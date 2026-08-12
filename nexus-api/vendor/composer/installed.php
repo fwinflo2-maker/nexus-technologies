@@ -1,9 +1,9 @@
 <?php return array(
     'root' => array(
         'name' => 'nexus-corp/nexus-api',
-        'pretty_version' => '1.0.0+no-version-set',
-        'version' => '1.0.0.0',
-        'reference' => null,
+        'pretty_version' => 'dev-qwen-code-ddcbcb39-bcf0-416e-b00f-0629ee0711e5',
+        'version' => 'dev-qwen-code-ddcbcb39-bcf0-416e-b00f-0629ee0711e5',
+        'reference' => '59443d65d86a1628c87aba706c01217d8776711f',
         'type' => 'project',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -20,9 +20,9 @@
             'dev_requirement' => true,
         ),
         'nexus-corp/nexus-api' => array(
-            'pretty_version' => '1.0.0+no-version-set',
-            'version' => '1.0.0.0',
-            'reference' => null,
+            'pretty_version' => 'dev-qwen-code-ddcbcb39-bcf0-416e-b00f-0629ee0711e5',
+            'version' => 'dev-qwen-code-ddcbcb39-bcf0-416e-b00f-0629ee0711e5',
+            'reference' => '59443d65d86a1628c87aba706c01217d8776711f',
             'type' => 'project',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),
