@@ -1,3 +1,37 @@
-Nothing should be ignored in this case, as only a PHP source file was added without any build artifacts, dependencies, or temporary files.
+```
+# Dependencies
+vendor/
+node_modules/
 
-Output: (empty)
+# PHP
+*.php~
+*.php.bak
+*.log
+composer.lock
+.env
+.env.local
+.env.*
+.php_cs.cache
+
+# Frontend
+dist/
+build/
+*.min.js
+*.min.css
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Tests
+.phpunit.result.cache
+```

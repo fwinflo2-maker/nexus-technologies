@@ -806,3 +806,81 @@ export async function apiReleaseHold(
 }
 
 export { getToken, setToken };
+
+// ============================================================================
+// USER PROFILE API
+// ============================================================================
+
+/** Interface pour les données utilisateur complètes. */
+export interface UserProfile {
+  id: string;
+  full_name: string | null;
+  email: string;
+  phone: string | null;
+  account_type: 'personal' | 'business';
+  auth_provider: 'local' | 'google';
+  status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'CLOSED';
+  kyc_level: 'none' | 'basic' | 'standard' | 'advanced';
+  created_at: string;
+  updated_at: string;
+}
+
+/** Interface pour une session active. */
+export interface UserSession {
+  jti: string;
+  device?: string;
+  browser?: string;
+  ip_address?: string;
+  created_at: string;
+  last_activity?: string;
+  is_current: boolean;
+}
+
+/** Réponse de GET /api/users/me/sessions. */
+export interface SessionsListData {
+  sessions: UserSession[];
+  revoked_count: number;
+}
+
+/** Payload pour PUT /api/users/me. */
+export interface UpdateProfilePayload {
+  full_name?: string;
+  phone?: string;
+  country_of_residence?: string;
+}
+
+/** Payload pour PUT /api/users/me/password. */
+export interface UpdatePasswordPayload {
+  current_password: string;
+  new_password: string;
+  confirm_password: string;
+}
+
+/** Récupère le profil complet de l'utilisateur (GET /api/users/me). */
+export async function apiGetUserProfile(): Promise<ApiResponse<{ user: UserProfile }>> {
+  return request<{ user: UserProfile }>('GET', '/users/me');
+}
+
+/** Met à jour le profil utilisateur (PUT /api/users/me). */
+export async function apiUpdateProfile(
+  payload: UpdateProfilePayload,
+): Promise<ApiResponse<{ updated: boolean }>> {
+  return request<{ updated: boolean }>('PUT', '/users/me', payload);
+}
+
+/** Change le mot de passe (PUT /api/users/me/password). */
+export async function apiUpdatePassword(
+  payload: UpdatePasswordPayload,
+): Promise<ApiResponse<{ updated: boolean }>> {
+  return request<{ updated: boolean }>('PUT', '/users/me/password', payload);
+}
+
+/** Liste les sessions actives (GET /api/users/me/sessions). */
+export async function apiGetSessions(): Promise<ApiResponse<SessionsListData>> {
+  return request<SessionsListData>('GET', '/users/me/sessions');
+}
+
+/** Révoque une session (DELETE /api/users/me/sessions/{id}). */
+export async function apiRevokeSession(jti: string): Promise<ApiResponse<{ revoked: boolean }>> {
+  return request<{ revoked: boolean }>('DELETE', `/users/me/sessions/${jti}`);
+}
