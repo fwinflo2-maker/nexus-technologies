@@ -18,6 +18,8 @@ import SendPage from './views/dashboard/SendPage';
 import ReceivePage from './views/dashboard/ReceivePage';
 import ConvertPage from './views/dashboard/ConvertPage';
 import HistoryPage from './views/dashboard/HistoryPage';
+import SettingsPage from './views/dashboard/SettingsPage';
+import PlaceholderPage from './views/dashboard/PlaceholderPage';
 import './styles/design-system.css';
 import './styles/dashboard-system.css';
 
@@ -118,7 +120,7 @@ function DashboardLayout() {
             {/* /providers est une fonctionnalité du Back Office : plus accessible depuis les dashboards */}
             <Route path="/providers" element={<Navigate to="/dashboard" replace />} />
             <Route path="/agents" element={<><DashTopbar mode={effectiveMode} title="Agents IA" subtitle="Système intelligent" /><PlaceholderPage /></>} />
-            <Route path="/settings" element={<><DashTopbar mode={effectiveMode} title="Paramètres" subtitle="Préférences du compte" /><PlaceholderPage /></>} />
+            <Route path="/settings" element={<><DashTopbar mode={effectiveMode} title="Paramètres" subtitle="Gestion du compte" /><SettingsPage /></>} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </div>
