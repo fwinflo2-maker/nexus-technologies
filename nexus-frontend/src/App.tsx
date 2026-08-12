@@ -14,8 +14,10 @@ import DashboardPage from './views/dashboard/DashboardPage';
 import WalletPage from './views/dashboard/WalletPage';
 /* RoutingPage supprimé — le Routing Engine est intégré au workflow /send */
 import NotificationsPage from './views/dashboard/NotificationsPage';
-import PlaceholderPage from './views/dashboard/PlaceholderPage';
 import SendPage from './views/dashboard/SendPage';
+import ReceivePage from './views/dashboard/ReceivePage';
+import ConvertPage from './views/dashboard/ConvertPage';
+import HistoryPage from './views/dashboard/HistoryPage';
 import './styles/design-system.css';
 import './styles/dashboard-system.css';
 
@@ -99,9 +101,9 @@ function DashboardLayout() {
             {/* Redirection /routing → /send (routing intégré dans /send) */}
             <Route path="/routing" element={<Navigate to="/send" replace />} />
             <Route path="/send" element={<><DashTopbar mode={effectiveMode} title="Envoyer" subtitle="Transfert international" /><SendPage /></>} />
-            <Route path="/receive" element={<><DashTopbar mode={effectiveMode} title="Recevoir" subtitle="Recevoir un transfert" /><PlaceholderPage /></>} />
-            <Route path="/convert" element={<><DashTopbar mode={effectiveMode} title="Convertir" subtitle="Conversion de devises" /><PlaceholderPage /></>} />
-            <Route path="/history" element={<><DashTopbar mode={effectiveMode} title="Historique" subtitle="Transactions" /><PlaceholderPage /></>} />
+            <Route path="/receive" element={<><DashTopbar mode={effectiveMode} title="Recevoir" subtitle="Recevoir un transfert" /><ReceivePage /></>} />
+            <Route path="/convert" element={<><DashTopbar mode={effectiveMode} title="Convertir" subtitle="Conversion de devises" /><ConvertPage /></>} />
+            <Route path="/history" element={<><DashTopbar mode={effectiveMode} title="Historique" subtitle="Transactions" /><HistoryPage /></>} />
             <Route path="/nexus-pro" element={<><DashTopbar mode={effectiveMode} title="Nexus Pro" subtitle="Intelligence financière" /><PlaceholderPage /></>} />
             <Route path="/notifications" element={<><DashTopbar mode={effectiveMode} title="Notifications" subtitle="Centre de notification" /><NotificationsPage /></>} />
 
