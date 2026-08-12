@@ -1,0 +1,170 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Nexus\Services;
+
+use Nexus\Core\Database;
+use Nexus\Core\HttpException;
+
+/**
+ * Policy & Risk Engine — vérifie la conformité avant d'autoriser un transfert.
+ *
+ * Étape 5 du pipeline. Contrôles :
+ *   1. Statut du compte (PENDING → refus transfert)
+ *   2. Plafonds par niveau KYC (LIMITED : 200 EUR/mois, STANDARD : 2000, etc.)
+ *   3. Sanctions (liste noire — simulation démo, toujours passée)
+ *   4. Seuils réglementaires (KYC requis au-delà de 1000 EUR)
+ *   5. Disponibilité du wallet (fonds suffisants)
+ *
+ * Retourne un verdict : APPROVED | DECLINED | REVIEW_REQUIRED.
+ * Si DECLINED, lève une HttpException avec la raison.
+ */
+final class PolicyEngine
+{
+    /** Plafonds mensuels par niveau KYC (EUR). */
+    private const KYC_LIMITS = [
+        'none'     => 200.0,
+        'basic'    => 500.0,
+        'standard' => 2000.0,
+        'advanced' => 10000.0,
+    ];
+
+    /** Seuil KYC requis pour le transfert (montant EUR au-delà duquel KYC obligatoire). */
+    private const KYC_REQUIRED_THRESHOLD = 1000.0;
+
+    /** Statuts qui bloquent les transferts. */
+    private const BLOCKED_STATUSES = ['PENDING', 'SUSPENDED', 'CLOSED'];
+
+    /** Motifs de blocage par statut. */
+    private const BLOCK_REASONS = [
+        'PENDING'   => 'Votre compte est en attente de vérification. Complétez votre KYC pour effectuer des transferts.',
+        'SUSPENDED' => 'Votre compte est temporairement suspendu. Contactez le support NEXUS.',
+        'CLOSED'    => 'Votre compte a été fermé.',
+    ];
+
+    /** Liste noire simulation (toujours vide en démo). */
+    private const SANCTION_LIST = [];
+
+    private function __construct() {}
+
+    /**
+     * Vérifie toutes les politiques pour une intention donnée.
+     *
+     * @param array{id: int, status: string, kyc_level: string, account_type: string} $user
+     * @param array{amount: float, sourceCurrency: string} $intent
+     * @param float $amountRef Montant converti en EUR (pour comparaison aux plafonds).
+     *
+     * @return array{decision: string, reason: string, details: array<string, mixed>}
+     *
+     * @throws HttpException 403 si la transaction est refusée.
+     */
+    public static function evaluate(array $user, array $intent, float $amountRef): array
+    {
+        $status   = $user['status'];
+        $kycLevel = $user['kyc_level'];
+        $userId   = (int) $user['id'];
+        $amount   = (float) $intent['amount'];
+
+        $details = [];
+        $decision = 'APPROVED';
+        $reason   = '';
+
+        // ── 1. Statut du compte ──────────────────────────────────
+        if (in_array($status, self::BLOCKED_STATUSES, true)) {
+            $reason = self::BLOCK_REASONS[$status] ?? 'Compte non autorisé pour les transferts.';
+            return self::declined($reason, ['status' => $status]);
+        }
+
+        // ── 2. Plafonds KYC ─────────────────────────────────────
+        $monthlyLimit = self::KYC_LIMITS[$kycLevel] ?? self::KYC_LIMITS['basic'];
+        $monthlyTotal = self::getMonthlyTotal($userId, $intent['sourceCurrency']);
+
+        $newTotal = $monthlyTotal + $amountRef;
+        $details['monthly_limit']     = $monthlyLimit;
+        $details['monthly_used']      = round($monthlyTotal, 2);
+        $details['monthly_remaining'] = round(max(0, $monthlyLimit - $monthlyTotal), 2);
+
+        if ($newTotal > $monthlyLimit) {
+            $remaining = max(0, $monthlyLimit - $monthlyTotal);
+            $reason = "Plafond mensuel de {$monthlyLimit} EUR (niveau KYC : {$kycLevel}) " .
+                      "presque atteint. Il vous reste {$remaining} EUR ce mois-ci. " .
+                      "Relevez votre niveau KYC pour augmenter vos limites.";
+            return self::declined($reason, $details);
+        }
+
+        // ── 3. Sanctions (simulation) ───────────────────────────
+        foreach (self::SANCTION_LIST as $entry) {
+            if (stripos($intent['destCountry'] ?? '', $entry) !== false) {
+                return self::declined(
+                    'Transaction bloquée pour raison réglementaire.',
+                    array_merge($details, ['sanction' => true])
+                );
+            }
+        }
+
+        // ── 4. KYC requis au-delà du seuil ──────────────────────
+        if ($amountRef > self::KYC_REQUIRED_THRESHOLD && in_array($kycLevel, ['none', 'basic'], true)) {
+            $decision = 'REVIEW_REQUIRED';
+            $reason   = "Montant de {$amountRef} EUR nécessite un niveau KYC standard ou supérieur.";
+            $details['kyc_required'] = 'standard';
+        }
+
+        // ── 5. Disponibilité du wallet ──────────────────────────
+        $available = self::getWalletAvailable($userId, $intent['sourceCurrency']);
+        $details['wallet_available'] = $available;
+
+        if ($available < $amount) {
+            return self::declined(
+                "Fonds insuffisants. Solde disponible : {$available} {$intent['sourceCurrency']}.",
+                array_merge($details, ['wallet_shortage' => true])
+            );
+        }
+
+        return [
+            'decision' => $decision,
+            'reason'   => $reason ?: 'Tous les contrôles de conformité sont passés.',
+            'details'  => $details,
+        ];
+    }
+
+    /**
+     * Calcule le total des transferts mensuels de l'utilisateur (en EUR).
+     */
+    private static function getMonthlyTotal(int $userId, string $currency): float
+    {
+        $pdo = Database::getConnection();
+        $stmt = $pdo->prepare(
+            "SELECT COALESCE(SUM(amount_ref), 0)
+             FROM transactions
+             WHERE user_id = :uid
+               AND type = 'send'
+               AND direction = 'out'
+               AND status NOT IN ('cancelled', 'failed')
+               AND created_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01')"
+        );
+        $stmt->execute(['uid' => $userId]);
+        return (float) $stmt->fetchColumn();
+    }
+
+    /**
+     * Récupère le solde disponible d'un wallet pour une devise donnée.
+     */
+    private static function getWalletAvailable(int $userId, string $currency): float
+    {
+        $wallet = WalletService::getWallet($userId, $currency);
+        if ($wallet === null) {
+            return 0.0;
+        }
+        $availableInfo = WalletService::getAvailable($wallet['id']);
+        return (float) $availableInfo['available_balance'];
+    }
+
+    /**
+     * Déclenche une exception HttpException avec le motif de refus.
+     */
+    private static function declined(string $reason, array $details): never
+    {
+        throw new HttpException(403, $reason, 'POLICY_DECLINED');
+    }
+}

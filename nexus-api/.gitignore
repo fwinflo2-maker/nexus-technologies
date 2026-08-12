@@ -1,0 +1,5 @@
+# Fichier d'environnement local (secrets) — jamais versionné.
+.env
+
+# Journaux
+*.log

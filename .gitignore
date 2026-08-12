@@ -1,0 +1,220 @@
+# ================================================================
+# NEXUS CORP TECHNOLOGIES
+# Git ignore
+#
+# IMPORTANT :
+# - La documentation du projet DOIT être versionnée.
+# - Les fichiers .md, .txt, .pdf, .docx, etc. ne sont PAS ignorés.
+# - Les fichiers source, configuration et documentation sont conservés.
+# ================================================================
+
+
+# ================================================================
+# SYSTEM / OS
+# ================================================================
+
+.DS_Store
+Thumbs.db
+desktop.ini
+
+*.swp
+*.swo
+*.swn
+
+# ================================================================
+# IDE / EDITORS
+# ================================================================
+
+.idea/
+.vscode/
+*.code-workspace
+
+# ================================================================
+# NODE.JS / JAVASCRIPT / TYPESCRIPT
+# ================================================================
+
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+out/
+
+# Vite
+.vite/
+*.vite/
+
+# TypeScript
+*.tsbuildinfo
+
+# ESLint
+.eslintcache
+.eslintcache*
+
+# npm / yarn / pnpm logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ================================================================
+# NEXUS FRONTEND
+# ================================================================
+
+nexus-frontend/node_modules/
+nexus-frontend/dist/
+nexus-frontend/.vite/
+
+# ================================================================
+# NEXUS AGENTS
+# ================================================================
+
+agents/node_modules/
+agents/dist/
+
+# ================================================================
+# PHP / COMPOSER
+# ================================================================
+
+# Composer dependencies
+nexus-api/vendor/
+vendor/
+
+# Composer cache
+composer.phar
+
+# ================================================================
+# PHP BACKEND
+# ================================================================
+
+# Environment-specific configuration
+nexus-api/.env
+nexus-api/config/*.local.php
+
+# PHP logs
+*.log
+
+# ================================================================
+# ENVIRONMENT / SECRETS
+# ================================================================
+
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*.local
+
+# Local secret/config files
+*.secret
+*.secrets
+
+# ================================================================
+# DATABASE
+# ================================================================
+
+# Database backups / temporary dumps
+*.sql.bak
+*.sql.old
+*.sql.tmp
+
+# IMPORTANT:
+# Les vrais fichiers SQL du projet restent versionnés.
+# Exemple :
+# database/schema.sql       -> CONSERVÉ
+# database/migrations/*.sql -> CONSERVÉ
+
+
+# ================================================================
+# UPLOADS / TEMPORARY FILES
+# ================================================================
+
+# Runtime uploads
+uploads/
+
+# Temporary runtime files
+tmp/
+temp/
+
+*.tmp
+*.temp
+
+# ================================================================
+# PLAYWRIGHT / BROWSER AUTOMATION
+# ================================================================
+
+.playwright-mcp/
+
+# Playwright reports / generated artifacts
+playwright-report/
+test-results/
+blob-report/
+
+# ================================================================
+# TEST / COVERAGE OUTPUTS
+# ================================================================
+
+coverage/
+.nyc_output/
+
+# ================================================================
+# RUNTIME / CACHE
+# ================================================================
+
+.cache/
+.cache-loader/
+.parcel-cache/
+
+*.pid
+*.seed
+*.pid.lock
+
+# ================================================================
+# LOGS
+# ================================================================
+
+*.log
+logs/
+
+# ================================================================
+# ARCHIVES / EXPORTS TEMPORAIRES
+# ================================================================
+
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
+
+# ================================================================
+# LOCAL MACHINE FILES
+# ================================================================
+
+*.local
+
+# ================================================================
+# DOCUMENTATION
+# ================================================================
+#
+# NE PAS ajouter :
+#
+# *.md
+# docs/
+# documentation/
+# *.pdf
+# *.docx
+# *.txt
+#
+# La documentation NEXUS doit être versionnée dans Git.
+#
+# Exemples qui DOIVENT rester dans Git :
+#
+# README.md
+# README.dev.md
+# NEXUS TECHNOLOGIES.md
+# docs/NEXUS-Document-Technique.md
+# docs/NEXUS-TECHNOLOGIES.md
+# docs/api/*.md
+#
+# ================================================================

@@ -1,0 +1,2277 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEXUS — Architecture Technique DT01</title>
+<style>
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+
+:root{
+  --dark:#0A0F16;
+  --dark2:#0D1520;
+  --panel:#101820;
+  --panel2:#141E2C;
+  --border:#182030;
+  --border2:#1A2840;
+  --dim:#304050;
+  --mid:#5A7890;
+  --main:#A8C8DC;
+  --bright:#DCF0F8;
+  --white:#EEF8FC;
+
+  --c:#00C8FF;
+  --c2:#0080E0;
+  --g:#EAB830;
+  --g2:#C09020;
+  --gr:#00D4A8;
+  --gr2:#00A880;
+  --v:#8B5CF6;
+  --v2:#5830C0;
+  --r:#FF4560;
+  --o:#FF8C40;
+  --teal:#00B8D0;
+}
+
+html{font-family:'Inter',sans-serif;background:#060A10;color:var(--main);}
+body{min-height:100vh;padding:36px 18px;}
+
+.deck{display:flex;flex-direction:column;gap:24px;align-items:center;}
+
+/* SLIDE */
+.slide{
+  width:100%;max-width:1280px;min-height:720px;
+  background:var(--dark);border:1px solid var(--border);
+  border-radius:18px;overflow:hidden;
+  position:relative;display:flex;flex-direction:column;
+}
+
+/* BG */
+.bg-grid{
+  position:absolute;inset:0;pointer-events:none;
+  background-image:
+    linear-gradient(rgba(0,200,255,.022) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,200,255,.022) 1px,transparent 1px);
+  background-size:52px 52px;
+}
+.gr-c{background:radial-gradient(circle,rgba(0,200,255,.07) 0%,transparent 68%);}
+.gr-g{background:radial-gradient(circle,rgba(234,184,48,.06) 0%,transparent 68%);}
+.gr-v{background:radial-gradient(circle,rgba(139,92,246,.07) 0%,transparent 68%);}
+.gr-gr{background:radial-gradient(circle,rgba(0,212,168,.06) 0%,transparent 68%);}
+.bg-r{position:absolute;border-radius:50%;pointer-events:none;}
+
+/* TOPBAR */
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:16px 32px;border-bottom:1px solid var(--border);
+  position:relative;z-index:5;
+}
+.logo{display:flex;align-items:center;gap:9px;}
+.lbox{
+  width:28px;height:28px;border-radius:6px;
+  background:linear-gradient(135deg,var(--c),var(--c2));
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:900;color:#fff;
+}
+.ltxt{font-size:11px;font-weight:700;color:var(--bright);letter-spacing:.8px;}
+.sn{position:absolute;top:20px;right:28px;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--dim);letter-spacing:2px;z-index:10;}
+
+/* FOOTER */
+.footer{
+  padding:12px 32px;border-top:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+  position:relative;z-index:5;
+}
+.fl{font-size:9px;color:var(--dim);letter-spacing:1.5px;text-transform:uppercase;}
+.fr2{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--dim);}
+
+/* BODY */
+.body{flex:1;padding:44px 52px;position:relative;z-index:2;}
+.body-sm{flex:1;padding:32px 52px;position:relative;z-index:2;}
+
+/* GRID */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:start;}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
+
+/* FLEX */
+.fc{display:flex;flex-direction:column;}
+.fr{display:flex;flex-direction:row;}
+.ac{align-items:center;}
+.g4p{gap:4px;}.g6{gap:6px;}.g8{gap:8px;}.g10{gap:10px;}
+.g12{gap:12px;}.g14{gap:14px;}.g16{gap:16px;}.g20{gap:20px;}
+.g24{gap:24px;}.g28{gap:28px;}.g32{gap:32px;}.g40{gap:40px;}
+
+/* MT */
+.mt6{margin-top:6px;}.mt8{margin-top:8px;}.mt10{margin-top:10px;}
+.mt12{margin-top:12px;}.mt16{margin-top:16px;}.mt20{margin-top:20px;}
+.mt24{margin-top:24px;}.mt32{margin-top:32px;}.mt40{margin-top:40px;}
+
+/* TYPOGRAPHY */
+.label{font-size:9px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:var(--c);}
+.label-g{color:var(--g);}
+.label-gr{color:var(--gr);}
+.label-v{color:var(--v);}
+
+.hxl{font-size:clamp(40px,6vw,70px);font-weight:900;line-height:1.0;color:var(--white);letter-spacing:-2px;}
+.hlg{font-size:clamp(28px,4vw,48px);font-weight:800;line-height:1.05;color:var(--white);letter-spacing:-1.5px;}
+.hmd{font-size:clamp(22px,3vw,36px);font-weight:700;line-height:1.15;color:var(--white);letter-spacing:-0.8px;}
+.hsm{font-size:clamp(16px,2vw,24px);font-weight:700;line-height:1.2;color:var(--bright);letter-spacing:-0.4px;}
+
+.blg{font-size:16px;line-height:1.7;color:var(--mid);}
+.bmd{font-size:13px;line-height:1.6;color:var(--mid);}
+.bsm{font-size:11px;line-height:1.5;color:var(--dim);}
+.bxs{font-size:10px;line-height:1.4;color:var(--dim);}
+
+.mono{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--c);}
+.mono-g{color:var(--g);}
+.mono-gr{color:var(--gr);}
+.mono-v{color:var(--v);}
+.mono-dim{color:var(--dim);}
+
+.gc{background:linear-gradient(135deg,var(--c),#0068FF 50%,var(--v));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.gg{background:linear-gradient(135deg,var(--g),#FF8C20);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.ggr{background:linear-gradient(135deg,var(--gr),var(--teal));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.gv{background:linear-gradient(135deg,var(--v),#C060FF);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+
+.ac-c{color:var(--c);}
+.ac-g{color:var(--g);}
+.ac-gr{color:var(--gr);}
+.ac-v{color:var(--v);}
+.ac-r{color:var(--r);}
+.ac-o{color:var(--o);}
+.tc{text-align:center;}
+
+/* PILL */
+.pill{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:100px;font-size:9px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;border:1px solid;}
+.pc{background:rgba(0,200,255,.07);border-color:rgba(0,200,255,.2);color:var(--c);}
+.pg{background:rgba(234,184,48,.07);border-color:rgba(234,184,48,.2);color:var(--g);}
+.pgr{background:rgba(0,212,168,.07);border-color:rgba(0,212,168,.2);color:var(--gr);}
+.pv{background:rgba(139,92,246,.07);border-color:rgba(139,92,246,.2);color:var(--v);}
+.pr{background:rgba(255,69,96,.07);border-color:rgba(255,69,96,.2);color:var(--r);}
+
+/* CARD */
+.card{background:var(--panel);border:1px solid var(--border2);border-radius:12px;padding:20px;position:relative;overflow:hidden;}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(0,200,255,.2),transparent);}
+.cc::before{background:linear-gradient(90deg,transparent,rgba(0,200,255,.28),transparent);}
+.cg::before{background:linear-gradient(90deg,transparent,rgba(234,184,48,.25),transparent);}
+.cgr::before{background:linear-gradient(90deg,transparent,rgba(0,212,168,.25),transparent);}
+.cv::before{background:linear-gradient(90deg,transparent,rgba(139,92,246,.25),transparent);}
+.cr::before{background:linear-gradient(90deg,transparent,rgba(255,69,96,.2),transparent);}
+
+.hi-c{border-color:rgba(0,200,255,.2);background:rgba(0,200,255,.04);}
+.hi-g{border-color:rgba(234,184,48,.2);background:rgba(234,184,48,.04);}
+.hi-gr{border-color:rgba(0,212,168,.2);background:rgba(0,212,168,.04);}
+.hi-v{border-color:rgba(139,92,246,.2);background:rgba(139,92,246,.04);}
+.hi-r{border-color:rgba(255,69,96,.2);background:rgba(255,69,96,.04);}
+.hi-o{border-color:rgba(255,140,64,.2);background:rgba(255,140,64,.04);}
+
+/* DOT */
+.dot{width:5px;height:5px;border-radius:50%;flex-shrink:0;}
+.dc{background:var(--c);box-shadow:0 0 5px var(--c);}
+.dg{background:var(--g);}
+.dgr{background:var(--gr);}
+.dv{background:var(--v);}
+.dr{background:var(--r);}
+.do{background:var(--o);}
+.dd{background:var(--dim);}
+
+/* TAG */
+.tag{display:inline-flex;align-items:center;padding:3px 9px;border-radius:4px;font-size:10px;font-weight:500;background:var(--panel2);border:1px solid var(--border);color:var(--mid);}
+
+/* STATUS */
+.status{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:100px;background:rgba(0,212,168,.05);border:1px solid rgba(0,212,168,.18);font-size:9px;color:var(--gr);font-weight:500;}
+.sdot{width:4px;height:4px;border-radius:50%;background:var(--gr);animation:blink 2s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* DIV */
+.div{width:100%;height:1px;background:var(--border);}
+.divc{background:linear-gradient(90deg,transparent,rgba(0,200,255,.25),transparent);}
+
+/* QUOTE */
+.quote{border-left:3px solid var(--c);padding:14px 20px;background:rgba(0,200,255,.04);border-radius:0 9px 9px 0;}
+.quote-g{border-left-color:var(--g);background:rgba(234,184,48,.04);}
+.quote-v{border-left-color:var(--v);background:rgba(139,92,246,.04);}
+.quote-gr{border-left-color:var(--gr);background:rgba(0,212,168,.04);}
+.qt{font-size:14px;font-weight:600;color:var(--bright);line-height:1.55;font-style:italic;}
+
+/* CODE BLOCK */
+.code{
+  background:var(--panel2);border:1px solid var(--border);
+  border-radius:10px;padding:16px;
+  font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.9;
+  color:var(--main);overflow-x:auto;
+}
+.code .kw{color:var(--c);}
+.code .str{color:var(--gr);}
+.code .cmt{color:var(--dim);}
+.code .key{color:var(--g);}
+.code .val{color:var(--v);}
+.code .ok{color:var(--gr);}
+.code .err{color:var(--r);}
+.code .warn{color:var(--o);}
+
+/* FLOW */
+.flow{display:flex;flex-direction:column;align-items:center;}
+.fn{background:var(--panel);border:1px solid var(--border2);border-radius:8px;padding:8px 18px;font-size:11px;font-weight:600;color:var(--bright);text-align:center;width:200px;}
+.fn-c{border-color:rgba(0,200,255,.32);background:rgba(0,200,255,.06);color:var(--c);}
+.fn-g{border-color:rgba(234,184,48,.32);background:rgba(234,184,48,.06);color:var(--g);}
+.fn-gr{border-color:rgba(0,212,168,.32);background:rgba(0,212,168,.06);color:var(--gr);}
+.fn-v{border-color:rgba(139,92,246,.32);background:rgba(139,92,246,.06);color:var(--v);}
+.fn-r{border-color:rgba(255,69,96,.32);background:rgba(255,69,96,.06);color:var(--r);}
+.fn-o{border-color:rgba(255,140,64,.32);background:rgba(255,140,64,.06);color:var(--o);}
+.fa{width:1px;height:16px;background:var(--border);position:relative;}
+.fa::after{content:'▼';position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);font-size:6px;color:var(--dim);}
+.fac{background:rgba(0,200,255,.3);}
+.fac::after{color:var(--c);}
+.fagr::after{color:var(--gr);}
+.fagr{background:rgba(0,212,168,.3);}
+
+/* ARCH BOX */
+.arch{
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;line-height:2;
+  background:var(--panel2);border:1px solid var(--border);
+  border-radius:10px;padding:16px;
+  color:var(--mid);
+}
+.arch .root{color:var(--c);font-weight:700;font-size:13px;}
+.arch .br{color:var(--dim);}
+.arch .leaf{color:var(--bright);font-weight:500;}
+.arch .sub{color:var(--dim);font-size:10px;}
+
+/* TABLE */
+.trow{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);}
+.trow:last-child{border-bottom:none;}
+.th{font-size:9px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--dim);}
+
+/* LAYER BOX */
+.layer{
+  border:1px solid var(--border);border-radius:10px;
+  padding:12px 16px;text-align:center;
+  font-size:11px;font-weight:600;color:var(--bright);
+  position:relative;
+}
+.layer-c{border-color:rgba(0,200,255,.25);background:rgba(0,200,255,.05);}
+.layer-g{border-color:rgba(234,184,48,.22);background:rgba(234,184,48,.04);}
+.layer-v{border-color:rgba(139,92,246,.22);background:rgba(139,92,246,.04);}
+.layer-gr{border-color:rgba(0,212,168,.22);background:rgba(0,212,168,.04);}
+.layer-dim{border-color:var(--border);background:var(--panel);}
+
+/* BADGE NORMATIVE */
+.norm{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:3px 9px;border-radius:5px;
+  font-size:9px;font-weight:700;letter-spacing:1px;font-family:'JetBrains Mono',monospace;
+}
+.nm-must{background:rgba(255,69,96,.1);border:1px solid rgba(255,69,96,.25);color:var(--r);}
+.nm-should{background:rgba(255,140,64,.1);border:1px solid rgba(255,140,64,.22);color:var(--o);}
+.nm-may{background:rgba(0,212,168,.08);border:1px solid rgba(0,212,168,.2);color:var(--gr);}
+.nm-not{background:rgba(255,69,96,.12);border:1px solid rgba(255,69,96,.3);color:var(--r);}
+
+/* ER */
+.er{display:flex;align-items:center;gap:10px;padding:10px 16px;border-radius:8px;border:1px solid var(--border);background:var(--panel);position:relative;overflow:hidden;}
+.er::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;}
+.e1::before{background:var(--c)}.e2::before{background:#0090E0}
+.e3::before{background:#0060C0}.e4::before{background:var(--v)}
+.e5::before{background:#5830C0}.e6::before{background:var(--g)}
+.e7::before{background:#B07010}.e8::before{background:var(--gr)}
+.e9::before{background:#00A070}.e10::before{background:#007860}
+.er-n{font-size:12px;font-weight:600;color:var(--bright);flex:1;}
+.er-d{font-size:10px;color:var(--dim);text-align:right;}
+
+/* COVER */
+.cover{
+  min-height:720px;
+  background:
+    radial-gradient(ellipse at 10% 50%,rgba(0,200,255,.06) 0%,transparent 50%),
+    radial-gradient(ellipse at 90% 20%,rgba(139,92,246,.06) 0%,transparent 50%),
+    var(--dark);
+  display:flex;flex-direction:column;position:relative;overflow:hidden;
+}
+
+/* CONNECTOR */
+.conn-v{width:1px;background:var(--border);margin:0 auto;}
+.conn-h{height:1px;background:var(--border);}
+
+/* STEP */
+.step{
+  display:flex;align-items:flex-start;gap:14px;
+  padding:12px 16px;border-radius:9px;
+  background:var(--panel);border:1px solid var(--border);
+}
+.step-num{
+  width:28px;height:28px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:700;flex-shrink:0;
+  background:rgba(0,200,255,.1);border:1px solid rgba(0,200,255,.25);
+  color:var(--c);
+}
+
+</style>
+</head>
+<body>
+<div class="deck">
+
+
+<!-- ══════════════════════════════════════
+     SLIDE 01 — COVER DT01
+══════════════════════════════════════ -->
+<div class="slide cover">
+  <div class="bg-grid"></div>
+  <div class="bg-r gr-c" style="width:700px;height:700px;top:-200px;left:-150px;"></div>
+  <div class="bg-r gr-v" style="width:600px;height:600px;bottom:-200px;right:-100px;"></div>
+
+  <svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;opacity:.18" viewBox="0 0 1280 720">
+    <path d="M960 0 L960 160 L1160 160 L1160 360 L1280 360" stroke="#00C8FF" stroke-width=".8" fill="none"/>
+    <path d="M1060 0 L1060 260 L1280 260" stroke="#00C8FF" stroke-width=".4" fill="none"/>
+    <circle cx="960" cy="160" r="3" fill="#00C8FF"/>
+    <circle cx="1160" cy="360" r="3" fill="#00C8FF"/>
+    <path d="M0 540 L160 540 L160 680 L360 680" stroke="#8B5CF6" stroke-width=".4" fill="none"/>
+    <circle cx="160" cy="540" r="2.5" fill="#8B5CF6"/>
+    <!-- Grid nodes -->
+    <circle cx="400" cy="200" r="1.5" fill="#00C8FF" opacity=".4"/>
+    <circle cx="600" cy="400" r="1.5" fill="#8B5CF6" opacity=".4"/>
+    <circle cx="800" cy="300" r="1.5" fill="#00D4A8" opacity=".4"/>
+    <path d="M400 200 L600 400 L800 300" stroke="#00C8FF" stroke-width=".3" fill="none" opacity=".3"/>
+  </svg>
+
+  <div class="topbar">
+    <div class="logo">
+      <div class="lbox">N</div>
+      <div class="ltxt">NEXUS CORP TECHNOLOGIES</div>
+    </div>
+    <div class="fr ac g10">
+      <div class="status"><div class="sdot"></div>DT01 — Architecture Technique — v1.0</div>
+    </div>
+  </div>
+
+  <div class="body" style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:80px;">
+    <div class="fr ac g12" style="margin-bottom:24px;">
+      <div style="width:32px;height:1px;background:var(--c);"></div>
+      <div class="label">Document Technique 01 · Août 2026</div>
+    </div>
+
+    <div class="hxl">NEXUS</div>
+    <div class="hxl gc" style="margin-top:2px;">Architecture<br>Technique<br>Détaillée.</div>
+
+    <div class="fr g28 mt40 ac">
+      <div class="fc g12">
+        <div class="blg" style="max-width:480px;">
+          Spécification de référence définissant les composants logiciels, flux de données, mécanismes d'orchestration, intégrations providers, sécurité et réconciliation.
+        </div>
+        <div class="fr g8 mt8" style="flex-wrap:wrap;">
+          <span class="norm nm-must">MUST</span>
+          <span class="norm nm-should">SHOULD</span>
+          <span class="norm nm-may">MAY</span>
+          <span class="norm nm-not">MUST NOT</span>
+          <span class="bsm" style="margin-left:4px;">Termes normatifs</span>
+        </div>
+      </div>
+      <div style="width:1px;height:80px;background:var(--border);"></div>
+      <div class="fc g14" style="min-width:200px;">
+        <div class="fc g5">
+          <div class="label" style="font-size:8px;">Document parent</div>
+          <div style="font-size:12px;color:var(--bright);font-weight:500;">Maître v5.3</div>
+        </div>
+        <div class="fc g5">
+          <div class="label" style="font-size:8px;">Statut</div>
+          <div style="font-size:12px;color:var(--gr);font-weight:600;">Architecture cible ✓</div>
+        </div>
+        <div class="fc g5">
+          <div class="label" style="font-size:8px;">KYC/KYB</div>
+          <div class="mono">Sumsub</div>
+        </div>
+        <div class="fc g5">
+          <div class="label" style="font-size:8px;">Comptes</div>
+          <div style="font-size:12px;color:var(--text-bright);font-weight:500;">Personal · Business</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="fl">Confidentiel — Nexus Corp Technologies — Référence technique interne</div>
+    <div class="fr2">NEXUS-DT01-v1.0</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════
+     SLIDE 02 — SOMMAIRE
+══════════════════════════════════════ -->
+<div class="slide">
+  <div class="bg-grid"></div>
+  <div class="sn">02 / 18</div>
+  <div class="topbar">
+    <div class="logo"><div class="lbox">N</div><div class="ltxt">NEXUS CORP TECHNOLOGIES</div></div>
+    <div class="pill pc">Sommaire DT01</div>
+  </div>
+
+  <div class="body-sm">
+    <div class="fc g10">
+      <div class="label">Navigation — 31 parties · 71 sections</div>
+      <div class="hmd mt8">Ce que couvre<br><span class="gc">DT01.</span></div>
+    </div>
+
+    <div class="g3 mt28" style="gap:16px;">
+
+      <div class="fc g8">
+        <div class="label" style="font-size:8px;color:var(--dim);">I–IV · Fondations</div>
+        <div class="card hi-c" style="padding:14px;">
+          <div class="fc g8">
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Objectif architectural</div></div>
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Principe fondamental</div></div>
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Vue logique en couches</div></div>
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">4 principes architecturaux</div></div>
+          </div>
+        </div>
+
+        <div class="label" style="font-size:8px;color:var(--dim);">V–VIII · Core & Wallet</div>
+        <div class="card" style="padding:14px;">
+          <div class="fc g8">
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Nexus Core Services</div></div>
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Account & Identity Service</div></div>
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Wallet Architecture</div></div>
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Funding & Destination Engine</div></div>
+          </div>
+        </div>
+
+        <div class="label" style="font-size:8px;color:var(--dim);">Sumsub · KYC/KYB</div>
+        <div class="card hi-g" style="padding:14px;">
+          <div class="fc g8">
+            <div class="fr ac g8"><div class="dot dg"></div><div class="bmd">Integration Layer</div></div>
+            <div class="fr ac g8"><div class="dot dg"></div><div class="bmd">KYC & KYB Flows</div></div>
+            <div class="fr ac g8"><div class="dot dg"></div><div class="bmd">Compliance State Machine</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="fc g8">
+        <div class="label" style="font-size:8px;color:var(--dim);">IX–XI · Intelligence & Routing</div>
+        <div class="card hi-v" style="padding:14px;">
+          <div class="fc g8">
+            <div class="fr ac g8"><div class="dot dv"></div><div class="bmd">Provider Abstraction Layer</div></div>
+            <div class="fr ac g8"><div class="dot dv"></div><div class="bmd">Intelligent Routing Engine</div></div>
+            <div class="fr ac g8"><div class="dot dv"></div><div class="bmd">Route Scoring & Selection</div></div>
+            <div class="fr ac g8"><div class="dot dv"></div><div class="bmd">Quote Aggregation</div></div>
+            <div class="fr ac g8"><div class="dot dv"></div><div class="bmd">Nexus AI Architecture</div></div>
+            <div class="fr ac g8"><div class="dot dv"></div><div class="bmd">AI Guardrails</div></div>
+          </div>
+        </div>
+
+        <div class="label" style="font-size:8px;color:var(--dim);">XII–XVI · Exécution</div>
+        <div class="card" style="padding:14px;">
+          <div class="fc g8">
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Policy & Risk Engine</div></div>
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Execution Architecture</div></div>
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Transaction State Machine</div></div>
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Idempotency</div></div>
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Intelligent Recovery</div></div>
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Reconciliation Engine</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="fc g8">
+        <div class="label" style="font-size:8px;color:var(--dim);">XVII–XXIV · Ledger & Settlement</div>
+        <div class="card hi-gr" style="padding:14px;">
+          <div class="fc g8">
+            <div class="fr ac g8"><div class="dot dgr"></div><div class="bmd">Ledger Architecture</div></div>
+            <div class="fr ac g8"><div class="dot dgr"></div><div class="bmd">Settlement Engine</div></div>
+            <div class="fr ac g8"><div class="dot dgr"></div><div class="bmd">Business Architecture</div></div>
+            <div class="fr ac g8"><div class="dot dgr"></div><div class="bmd">Nexus Pro & GPM</div></div>
+            <div class="fr ac g8"><div class="dot dgr"></div><div class="bmd">Cards Architecture</div></div>
+          </div>
+        </div>
+
+        <div class="label" style="font-size:8px;color:var(--dim);">XXV–XXXI · Infrastructure</div>
+        <div class="card" style="padding:14px;">
+          <div class="fc g8">
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">API Gateway & Connect</div></div>
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Event-Driven Architecture</div></div>
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Database Domain Separation</div></div>
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Security Architecture</div></div>
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Observabilité & KPIs</div></div>
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Failure Domains</div></div>
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Testing & CI/CD</div></div>
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Flux complet Personal & Business</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="fl">Document Technique 01 — Architecture Technique Détaillée</div>
+    <div class="fr2">NEXUS-DT01-v1.0</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════
+     SLIDE 03 — VUE LOGIQUE EN COUCHES
+══════════════════════════════════════ -->
+<div class="slide" style="background:radial-gradient(ellipse at 85% 30%,rgba(0,200,255,.05) 0%,transparent 55%),var(--dark);">
+  <div class="bg-grid"></div>
+  <div class="sn">03 / 18</div>
+  <div class="topbar">
+    <div class="logo"><div class="lbox">N</div><div class="ltxt">NEXUS CORP TECHNOLOGIES</div></div>
+    <div class="pill pc">Architecture Globale</div>
+  </div>
+
+  <div class="body-sm">
+    <div class="g2" style="gap:40px;align-items:start;">
+
+      <div class="fc g20">
+        <div class="fc g10">
+          <div class="label">Parties I & II — Vue logique</div>
+          <div class="hmd">Architecture<br>en <span class="gc">couches.</span></div>
+        </div>
+
+        <div class="blg" style="max-width:460px;">Chaque couche a une responsabilité précise. Le cœur Nexus ne dépend jamais directement de l'API d'un provider particulier.</div>
+
+        <div class="quote mt8">
+          <div class="qt">"Nexus n'est pas construit autour d'un provider. Il est construit autour de capacités financières abstraites."</div>
+        </div>
+
+        <div class="fc g10 mt16">
+          <div class="label" style="font-size:8px;">Principes architecturaux — Section 4</div>
+          <div class="fc g8 mt6">
+            <div class="fr ac g10"><div class="norm nm-must">MUST</div><div class="bmd">Provider abstraction — aucun provider exposé</div></div>
+            <div class="fr ac g10"><div class="norm nm-must">MUST</div><div class="bmd">Separation of concerns</div></div>
+            <div class="fr ac g10"><div class="norm nm-must">MUST</div><div class="bmd">Event-driven architecture</div></div>
+            <div class="fr ac g10"><div class="norm nm-must">MUST</div><div class="bmd">API-first — interfaces versionnées</div></div>
+            <div class="fr ac g10"><div class="norm nm-must">MUST</div><div class="bmd">Security-by-design</div></div>
+            <div class="fr ac g10"><div class="norm nm-must">MUST</div><div class="bmd">Auditability — décisions reconstruibles</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Layer stack -->
+      <div class="fc g8">
+        <div class="label" style="font-size:8px;margin-bottom:4px;">Stack logique</div>
+
+        <div class="layer layer-c">
+          <div style="font-size:10px;font-weight:600;color:var(--c);letter-spacing:1px;margin-bottom:6px;">EXPERIENCE</div>
+          <div class="fr g8" style="justify-content:center;flex-wrap:wrap;">
+            <span class="tag">Web App</span><span class="tag">Mobile</span><span class="tag">Business WS</span><span class="tag">Admin</span>
+          </div>
+        </div>
+
+        <div style="width:1px;height:12px;background:var(--border);margin:0 auto;"></div>
+
+        <div class="layer layer-c">
+          <div style="font-size:10px;font-weight:600;color:var(--c);letter-spacing:1px;margin-bottom:6px;">NEXUS API GATEWAY</div>
+          <div class="fr g8" style="justify-content:center;flex-wrap:wrap;">
+            <span class="tag">Auth</span><span class="tag">Rate Limit</span><span class="tag">Authorization</span>
+          </div>
+        </div>
+
+        <div style="width:1px;height:12px;background:var(--border);margin:0 auto;"></div>
+
+        <div class="layer" style="border-color:rgba(0,200,255,.18);">
+          <div style="font-size:10px;font-weight:600;color:var(--bright);letter-spacing:1px;margin-bottom:6px;">NEXUS CORE</div>
+          <div class="fr g8" style="justify-content:center;flex-wrap:wrap;">
+            <span class="tag">Accounts</span><span class="tag">Wallets</span><span class="tag">Transfers</span><span class="tag">Payments</span>
+          </div>
+        </div>
+
+        <div style="width:1px;height:12px;background:var(--border);margin:0 auto;"></div>
+
+        <div class="layer layer-v">
+          <div style="font-size:10px;font-weight:600;color:var(--v);letter-spacing:1px;margin-bottom:6px;">NEXUS ORCHESTRATION</div>
+          <div class="fr g8" style="justify-content:center;flex-wrap:wrap;">
+            <span class="tag">Intent</span><span class="tag">Capability</span><span class="tag">Quote</span><span class="tag">Routing</span><span class="tag">Policy</span><span class="tag">Risk</span><span class="tag">Execution</span><span class="tag">Recovery</span>
+          </div>
+        </div>
+
+        <div style="width:1px;height:12px;background:var(--border);margin:0 auto;"></div>
+
+        <div class="layer layer-g">
+          <div style="font-size:10px;font-weight:600;color:var(--g);letter-spacing:1px;margin-bottom:6px;">NEXUS INTELLIGENCE</div>
+          <div class="fr g8" style="justify-content:center;flex-wrap:wrap;">
+            <span class="tag">AI</span><span class="tag">Analytics</span><span class="tag">Pro</span><span class="tag">Recommendations</span>
+          </div>
+        </div>
+
+        <div style="width:1px;height:12px;background:var(--border);margin:0 auto;"></div>
+
+        <div class="layer layer-gr">
+          <div style="font-size:10px;font-weight:600;color:var(--gr);letter-spacing:1px;margin-bottom:6px;">PROVIDER LAYER</div>
+          <div class="fr g8" style="justify-content:center;flex-wrap:wrap;">
+            <span class="tag">Banking</span><span class="tag">PSP</span><span class="tag">FX</span><span class="tag">Mobile Money</span><span class="tag">Crypto</span><span class="tag">Cards</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="fl">Architecture Globale — Parties I & II, Sections 1–4</div>
+    <div class="fr2">NEXUS-DT01-v1.0</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════
+     SLIDE 04 — NEXUS CORE & SERVICES
+══════════════════════════════════════ -->
+<div class="slide">
+  <div class="bg-grid"></div>
+  <div class="sn">04 / 18</div>
+  <div class="topbar">
+    <div class="logo"><div class="lbox">N</div><div class="ltxt">NEXUS CORP TECHNOLOGIES</div></div>
+    <div class="pill pc">Nexus Core</div>
+  </div>
+
+  <div class="body-sm">
+    <div class="fc g10">
+      <div class="label">Partie III — Nexus Core Services</div>
+      <div class="hmd">Le cœur<br><span class="gc">transactionnel.</span></div>
+    </div>
+
+    <div class="g3 mt28" style="gap:16px;">
+
+      <!-- Core map -->
+      <div class="fc g10">
+        <div class="label" style="font-size:8px;color:var(--dim);">Nexus Core — Primitives</div>
+        <div class="arch" style="font-size:10px;">
+<span class="kw">NEXUS CORE</span>
+├── <span class="leaf">Identity</span>
+├── <span class="leaf">Accounts</span>
+├── <span class="leaf">Wallets</span>
+├── <span class="leaf">Beneficiaries</span>
+├── <span class="leaf">Transfers</span>
+├── <span class="leaf">Payments</span>
+├── <span class="leaf">Funding</span>
+├── <span class="leaf">Transactions</span>
+├── <span class="leaf">Ledger</span>
+├── <span class="leaf">Settlement</span>
+├── <span class="leaf">Reconciliation</span>
+├── <span class="leaf">Notifications</span>
+└── <span class="leaf">Audit</span>
+        </div>
+        <div class="card hi-c mt10" style="padding:14px;">
+          <div class="label" style="font-size:8px;">Principe (Section 5)</div>
+          <div class="bmd mt6">Nexus Core fournit l'état et les primitives nécessaires à l'orchestration. Il ne décide pas seul quelle route utiliser.</div>
+        </div>
+      </div>
+
+      <!-- Personal -->
+      <div class="fc g10">
+        <div class="label" style="font-size:8px;color:var(--dim);">Personal Account — Section 6.1</div>
+        <div class="arch" style="font-size:10px;">
+<span class="str">PERSONAL ACCOUNT</span>
+├── <span class="leaf">User</span>
+├── <span class="leaf">KYC</span>
+├── <span class="leaf">Wallets</span>
+├── <span class="leaf">Accounts</span>
+├── <span class="leaf">Beneficiaries</span>
+├── <span class="leaf">Transfers</span>
+├── <span class="leaf">Cards</span>
+└── <span class="leaf">Nexus Pro</span>
+        </div>
+
+        <div class="label" style="font-size:8px;color:var(--dim);margin-top:8px;">Identity Service — Section 7</div>
+        <div class="fc g8 mt6">
+          <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Authentification & Sessions</div></div>
+          <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">MFA & Appareils</div></div>
+          <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">OAuth2 / OIDC · Tokens</div></div>
+          <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Permissions & Recovery</div></div>
+        </div>
+        <div class="card mt8" style="padding:12px;">
+          <div class="fr ac g8">
+            <div class="norm nm-must">MUST</div>
+            <div class="bsm">Le service Identity doit être séparé du système KYC.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Business -->
+      <div class="fc g10">
+        <div class="label" style="font-size:8px;color:var(--dim);">Business Account — Section 6.2</div>
+        <div class="arch" style="font-size:10px;">
+<span class="key">BUSINESS ACCOUNT</span>
+├── <span class="leaf">Organization</span>
+├── <span class="leaf">KYB</span>
+├── <span class="leaf">Members</span>
+├── <span class="leaf">Roles</span>
+├── <span class="leaf">Wallets</span>
+├── <span class="leaf">Accounts</span>
+├── <span class="leaf">Beneficiaries</span>
+├── <span class="leaf">Approval Workflows</span>
+├── <span class="leaf">Treasury</span>
+├── <span class="leaf">Payments</span>
+├── <span class="leaf">Cards</span>
+└── <span class="leaf">Nexus Pro</span>
+        </div>
+
+        <div class="card hi-g mt10" style="padding:14px;">
+          <div class="label-g" style="font-size:8px;">Différence Personal / Business</div>
+          <div class="bmd mt6">Le moteur financier est <strong style="color:var(--bright);">commun</strong>. La différence porte sur : identité, ownership, permissions, approbations, limites, reporting, conformité, trésorerie.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="fl">Nexus Core — Partie III & IV, Sections 5–7</div>
+    <div class="fr2">NEXUS-DT01-v1.0</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════
+     SLIDE 05 — SUMSUB & KYC/KYB
+══════════════════════════════════════ -->
+<div class="slide" style="background:radial-gradient(ellipse at 80% 60%,rgba(234,184,48,.04) 0%,transparent 50%),var(--dark);">
+  <div class="bg-grid"></div>
+  <div class="sn">05 / 18</div>
+  <div class="topbar">
+    <div class="logo"><div class="lbox">N</div><div class="ltxt">NEXUS CORP TECHNOLOGIES</div></div>
+    <div class="pill pg">Sumsub · KYC / KYB</div>
+  </div>
+
+  <div class="body-sm">
+    <div class="g2" style="gap:40px;align-items:start;">
+      <div class="fc g20">
+        <div class="fc g10">
+          <div class="label">Partie IV — Sumsub Integration</div>
+          <div class="hmd">Vérification.<br><span class="gg">Compliance.</span><br>State Machine.</div>
+        </div>
+
+        <div class="quote-g quote">
+          <div class="qt" style="font-size:13px;">Nexus ne doit pas appeler directement Sumsub depuis les interfaces utilisateur. Toutes les interactions doivent passer par un service d'intégration contrôlé.</div>
+        </div>
+
+        <div class="card hi-g mt12">
+          <div class="label-g" style="font-size:8px;">Architecture — Section 8</div>
+          <div class="flow mt12" style="gap:0;">
+            <div class="fn fn-c">NEXUS</div>
+            <div class="fa fac"></div>
+            <div class="fn">Compliance Service</div>
+            <div class="fa"></div>
+            <div class="fn" style="border-color:rgba(234,184,48,.35);background:rgba(234,184,48,.08);color:var(--g);">Sumsub Adapter</div>
+            <div class="fa"></div>
+            <div class="fn fn-g">SUMSUB</div>
+          </div>
+        </div>
+
+        <div class="card mt12" style="padding:14px;">
+          <div class="fr ac g8">
+            <div class="norm nm-must">MUST NOT</div>
+            <div class="bsm">Le résultat Sumsub ne constitue pas à lui seul la décision réglementaire de Nexus.</div>
+          </div>
+        </div>
+
+        <!-- Compliance State Machine -->
+        <div class="label" style="font-size:8px;margin-top:16px;">Compliance State Machine — Section 11</div>
+        <div class="flow mt8" style="gap:0;">
+          <div class="fn">NOT_STARTED</div>
+          <div class="fa"></div>
+          <div class="fn">PENDING</div>
+          <div class="fa"></div>
+          <div class="fn">VERIFICATION</div>
+          <div class="fa"></div>
+          <div class="fn fn-gr">APPROVED</div>
+        </div>
+        <div class="fr g16 mt8" style="justify-content:center;">
+          <div class="fn fn-o" style="width:160px;">REVIEW_REQUIRED</div>
+          <div class="fn fn-r" style="width:160px;">REJECTED</div>
+        </div>
+        <div class="card mt10" style="padding:10px 14px;">
+          <div class="fr ac g8"><div class="norm nm-must">MUST NOT</div><div class="bsm">Un compte non conforme ne doit pas accéder aux fonctionnalités réglementées.</div></div>
+        </div>
+      </div>
+
+      <div class="fc g16">
+        <!-- KYC Flow -->
+        <div class="label" style="font-size:8px;color:var(--dim);">KYC Flow Personal — Section 9</div>
+        <div class="flow mt6" style="gap:0;">
+          <div class="fn fn-c">ACCOUNT CREATED</div>
+          <div class="fa fac"></div>
+          <div class="fn">KYC REQUIRED</div>
+          <div class="fa"></div>
+          <div class="fn fn-g">SUMSUB SESSION</div>
+          <div class="fa"></div>
+          <div class="fn">DOCUMENT VERIFICATION</div>
+          <div class="fa"></div>
+          <div class="fn">LIVENESS / BIOMETRIC</div>
+          <div class="fa"></div>
+          <div class="fn">SCREENING</div>
+          <div class="fa"></div>
+          <div class="fn">SUMSUB RESULT</div>
+          <div class="fa"></div>
+          <div class="fn">NEXUS COMPLIANCE DECISION</div>
+          <div class="fa"></div>
+          <div class="fn fn-gr">ACTIVE / REVIEW / REJECTED</div>
+        </div>
+
+        <!-- KYB Flow -->
+        <div class="label" style="font-size:8px;color:var(--dim);margin-top:16px;">KYB Flow Business — Section 10</div>
+        <div class="flow mt6" style="gap:0;">
+          <div class="fn fn-c">BUSINESS CREATED</div>
+          <div class="fa fac"></div>
+          <div class="fn fn-g">KYB</div>
+          <div class="fa"></div>
+          <div class="fn">COMPANY VERIFICATION</div>
+          <div class="fa"></div>
+          <div class="fn">UBO IDENTIFICATION</div>
+          <div class="fa"></div>
+          <div class="fn">DIRECTOR / REPRESENTATIVE</div>
+          <div class="fa"></div>
+          <div class="fn">SCREENING</div>
+          <div class="fa"></div>
+          <div class="fn">COMPLIANCE REVIEW</div>
+          <div class="fa"></div>
+          <div class="fn fn-gr">BUSINESS ACTIVATED</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="fl">Sumsub & KYC/KYB — Partie IV, Sections 8–11</div>
+    <div class="fr2">NEXUS-DT01-v1.0</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════
+     SLIDE 06 — WALLET & FUNDING ENGINE
+══════════════════════════════════════ -->
+<div class="slide">
+  <div class="bg-grid"></div>
+  <div class="sn">06 / 18</div>
+  <div class="topbar">
+    <div class="logo"><div class="lbox">N</div><div class="ltxt">NEXUS CORP TECHNOLOGIES</div></div>
+    <div class="pill pc">Wallet & Funding</div>
+  </div>
+
+  <div class="body-sm">
+    <div class="g2" style="gap:40px;align-items:start;">
+
+      <div class="fc g20">
+        <div class="fc g10">
+          <div class="label">Parties V–VII — Wallet & Funding</div>
+          <div class="hmd">Balances unifiées.<br><span class="gc">Funding Engine.</span></div>
+        </div>
+
+        <!-- Wallet balance types -->
+        <div class="card hi-c">
+          <div class="label" style="font-size:8px;">Balance Types — Section 12</div>
+          <div class="fc g8 mt10">
+            <div class="trow"><div class="bmd">DISPLAY BALANCE</div><div class="pill pc" style="font-size:8px;">Affiché</div></div>
+            <div class="trow"><div class="bmd">AVAILABLE BALANCE</div><div class="pill pgr" style="font-size:8px;">Utilisable</div></div>
+            <div class="trow"><div class="bmd">PENDING BALANCE</div><div class="pill pg" style="font-size:8px;">En cours</div></div>
+            <div class="trow"><div class="bmd">RESERVED BALANCE</div><div class="pill pv" style="font-size:8px;">Réservé</div></div>
+            <div class="trow"><div class="bmd">IN_TRANSIT</div><div class="pill pc" style="font-size:8px;">Transit</div></div>
+            <div class="trow" style="border:none;"><div class="bmd">SETTLEMENT_PENDING</div><div class="pill pg" style="font-size:8px;">Settlement</div></div>
+          </div>
+        </div>
+
+        <!-- Wallet schema -->
+        <div class="label" style="font-size:8px;margin-top:8px;">Wallet Object — Section 14</div>
+        <div class="code mt6" style="font-size:10px;">
+<span class="cmt">// Wallet schema</span>
+{
+  <span class="key">"wallet_id"</span>: <span class="str">"wal_123"</span>,
+  <span class="key">"currency"</span>: <span class="str">"EUR"</span>,
+  <span class="key">"asset_type"</span>: <span class="str">"FIAT"</span>,
+  <span class="key">"provider"</span>: <span class="str">"provider_x"</span>,
+  <span class="key">"custody_model"</span>: <span class="str">"PARTNER_CUSTODY"</span>,
+  <span class="key">"balance"</span>: <span class="val">2500.00</span>,
+  <span class="key">"available_balance"</span>: <span class="val">2200.00</span>,
+  <span class="key">"status"</span>: <span class="ok">"ACTIVE"</span>
+}
+        </div>
+
+        <div class="card mt8" style="padding:12px;">
+          <div class="fr ac g8"><div class="norm nm-must">MUST NOT</div><div class="bsm">Ne pas présenter comme "solde Nexus" des fonds détenus chez un partenaire sans distinction.</div></div>
+        </div>
+      </div>
+
+      <div class="fc g16">
+        <!-- Funding Engine -->
+        <div class="label" style="font-size:8px;color:var(--dim);">Funding Engine — Section 15–17</div>
+        <div class="card hi-c mt6">
+          <div class="label" style="font-size:8px;margin-bottom:10px;">Sources disponibles</div>
+          <div class="fc g8">
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Bank Account</div></div>
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Card</div></div>
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Mobile Money</div></div>
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Fiat Wallet</div></div>
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Crypto Wallet</div></div>
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Virtual Account</div></div>
+            <div class="fr ac g8"><div class="dot dd"></div><div class="bmd">Other Supported Rail</div></div>
+          </div>
+        </div>
+
+        <div class="label" style="font-size:8px;color:var(--dim);margin-top:8px;">Funding Authorization Flow</div>
+        <div class="flow mt6" style="gap:0;">
+          <div class="fn fn-v">QUOTE</div>
+          <div class="fa"></div>
+          <div class="fn">USER CONFIRMATION</div>
+          <div class="fa"></div>
+          <div class="fn fn-c">FUNDING AUTHORIZATION</div>
+          <div class="fa fac"></div>
+          <div class="fn">SOURCE VALIDATION</div>
+          <div class="fa"></div>
+          <div class="fn">DEBIT / RESERVATION</div>
+          <div class="fa"></div>
+          <div class="fn fn-gr">EXECUTION</div>
+        </div>
+
+        <div class="card mt10" style="padding:12px;">
+          <div class="fr ac g8"><div class="norm nm-must">MUST</div><div class="bsm">Le Funding Engine vérifie : solde, devise, disponibilité, limites, KYC/KYB, risque, provider, frais, autorisation.</div></div>
+        </div>
+
+        <!-- Funding verification checklist -->
+        <div class="card hi-gr mt10" style="padding:14px;">
+          <div class="label-gr" style="font-size:8px;margin-bottom:8px;">Funding Verification</div>
+          <div class="g2" style="grid-template-columns:1fr 1fr;gap:6px;">
+            <div class="fr ac g6"><div class="dot dgr" style="width:4px;height:4px;"></div><div class="bsm">Solde suffisant</div></div>
+            <div class="fr ac g6"><div class="dot dgr" style="width:4px;height:4px;"></div><div class="bsm">Devise compatible</div></div>
+            <div class="fr ac g6"><div class="dot dgr" style="width:4px;height:4px;"></div><div class="bsm">Disponibilité</div></div>
+            <div class="fr ac g6"><div class="dot dgr" style="width:4px;height:4px;"></div><div class="bsm">Limites respectées</div></div>
+            <div class="fr ac g6"><div class="dot dgr" style="width:4px;height:4px;"></div><div class="bsm">KYC/KYB validé</div></div>
+            <div class="fr ac g6"><div class="dot dgr" style="width:4px;height:4px;"></div><div class="bsm">Risk clearance</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="fl">Wallet & Funding — Parties V, VI & VII, Sections 12–19</div>
+    <div class="fr2">NEXUS-DT01-v1.0</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════
+     SLIDE 07 — PROVIDER ABSTRACTION & ROUTING
+══════════════════════════════════════ -->
+<div class="slide" style="background:radial-gradient(ellipse at 20% 60%,rgba(139,92,246,.06) 0%,transparent 50%),var(--dark);">
+  <div class="bg-grid"></div>
+  <div class="sn">07 / 18</div>
+  <div class="topbar">
+    <div class="logo"><div class="lbox">N</div><div class="ltxt">NEXUS CORP TECHNOLOGIES</div></div>
+    <div class="pill pv">Provider Abstraction & Routing</div>
+  </div>
+
+  <div class="body-sm">
+    <div class="g2" style="gap:40px;align-items:start;">
+
+      <div class="fc g20">
+        <div class="fc g10">
+          <div class="label">Parties VIII & IX — Provider & Routing</div>
+          <div class="hmd">Abstraction.<br><span class="gv">Routing intelligent.</span></div>
+        </div>
+
+        <!-- Provider Interface -->
+        <div class="label" style="font-size:8px;">Provider Interface — Section 20</div>
+        <div class="code mt6">
+<span class="kw">ProviderInterface</span>
+
+<span class="str">createQuote</span>()
+<span class="str">getCapabilities</span>()
+<span class="str">createPayment</span>()
+<span class="str">getPaymentStatus</span>()
+<span class="str">cancelPayment</span>()
+<span class="str">refundPayment</span>()
+<span class="str">getBalance</span>()
+<span class="str">getAccount</span>()
+        </div>
+
+        <!-- Provider Health -->
+        <div class="label" style="font-size:8px;margin-top:12px;">Provider Health — Section 22</div>
+        <div class="fc g6 mt6">
+          <div class="fr ac g8"><div style="width:8px;height:8px;border-radius:50%;background:var(--gr);"></div><div class="bmd">ACTIVE — Routes disponibles</div></div>
+          <div class="fr ac g8"><div style="width:8px;height:8px;border-radius:50%;background:var(--o);"></div><div class="bmd">DEGRADED — Exclu des routes prioritaires</div></div>
+          <div class="fr ac g8"><div style="width:8px;height:8px;border-radius:50%;background:var(--r);"></div><div class="bmd">PAUSED — Aucune nouvelle transaction</div></div>
+          <div class="fr ac g8"><div style="width:8px;height:8px;border-radius:50%;background:var(--dim);"></div><div class="bmd">MAINTENANCE / DISABLED</div></div>
+        </div>
+
+        <!-- Route Object -->
+        <div class="label" style="font-size:8px;margin-top:12px;">Route Object — Section 26</div>
+        <div class="code mt6" style="font-size:10px;">
+{
+  <span class="key">"route_id"</span>: <span class="str">"route_123"</span>,
+  <span class="key">"source"</span>: { <span class="key">"currency"</span>: <span class="str">"EUR"</span>, <span class="key">"country"</span>: <span class="str">"FR"</span> },
+  <span class="key">"destination"</span>: {
+    <span class="key">"currency"</span>: <span class="str">"XAF"</span>,
+    <span class="key">"country"</span>: <span class="str">"CG"</span>,
+    <span class="key">"type"</span>: <span class="str">"MOBILE_MONEY"</span>
+  },
+  <span class="key">"providers"</span>: [<span class="str">"provider_a"</span>, <span class="str">"provider_b"</span>],
+  <span class="key">"fees"</span>: <span class="val">4.50</span>,
+  <span class="key">"estimated_delivery"</span>: <span class="str">"10m"</span>,
+  <span class="key">"reliability_score"</span>: <span class="val">0.97</span>,
+  <span class="key">"status"</span>: <span class="ok">"ELIGIBLE"</span>
+}
+        </div>
+      </div>
+
+      <div class="fc g16">
+        <!-- Routing Pipeline -->
+        <div class="label" style="font-size:8px;color:var(--dim);">Routing Pipeline — Section 24</div>
+        <div class="flow mt6" style="gap:0;">
+          <div class="fn fn-c">USER INTENT</div>
+          <div class="fa fac"></div>
+          <div class="fn">CAPABILITY CHECK</div>
+          <div class="fa"></div>
+          <div class="fn">COMPLIANCE FILTER</div>
+          <div class="fa"></div>
+          <div class="fn">RISK FILTER</div>
+          <div class="fa"></div>
+          <div class="fn">PROVIDER DISCOVERY</div>
+          <div class="fa"></div>
+          <div class="fn">QUOTE COLLECTION</div>
+          <div class="fa"></div>
+          <div class="fn fn-v">ROUTE CONSTRUCTION</div>
+          <div class="fa"></div>
+          <div class="fn fn-v">ROUTE SCORING</div>
+          <div class="fa"></div>
+          <div class="fn fn-v">ROUTE EXPLANATION</div>
+          <div class="fa"></div>
+          <div class="fn fn-g">USER SELECTION</div>
+          <div class="fa"></div>
+          <div class="fn fn-gr">EXECUTION</div>
+        </div>
+
+        <div class="quote-v quote mt12">
+          <div class="qt" style="font-size:12px;">"Le Routing Engine répond à : quelles routes admissibles permettent de réaliser cette intention, et laquelle répond le mieux aux préférences de l'utilisateur ?"</div>
+        </div>
+
+        <!-- Provider Registry -->
+        <div class="card hi-v mt12" style="padding:14px;">
+          <div class="label-v" style="font-size:8px;margin-bottom:8px;">Provider Registry — Section 21</div>
+          <div class="fr g6" style="flex-wrap:wrap;">
+            <span class="tag">Provider ID</span>
+            <span class="tag">Capabilities</span>
+            <span class="tag">Countries</span>
+            <span class="tag">Currencies</span>
+            <span class="tag">Payment Rails</span>
+            <span class="tag">Limits & Fees</span>
+            <span class="tag">SLA</span>
+            <span class="tag">Compliance req.</span>
+            <span class="tag">API Version</span>
+            <span class="tag">Health</span>
+            <span class="tag">Reliability Score</span>
+            <span class="tag">Status</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="fl">Provider Abstraction & Routing — Parties VIII & IX, Sections 20–27</div>
+    <div class="fr2">NEXUS-DT01-v1.0</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════
+     SLIDE 08 — QUOTE ENGINE & NEXUS AI
+══════════════════════════════════════ -->
+<div class="slide">
+  <div class="bg-grid"></div>
+  <div class="sn">08 / 18</div>
+  <div class="topbar">
+    <div class="logo"><div class="lbox">N</div><div class="ltxt">NEXUS CORP TECHNOLOGIES</div></div>
+    <div class="pill pv">Quote Engine & Nexus AI</div>
+  </div>
+
+  <div class="body-sm">
+    <div class="g2" style="gap:40px;align-items:start;">
+
+      <div class="fc g20">
+        <div class="fc g10">
+          <div class="label">Parties X & XI — Quote & Intelligence</div>
+          <div class="hmd">Quotes parallèles.<br><span class="gv">AI contrôlée.</span></div>
+        </div>
+
+        <!-- Quote aggregation -->
+        <div class="label" style="font-size:8px;">Quote Aggregation — Section 28</div>
+        <div class="card hi-c mt6">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:0;">
+            <div class="fn fn-c" style="width:220px;">QUOTE REQUEST</div>
+            <div class="fa fac"></div>
+            <div style="display:flex;gap:12px;align-items:flex-start;">
+              <div class="fc" style="align-items:center;gap:0;">
+                <div class="fn" style="width:100px;font-size:10px;padding:7px 12px;">Provider A</div>
+              </div>
+              <div class="fc" style="align-items:center;gap:0;">
+                <div class="fn" style="width:100px;font-size:10px;padding:7px 12px;">Provider B</div>
+              </div>
+              <div class="fc" style="align-items:center;gap:0;">
+                <div class="fn" style="width:100px;font-size:10px;padding:7px 12px;">Provider C</div>
+              </div>
+            </div>
+            <div class="fa"></div>
+            <div class="fn" style="width:220px;">NORMALIZATION</div>
+            <div class="fa"></div>
+            <div class="fn fn-g" style="width:220px;">COMPARISON</div>
+          </div>
+        </div>
+
+        <div class="card mt10" style="padding:12px;">
+          <div class="fr ac g8"><div class="norm nm-must">MUST NOT</div><div class="bsm">Une quote expirée ne peut pas être utilisée sans nouvelle validation.</div></div>
+        </div>
+
+        <!-- Quote Object -->
+        <div class="label" style="font-size:8px;margin-top:12px;">Quote Object — Section 29</div>
+        <div class="fc g6 mt6">
+          <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">quote_id · provider_id · route_id</div></div>
+          <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">source_amount · source_currency</div></div>
+          <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">destination_amount · destination_currency</div></div>
+          <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">fees · spread · exchange_rate</div></div>
+          <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">estimated_delivery · expires_at</div></div>
+          <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">conditions · created_at</div></div>
+        </div>
+      </div>
+
+      <div class="fc g16">
+        <!-- AI Architecture -->
+        <div class="label" style="font-size:8px;color:var(--dim);">AI Architecture — Section 30</div>
+        <div class="card hi-v mt6">
+          <div class="arch" style="font-size:10px;background:transparent;border:none;padding:0;">
+<span class="kw">NEXUS AI</span>
+   ↓
+<span class="leaf">Understanding · Analytics · Recommendations</span>
+   ↓
+<span class="val">Deterministic Engines</span>
+   ↓
+<span class="str">Execution / Risk</span>
+          </div>
+        </div>
+
+        <!-- AI Use Cases -->
+        <div class="label" style="font-size:8px;color:var(--dim);margin-top:8px;">AI Use Cases — Section 31</div>
+        <div class="fc g7 mt6">
+          <div class="fr ac g8"><div class="dot dv"></div><div class="bmd">Compréhension de l'intention</div></div>
+          <div class="fr ac g8"><div class="dot dv"></div><div class="bmd">Explication des routes</div></div>
+          <div class="fr ac g8"><div class="dot dv"></div><div class="bmd">Analyse des coûts & spreads</div></div>
+          <div class="fr ac g8"><div class="dot dv"></div><div class="bmd">Détection d'anomalies</div></div>
+          <div class="fr ac g8"><div class="dot dv"></div><div class="bmd">Prédiction de délais</div></div>
+          <div class="fr ac g8"><div class="dot dv"></div><div class="bmd">Analyse performance provider</div></div>
+          <div class="fr ac g8"><div class="dot dv"></div><div class="bmd">Recherche d'opportunités</div></div>
+          <div class="fr ac g8"><div class="dot dv"></div><div class="bmd">Assistance Business & Support</div></div>
+        </div>
+
+        <!-- AI Guardrails -->
+        <div class="card hi-r mt12" style="padding:16px;">
+          <div class="label-g" style="font-size:8px;color:var(--r);margin-bottom:10px;">AI Guardrails — Section 32</div>
+          <div class="bmd" style="color:var(--bright);margin-bottom:10px;">L'IA ne peut pas seule :</div>
+          <div class="fc g7">
+            <div class="fr ac g8"><div class="norm nm-not">MUST NOT</div><div class="bsm">Débiter un compte</div></div>
+            <div class="fr ac g8"><div class="norm nm-not">MUST NOT</div><div class="bsm">Changer un bénéficiaire</div></div>
+            <div class="fr ac g8"><div class="norm nm-not">MUST NOT</div><div class="bsm">Contourner KYC ou AML</div></div>
+            <div class="fr ac g8"><div class="norm nm-not">MUST NOT</div><div class="bsm">Sélectionner une route interdite</div></div>
+            <div class="fr ac g8"><div class="norm nm-not">MUST NOT</div><div class="bsm">Autoriser une transaction bloquée</div></div>
+          </div>
+          <div class="divc div mt10"></div>
+          <div class="bsm mt8" style="font-style:italic;color:var(--main);">Toute action financière passe par les services déterministes correspondants.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="fl">Quote Engine & Nexus AI — Parties X & XI, Sections 28–32</div>
+    <div class="fr2">NEXUS-DT01-v1.0</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════
+     SLIDE 09 — POLICY, RISK & EXECUTION
+══════════════════════════════════════ -->
+<div class="slide">
+  <div class="bg-grid"></div>
+  <div class="sn">09 / 18</div>
+  <div class="topbar">
+    <div class="logo"><div class="lbox">N</div><div class="ltxt">NEXUS CORP TECHNOLOGIES</div></div>
+    <div class="pill pc">Policy · Risk · Execution</div>
+  </div>
+
+  <div class="body-sm">
+    <div class="g2" style="gap:40px;align-items:start;">
+
+      <div class="fc g16">
+        <div class="fc g10">
+          <div class="label">Parties XII & XIII — Contrôle & Exécution</div>
+          <div class="hmd">Policy.<br><span class="gc">Risk.</span><br>Execution.</div>
+        </div>
+
+        <!-- Policy Engine -->
+        <div class="label" style="font-size:8px;color:var(--dim);">Policy Engine — Section 33</div>
+        <div class="card hi-c mt6">
+          <div class="flow" style="gap:0;align-items:flex-start;">
+            <div style="font-size:13px;font-weight:600;color:var(--text-bright);margin-bottom:8px;font-family:'JetBrains Mono',monospace;">Transaction</div>
+            <div class="fa fac" style="margin-left:40px;"></div>
+            <div style="font-size:13px;font-weight:700;color:var(--c);margin-bottom:8px;font-family:'JetBrains Mono',monospace;">Policy Engine</div>
+          </div>
+          <div class="fc g7 mt4">
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Jurisdiction</div></div>
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">KYC/KYB</div></div>
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">AML</div></div>
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Limits</div></div>
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Provider Rules</div></div>
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Asset Rules & Internal Policies</div></div>
+          </div>
+          <div class="divc div mt12"></div>
+          <div class="fr g10 mt10">
+            <div class="fn fn-gr" style="flex:1;width:auto;">APPROVED</div>
+            <div class="fn fn-o" style="flex:1;width:auto;">REVIEW</div>
+            <div class="fn fn-r" style="flex:1;width:auto;">DECLINED</div>
+          </div>
+        </div>
+
+        <!-- Risk Engine -->
+        <div class="label" style="font-size:8px;color:var(--dim);margin-top:12px;">Risk Engine — Section 34</div>
+        <div class="card hi-v mt6" style="padding:14px;">
+          <div class="fr g6" style="flex-wrap:wrap;">
+            <span class="tag">Profil utilisateur</span>
+            <span class="tag">Montant</span>
+            <span class="tag">Fréquence</span>
+            <span class="tag">Destination</span>
+            <span class="tag">Source</span>
+            <span class="tag">Historique</span>
+            <span class="tag">Signaux fraude</span>
+            <span class="tag">Corridor risk</span>
+            <span class="tag">Contrepartie</span>
+          </div>
+          <div class="card mt10" style="padding:10px;background:var(--panel2);">
+            <div class="bsm">⚠ Le Risk Engine ne doit pas être confondu avec le moteur AML.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="fc g16">
+        <!-- Execution Architecture -->
+        <div class="label" style="font-size:8px;color:var(--dim);">Execution Architecture — Section 35</div>
+        <div class="flow mt6" style="gap:0;">
+          <div class="fn fn-g">USER SELECTS ROUTE</div>
+          <div class="fa"></div>
+          <div class="fn">CONFIRMATION</div>
+          <div class="fa"></div>
+          <div class="fn fn-c">FUNDING AUTHORIZATION</div>
+          <div class="fa fac"></div>
+          <div class="fn fn-v">EXECUTION ENGINE</div>
+          <div class="fa"></div>
+          <div class="fn">PROVIDER ADAPTER</div>
+          <div class="fa"></div>
+          <div class="fn">PROVIDER</div>
+          <div class="fa"></div>
+          <div class="fn">WEBHOOK / POLLING</div>
+          <div class="fa"></div>
+          <div class="fn fn-gr">TRANSACTION STATE</div>
+        </div>
+
+        <!-- State Machine -->
+        <div class="label" style="font-size:8px;color:var(--dim);margin-top:12px;">Transaction State Machine — Section 36</div>
+        <div class="fc g6 mt6">
+          <div class="code" style="font-size:10px;">
+<span class="ok">CREATED</span> → <span class="ok">QUOTED</span> → <span class="ok">AUTHORIZED</span>
+→ <span class="ok">FUNDING</span> → <span class="ok">PROCESSING</span>
+→ <span class="ok">PENDING</span> → <span class="ok">COMPLETED</span>
+          </div>
+          <div class="code" style="font-size:10px;">
+<span class="err">FAILED</span>      <span class="warn">CANCELLED</span>    <span class="warn">EXPIRED</span>
+<span class="warn">REVERSED</span>    <span class="err">REFUNDED</span>     <span class="warn">MANUAL_REVIEW</span>
+<span class="err">RECONCILIATION_REQUIRED</span>
+          </div>
+        </div>
+
+        <!-- Idempotency -->
+        <div class="card hi-c mt8" style="padding:14px;">
+          <div class="label" style="font-size:8px;margin-bottom:8px;">Idempotency — Section 37</div>
+          <div class="code" style="font-size:10px;background:var(--panel2);">
+idempotency_key
+transaction_id
+provider_reference
+          </div>
+          <div class="fr ac g8 mt10"><div class="norm nm-must">MUST NOT</div><div class="bsm">Un même ordre ne doit jamais entraîner deux débits simplement parce qu'une requête a été répétée.</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="fl">Policy, Risk & Execution — Parties XII & XIII, Sections 33–37</div>
+    <div class="fr2">NEXUS-DT01-v1.0</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════
+     SLIDE 10 — RECOVERY, RECONCILIATION & LEDGER
+══════════════════════════════════════ -->
+<div class="slide" style="background:radial-gradient(ellipse at 85% 60%,rgba(0,212,168,.05) 0%,transparent 50%),var(--dark);">
+  <div class="bg-grid"></div>
+  <div class="sn">10 / 18</div>
+  <div class="topbar">
+    <div class="logo"><div class="lbox">N</div><div class="ltxt">NEXUS CORP TECHNOLOGIES</div></div>
+    <div class="pill pgr">Recovery · Reconciliation · Ledger</div>
+  </div>
+
+  <div class="body-sm">
+    <div class="g2" style="gap:40px;align-items:start;">
+
+      <div class="fc g16">
+        <div class="fc g10">
+          <div class="label">Parties XIV–XVI — Recovery & Ledger</div>
+          <div class="hmd">Intelligent.<br><span class="ggr">Réconcilié.</span><br>Immuable.</div>
+        </div>
+
+        <!-- Recovery -->
+        <div class="label" style="font-size:8px;color:var(--dim);">Intelligent Recovery — Section 38–39</div>
+        <div class="card hi-gr mt6">
+          <div class="label-gr" style="font-size:8px;margin-bottom:8px;">Cas traités</div>
+          <div class="fc g7">
+            <div class="fr ac g8"><div class="dot dgr"></div><div class="bmd">Timeout · Provider unavailable</div></div>
+            <div class="fr ac g8"><div class="dot dgr"></div><div class="bmd">Webhook missing / Duplicate</div></div>
+            <div class="fr ac g8"><div class="dot dgr"></div><div class="bmd">Failed · Unknown state</div></div>
+            <div class="fr ac g8"><div class="dot dgr"></div><div class="bmd">Partial completion</div></div>
+            <div class="fr ac g8"><div class="dot dgr"></div><div class="bmd">Refund · Route failure</div></div>
+          </div>
+          <div class="fr ac g8 mt10"><div class="norm nm-must">MUST NOT</div><div class="bsm">Jamais de retry financier aveugle.</div></div>
+        </div>
+
+        <div class="flow mt12" style="gap:0;">
+          <div class="fn fn-c">EXECUTION</div>
+          <div class="fa fac"></div>
+          <div class="fn fn-o">TIMEOUT</div>
+          <div class="fa"></div>
+          <div class="fn fn-o">UNKNOWN</div>
+          <div class="fa"></div>
+          <div class="fn">CHECK PROVIDER</div>
+          <div class="fa"></div>
+          <div style="display:flex;gap:20px;align-items:flex-start;">
+            <div class="fn fn-gr" style="width:100px;font-size:10px;">SUCCESS ✓</div>
+            <div class="fc" style="align-items:center;gap:0;">
+              <div class="fn fn-r" style="width:100px;font-size:10px;">FAILED</div>
+              <div class="fa"></div>
+              <div class="fn fn-g" style="width:130px;font-size:10px;">NEW ROUTE</div>
+              <div class="fa"></div>
+              <div class="fn" style="width:130px;font-size:10px;">POLICY CHECK</div>
+              <div class="fa"></div>
+              <div class="fn fn-gr" style="width:130px;font-size:10px;">EXECUTION</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="fc g16">
+        <!-- Reconciliation -->
+        <div class="label" style="font-size:8px;color:var(--dim);">Reconciliation Engine — Sections 40–41</div>
+        <div class="card hi-c mt6">
+          <div class="arch" style="background:transparent;border:none;padding:0;font-size:10px;">
+<span class="kw">NEXUS</span>
+   ↕
+<span class="leaf">PROVIDER</span>
+   ↕
+<span class="str">BANK / PAYMENT NETWORK</span>
+          </div>
+          <div class="fc g7 mt10">
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Montant · Statut · Frais</div></div>
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Référence · Settlement</div></div>
+            <div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Timestamp · Devise</div></div>
+          </div>
+        </div>
+
+        <div class="label" style="font-size:8px;color:var(--dim);margin-top:10px;">Reconciliation Case</div>
+        <div class="code mt6" style="font-size:10px;">
+CASE_ID · TRANSACTION_ID
+PROVIDER · EXPECTED / ACTUAL
+DIFFERENCE · STATUS
+OWNER · PRIORITY
+CREATED_AT · RESOLUTION
+        </div>
+        <div class="card mt8" style="padding:10px 14px;">
+          <div class="bsm">Les cas critiques sont escaladés automatiquement.</div>
+        </div>
+
+        <!-- Ledger -->
+        <div class="label" style="font-size:8px;color:var(--dim);margin-top:12px;">Ledger Architecture — Sections 42–43</div>
+        <div class="flow mt6" style="gap:0;">
+          <div class="fn fn-c">TRANSACTION</div>
+          <div class="fa fac"></div>
+          <div class="fn">LEDGER EVENTS</div>
+          <div class="fa"></div>
+          <div class="fn">ACCOUNTING ENTRIES</div>
+          <div class="fa"></div>
+          <div class="fn fn-gr">SETTLEMENT</div>
+        </div>
+        <div class="card hi-gr mt10" style="padding:14px;">
+          <div class="label-gr" style="font-size:8px;margin-bottom:8px;">Ledger Principles</div>
+          <div class="fc g7">
+            <div class="fr ac g8"><div class="norm nm-must">MUST</div><div class="bsm">Immuable · Append-only</div></div>
+            <div class="fr ac g8"><div class="norm nm-must">MUST</div><div class="bsm">Auditable · Réconciliable</div></div>
+            <div class="fr ac g8"><div class="norm nm-must">MUST</div><div class="bsm">Versionné — Double-entry</div></div>
+            <div class="fr ac g8"><div class="norm nm-not">MUST NOT</div><div class="bsm">Modifier silencieusement l'historique</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="fl">Recovery, Reconciliation & Ledger — Parties XIV–XVI, Sections 38–43</div>
+    <div class="fr2">NEXUS-DT01-v1.0</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════
+     SLIDE 11 — EVENT BUS & DATA ARCHITECTURE
+══════════════════════════════════════ -->
+<div class="slide">
+  <div class="bg-grid"></div>
+  <div class="sn">11 / 18</div>
+  <div class="topbar">
+    <div class="logo"><div class="lbox">N</div><div class="ltxt">NEXUS CORP TECHNOLOGIES</div></div>
+    <div class="pill pc">Events & Data Architecture</div>
+  </div>
+
+  <div class="body-sm">
+    <div class="g2" style="gap:40px;align-items:start;">
+
+      <div class="fc g16">
+        <div class="fc g10">
+          <div class="label">Parties XXII & XXIII — Events & Data</div>
+          <div class="hmd">Event-driven.<br><span class="gc">Domain separation.</span></div>
+        </div>
+
+        <!-- Events -->
+        <div class="label" style="font-size:8px;color:var(--dim);">Événements principaux — Section 53</div>
+        <div class="g2 mt6" style="grid-template-columns:1fr 1fr;gap:6px;">
+          <div class="card" style="padding:10px;"><div class="mono" style="font-size:9px;">USER_CREATED</div></div>
+          <div class="card" style="padding:10px;"><div class="mono" style="font-size:9px;">KYC_COMPLETED</div></div>
+          <div class="card" style="padding:10px;"><div class="mono" style="font-size:9px;">KYB_COMPLETED</div></div>
+          <div class="card" style="padding:10px;"><div class="mono" style="font-size:9px;">WALLET_CREATED</div></div>
+          <div class="card" style="padding:10px;"><div class="mono" style="font-size:9px;">QUOTE_CREATED</div></div>
+          <div class="card" style="padding:10px;"><div class="mono" style="font-size:9px;">QUOTE_EXPIRED</div></div>
+          <div class="card" style="padding:10px;"><div class="mono" style="font-size:9px;">ROUTE_SELECTED</div></div>
+          <div class="card" style="padding:10px;"><div class="mono" style="font-size:9px;">TX_CREATED</div></div>
+          <div class="card" style="padding:10px;"><div class="mono" style="font-size:9px;">FUNDING_AUTH</div></div>
+          <div class="card" style="padding:10px;"><div class="mono" style="font-size:9px;">TX_PROCESSING</div></div>
+          <div class="card hi-gr" style="padding:10px;"><div class="mono mono-gr" style="font-size:9px;">TX_COMPLETED</div></div>
+          <div class="card hi-r" style="padding:10px;"><div class="mono" style="font-size:9px;color:var(--r);">TX_FAILED</div></div>
+          <div class="card" style="padding:10px;"><div class="mono" style="font-size:9px;">REFUND_CREATED</div></div>
+          <div class="card" style="padding:10px;"><div class="mono" style="font-size:9px;">SETTLEMENT_OK</div></div>
+          <div class="card hi-r" style="padding:10px;"><div class="mono" style="font-size:9px;color:var(--o);">RECON_FAILED</div></div>
+          <div class="card hi-o" style="padding:10px;"><div class="mono" style="font-size:9px;color:var(--o);">PROVIDER_DEGRADED</div></div>
+        </div>
+
+        <div class="card mt10" style="padding:12px;">
+          <div class="fr ac g8"><div class="norm nm-must">MUST</div><div class="bsm">Les événements financiers doivent être immuables et traçables.</div></div>
+        </div>
+        <div class="card mt6" style="padding:12px;">
+          <div class="fr ac g8"><div class="norm nm-not">MUST NOT</div><div class="bsm">Les événements financiers ne doivent jamais être rejoués aveuglément.</div></div>
+        </div>
+      </div>
+
+      <div class="fc g16">
+        <!-- Domain separation -->
+        <div class="label" style="font-size:8px;color:var(--dim);">Domain Separation — Section 54</div>
+        <div class="fc g8 mt6">
+          <div class="card hi-c" style="padding:12px;">
+            <div class="fr ac g10">
+              <div class="mono" style="font-size:10px;min-width:90px;">IDENTITY</div>
+              <div class="bsm">Identity Service</div>
+            </div>
+          </div>
+          <div class="card" style="padding:12px;">
+            <div class="fr ac g10">
+              <div class="mono" style="font-size:10px;min-width:90px;">COMPLIANCE</div>
+              <div class="bsm">Compliance Service + Sumsub evidence</div>
+            </div>
+          </div>
+          <div class="card" style="padding:12px;">
+            <div class="fr ac g10">
+              <div class="mono" style="font-size:10px;min-width:90px;">TRANSACTION</div>
+              <div class="bsm">Transaction Service</div>
+            </div>
+          </div>
+          <div class="card" style="padding:12px;">
+            <div class="fr ac g10">
+              <div class="mono" style="font-size:10px;min-width:90px;">LEDGER</div>
+              <div class="bsm">Ledger Service</div>
+            </div>
+          </div>
+          <div class="card" style="padding:12px;">
+            <div class="fr ac g10">
+              <div class="mono" style="font-size:10px;min-width:90px;">PROVIDER</div>
+              <div class="bsm">Provider Registry</div>
+            </div>
+          </div>
+          <div class="card" style="padding:12px;">
+            <div class="fr ac g10">
+              <div class="mono" style="font-size:10px;min-width:90px;">SETTLEMENT</div>
+              <div class="bsm">Settlement Service</div>
+            </div>
+          </div>
+          <div class="card" style="padding:12px;">
+            <div class="fr ac g10">
+              <div class="mono" style="font-size:10px;min-width:90px;">AUDIT</div>
+              <div class="bsm">Audit Service</div>
+            </div>
+          </div>
+          <div class="card hi-v" style="padding:12px;">
+            <div class="fr ac g10">
+              <div class="mono mono-v" style="font-size:10px;min-width:90px;">AI</div>
+              <div class="bsm">Recommendations · Models · Signals</div>
+            </div>
+          </div>
+          <div class="card hi-g" style="padding:12px;">
+            <div class="fr ac g10">
+              <div class="mono mono-g" style="font-size:10px;min-width:90px;">MARKET</div>
+              <div class="bsm">FX · Crypto · P2P · Spreads</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card mt8" style="padding:12px;">
+          <div class="fr ac g8"><div class="norm nm-must">MUST</div><div class="bsm">Chaque domaine doit avoir une source de vérité clairement définie.</div></div>
+        </div>
+        <div class="card mt6" style="padding:12px;">
+          <div class="fr ac g8"><div class="norm nm-not">MUST NOT</div><div class="bsm">Les données critiques ne doivent pas être accessibles directement par n'importe quel service.</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="fl">Events & Data — Parties XXII & XXIII, Sections 53–55</div>
+    <div class="fr2">NEXUS-DT01-v1.0</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════
+     SLIDE 12 — SÉCURITÉ & OBSERVABILITÉ
+══════════════════════════════════════ -->
+<div class="slide">
+  <div class="bg-grid"></div>
+  <div class="sn">12 / 18</div>
+  <div class="topbar">
+    <div class="logo"><div class="lbox">N</div><div class="ltxt">NEXUS CORP TECHNOLOGIES</div></div>
+    <div class="pill pgr">Sécurité & Observabilité</div>
+  </div>
+
+  <div class="body-sm">
+    <div class="g2" style="gap:40px;align-items:start;">
+
+      <div class="fc g16">
+        <div class="fc g10">
+          <div class="label">Parties XXIV & XXV — Security & Monitoring</div>
+          <div class="hmd">Défense.<br><span class="ggr">Observabilité.</span></div>
+        </div>
+
+        <!-- Security -->
+        <div class="label" style="font-size:8px;color:var(--dim);">Security Architecture — Section 56</div>
+        <div class="flow mt6" style="gap:0;align-items:flex-start;">
+          <div style="display:flex;flex-direction:column;gap:6px;width:100%;">
+            <div class="card hi-c" style="padding:12px;">
+              <div class="bmd" style="font-weight:600;color:var(--bright);">Authentification & Accès</div>
+              <div class="fr g6 mt6" style="flex-wrap:wrap;"><span class="tag">MFA</span><span class="tag">OAuth2/OIDC</span><span class="tag">RBAC/ABAC</span><span class="tag">Séparation tâches</span></div>
+            </div>
+            <div class="card" style="padding:12px;">
+              <div class="bmd" style="font-weight:600;color:var(--bright);">Chiffrement & Transport</div>
+              <div class="fr g6 mt6" style="flex-wrap:wrap;"><span class="tag">At-rest encryption</span><span class="tag">TLS</span><span class="tag">Key management</span></div>
+            </div>
+            <div class="card hi-r" style="padding:12px;">
+              <div class="bmd" style="font-weight:600;color:var(--bright);">Secrets — Section 57</div>
+              <div class="fc g6 mt8">
+                <div class="fr ac g8"><div class="norm nm-not">MUST NOT</div><div class="bsm">Dans le code ou Git</div></div>
+                <div class="fr ac g8"><div class="norm nm-not">MUST NOT</div><div class="bsm">Dans les logs ou tickets</div></div>
+                <div class="fr ac g8"><div class="norm nm-not">MUST NOT</div><div class="bsm">Dans les réponses API</div></div>
+                <div class="fr ac g8"><div class="norm nm-not">MUST NOT</div><div class="bsm">Dans les messages d'erreur</div></div>
+              </div>
+            </div>
+            <div class="card" style="padding:12px;">
+              <div class="bmd" style="font-weight:600;color:var(--bright);">Opérations</div>
+              <div class="fr g6 mt6" style="flex-wrap:wrap;"><span class="tag">Anti-replay</span><span class="tag">Rate limiting</span><span class="tag">Webhook sign.</span><span class="tag">Audit logs</span><span class="tag">Monitoring</span><span class="tag">Alerting</span><span class="tag">Backups</span><span class="tag">DR · RPO/RTO</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="fc g16">
+        <!-- Monitoring perimeter -->
+        <div class="label" style="font-size:8px;color:var(--dim);">Monitoring Scope — Section 58</div>
+        <div class="g2 mt6" style="grid-template-columns:1fr 1fr;gap:8px;">
+          <div class="card" style="padding:10px;"><div class="fr ac g6"><div class="dot dc" style="width:4px;height:4px;"></div><div class="bsm">API Latency</div></div></div>
+          <div class="card" style="padding:10px;"><div class="fr ac g6"><div class="dot dc" style="width:4px;height:4px;"></div><div class="bsm">Providers</div></div></div>
+          <div class="card" style="padding:10px;"><div class="fr ac g6"><div class="dot dc" style="width:4px;height:4px;"></div><div class="bsm">Transactions</div></div></div>
+          <div class="card" style="padding:10px;"><div class="fr ac g6"><div class="dot dc" style="width:4px;height:4px;"></div><div class="bsm">Routes</div></div></div>
+          <div class="card" style="padding:10px;"><div class="fr ac g6"><div class="dot dc" style="width:4px;height:4px;"></div><div class="bsm">Webhooks</div></div></div>
+          <div class="card" style="padding:10px;"><div class="fr ac g6"><div class="dot dc" style="width:4px;height:4px;"></div><div class="bsm">Queue</div></div></div>
+          <div class="card" style="padding:10px;"><div class="fr ac g6"><div class="dot dc" style="width:4px;height:4px;"></div><div class="bsm">Settlement</div></div></div>
+          <div class="card" style="padding:10px;"><div class="fr ac g6"><div class="dot dc" style="width:4px;height:4px;"></div><div class="bsm">Reconciliation</div></div></div>
+          <div class="card" style="padding:10px;"><div class="fr ac g6"><div class="dot dc" style="width:4px;height:4px;"></div><div class="bsm">Ledger</div></div></div>
+          <div class="card" style="padding:10px;"><div class="fr ac g6"><div class="dot dv" style="width:4px;height:4px;"></div><div class="bsm">AI</div></div></div>
+        </div>
+
+        <!-- Core KPIs -->
+        <div class="label" style="font-size:8px;color:var(--dim);margin-top:12px;">Core Technical KPIs — Section 59</div>
+        <div class="fc g8 mt6">
+          <div class="trow"><div class="bmd">Transaction Success Rate</div><div class="pill pgr" style="font-size:8px;">Primaire</div></div>
+          <div class="trow"><div class="bmd">Provider Success Rate</div><div class="pill pgr" style="font-size:8px;">Primaire</div></div>
+          <div class="trow"><div class="bmd">API / Quote Latency</div><div class="pill pc" style="font-size:8px;">Performance</div></div>
+          <div class="trow"><div class="bmd">Routing Success Rate</div><div class="pill pc" style="font-size:8px;">Performance</div></div>
+          <div class="trow"><div class="bmd">Recovery Rate</div><div class="pill pgr" style="font-size:8px;">Resilience</div></div>
+          <div class="trow"><div class="bmd">Reconciliation Rate</div><div class="pill pgr" style="font-size:8px;">Intégrité</div></div>
+          <div class="trow"><div class="bmd">Error Rate · Webhook Delay</div><div class="pill pr" style="font-size:8px;">Alerting</div></div>
+        </div>
+
+        <!-- Failure Domains -->
+        <div class="card hi-r mt12" style="padding:14px;">
+          <div class="label-g" style="font-size:8px;color:var(--r);margin-bottom:8px;">Failure Domains — Sections 60–62</div>
+          <div class="fc g7">
+            <div class="fr ac g8"><div class="norm nm-must">MUST</div><div class="bsm">Isoler les défaillances provider</div></div>
+            <div class="fr ac g8"><div class="norm nm-must">MUST</div><div class="bsm">Dead-letter queue + replay contrôlé</div></div>
+            <div class="fr ac g8"><div class="norm nm-not">MUST NOT</div><div class="bsm">Transférer automatiquement sans règles de confirmation</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="fl">Sécurité & Observabilité — Parties XXIV & XXV, Sections 56–62</div>
+    <div class="fr2">NEXUS-DT01-v1.0</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════
+     SLIDE 13 — TESTING, CI/CD & FEATURE FLAGS
+══════════════════════════════════════ -->
+<div class="slide">
+  <div class="bg-grid"></div>
+  <div class="sn">13 / 18</div>
+  <div class="topbar">
+    <div class="logo"><div class="lbox">N</div><div class="ltxt">NEXUS CORP TECHNOLOGIES</div></div>
+    <div class="pill pc">Testing · CI/CD · Feature Flags</div>
+  </div>
+
+  <div class="body-sm">
+    <div class="g2" style="gap:40px;align-items:start;">
+
+      <div class="fc g16">
+        <div class="fc g10">
+          <div class="label">Parties XXVII–XXIX — Quality & Deployment</div>
+          <div class="hmd">Tests.<br><span class="gc">Pipeline.</span><br>Feature Flags.</div>
+        </div>
+
+        <!-- Testing -->
+        <div class="label" style="font-size:8px;color:var(--dim);">Testing Strategy — Section 64</div>
+        <div class="g2 mt6" style="grid-template-columns:1fr 1fr;gap:8px;">
+          <div class="card hi-c" style="padding:12px;"><div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Unit</div></div></div>
+          <div class="card hi-c" style="padding:12px;"><div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Integration</div></div></div>
+          <div class="card hi-v" style="padding:12px;"><div class="fr ac g8"><div class="dot dv"></div><div class="bmd">Contract</div></div></div>
+          <div class="card" style="padding:12px;"><div class="fr ac g8"><div class="dot dc"></div><div class="bmd">End-to-End</div></div></div>
+          <div class="card hi-r" style="padding:12px;"><div class="fr ac g8"><div class="dot dr"></div><div class="bmd">Security</div></div></div>
+          <div class="card" style="padding:12px;"><div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Load</div></div></div>
+          <div class="card hi-o" style="padding:12px;"><div class="fr ac g8"><div class="dot do"></div><div class="bmd">Failure</div></div></div>
+          <div class="card hi-gr" style="padding:12px;"><div class="fr ac g8"><div class="dot dgr"></div><div class="bmd">Reconciliation</div></div></div>
+          <div class="card" style="padding:12px;"><div class="fr ac g8"><div class="dot dc"></div><div class="bmd">Provider</div></div></div>
+          <div class="card hi-v" style="padding:12px;"><div class="fr ac g8"><div class="dot dv"></div><div class="bmd">AI</div></div></div>
+        </div>
+
+        <!-- Provider Contract Testing -->
+        <div class="card hi-v mt12" style="padding:14px;">
+          <div class="label-v" style="font-size:8px;margin-bottom:8px;">Provider Contract Testing — Section 65</div>
+          <div class="code" style="font-size:10px;background:var(--panel2);">
+<span class="str">createQuote</span>()
+<span class="str">createPayment</span>()
+<span class="str">getStatus</span>()
+<span class="str">refund</span>()
+<span class="str">webhook</span>()
+          </div>
+          <div class="fr ac g8 mt10"><div class="norm nm-must">MUST NOT</div><div class="bsm">Un changement d'API provider ne doit pas casser silencieusement Nexus.</div></div>
+        </div>
+
+        <!-- Environments -->
+        <div class="label" style="font-size:8px;color:var(--dim);margin-top:12px;">Environnements — Section 63</div>
+        <div class="fr g8 mt6" style="flex-wrap:wrap;">
+          <div class="card" style="padding:10px 14px;flex:1;text-align:center;"><div class="bsm">LOCAL</div></div>
+          <div class="card" style="padding:10px 14px;flex:1;text-align:center;"><div class="bsm">DEV</div></div>
+          <div class="card" style="padding:10px 14px;flex:1;text-align:center;"><div class="bsm">STAGING</div></div>
+          <div class="card hi-c" style="padding:10px 14px;flex:1;text-align:center;"><div class="bsm ac-c">SANDBOX</div></div>
+          <div class="card hi-gr" style="padding:10px 14px;flex:1;text-align:center;"><div class="bsm ac-gr">PRODUCTION</div></div>
+        </div>
+        <div class="fr ac g8 mt8"><div class="norm nm-not">MUST NOT</div><div class="bsm">Les données production ne doivent pas être copiées vers des environnements inférieurs.</div></div>
+      </div>
+
+      <div class="fc g16">
+        <!-- CI/CD Pipeline -->
+        <div class="label" style="font-size:8px;color:var(--dim);">CI/CD Pipeline — Section 66</div>
+        <div class="flow mt6" style="gap:0;">
+          <div class="fn fn-c">COMMIT</div>
+          <div class="fa fac"></div>
+          <div class="fn">LINT</div>
+          <div class="fa"></div>
+          <div class="fn">UNIT TEST</div>
+          <div class="fa"></div>
+          <div class="fn fn-r">SECURITY SCAN</div>
+          <div class="fa"></div>
+          <div class="fn">BUILD</div>
+          <div class="fa"></div>
+          <div class="fn">INTEGRATION TEST</div>
+          <div class="fa"></div>
+          <div class="fn fn-g">STAGING</div>
+          <div class="fa"></div>
+          <div class="fn fn-v">E2E</div>
+          <div class="fa"></div>
+          <div class="fn fn-g">APPROVAL ✓</div>
+          <div class="fa"></div>
+          <div class="fn fn-gr">PRODUCTION</div>
+        </div>
+        <div class="card mt10" style="padding:12px;">
+          <div class="fr ac g8"><div class="norm nm-must">MUST</div><div class="bsm">Les changements affectant les flux financiers nécessitent une validation renforcée.</div></div>
+        </div>
+
+        <!-- Feature Flags -->
+        <div class="label" style="font-size:8px;color:var(--dim);margin-top:12px;">Feature Flags — Section 67</div>
+        <div class="fc g8 mt6">
+          <div class="code" style="font-size:10px;">
+<span class="kw">CRYPTO_ENABLED</span>
+<span class="kw">CARDS_ENABLED</span>
+<span class="kw">P2P_ENABLED</span>
+<span class="kw">CROSS_ASSET_ENABLED</span>
+<span class="kw">BUSINESS_MASS_PAYMENTS</span>
+          </div>
+          <div class="card hi-r" style="padding:12px;">
+            <div class="fr ac g8"><div class="norm nm-not">MUST NOT</div><div class="bsm">Une feature flag ne doit jamais servir à contourner une obligation réglementaire.</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="fl">Testing, CI/CD & Feature Flags — Parties XXVII–XXIX, Sections 63–67</div>
+    <div class="fr2">NEXUS-DT01-v1.0</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════
+     SLIDE 14 — FLUX COMPLET PERSONAL
+══════════════════════════════════════ -->
+<div class="slide" style="background:radial-gradient(ellipse at 50% 0%,rgba(0,200,255,.05) 0%,transparent 50%),var(--dark);">
+  <div class="bg-grid"></div>
+  <div class="sn">14 / 18</div>
+  <div class="topbar">
+    <div class="logo"><div class="lbox">N</div><div class="ltxt">NEXUS CORP TECHNOLOGIES</div></div>
+    <div class="pill pc">Flux Complet — Personal</div>
+  </div>
+
+  <div class="body-sm">
+    <div class="fc g10">
+      <div class="label">Partie XXX — Architecture du transfert complet</div>
+      <div class="hmd">EUR → XAF · Congo.<br><span class="gc">16 étapes.</span></div>
+    </div>
+
+    <div class="g3 mt24" style="gap:16px;align-items:start;">
+
+      <!-- Steps 1-6 -->
+      <div class="fc g8">
+        <div class="label" style="font-size:8px;color:var(--dim);">Initiation</div>
+        <div class="step">
+          <div class="step-num">01</div>
+          <div class="fc g4"><div style="font-size:12px;font-weight:600;color:var(--bright);">Transfer Form</div><div class="bsm">Utilisateur Personal</div></div>
+        </div>
+        <div class="step">
+          <div class="step-num">02</div>
+          <div class="fc g4"><div style="font-size:12px;font-weight:600;color:var(--bright);">Source</div><div class="bsm">EUR Wallet sélectionné</div></div>
+        </div>
+        <div class="step">
+          <div class="step-num">03</div>
+          <div class="fc g4"><div style="font-size:12px;font-weight:600;color:var(--bright);">Destination</div><div class="bsm">CG · Mobile Money · +242XX</div></div>
+        </div>
+        <div class="step">
+          <div class="step-num">04</div>
+          <div class="fc g4"><div style="font-size:12px;font-weight:600;color:var(--cyan);">Intent Engine</div><div class="bsm">Intention structurée</div></div>
+        </div>
+        <div class="step">
+          <div class="step-num">05</div>
+          <div class="fc g4"><div style="font-size:12px;font-weight:600;color:var(--cyan);">Capability Engine</div><div class="bsm">Capacités disponibles</div></div>
+        </div>
+        <div class="step">
+          <div class="step-num">06</div>
+          <div class="fc g4"><div style="font-size:12px;font-weight:600;color:var(--v);">Policy / Risk</div><div class="bsm">Validation KYC · AML</div></div>
+        </div>
+      </div>
+
+      <!-- Steps 7-11 -->
+      <div class="fc g8">
+        <div class="label" style="font-size:8px;color:var(--dim);">Routing & Sélection</div>
+        <div class="step">
+          <div class="step-num">07</div>
+          <div class="fc g4"><div style="font-size:12px;font-weight:600;color:var(--cyan);">Quote Engine</div><div class="bsm">Interrogation parallèle</div></div>
+        </div>
+        <div class="step">
+          <div class="step-num">08</div>
+          <div class="fc g4"><div style="font-size:12px;font-weight:600;color:var(--v);">Routing Engine</div><div class="bsm">Construction des routes</div></div>
+        </div>
+        <div class="step">
+          <div class="step-num" style="background:rgba(234,184,48,.12);border-color:rgba(234,184,48,.28);color:var(--g);">09</div>
+          <div class="fc g4"><div style="font-size:12px;font-weight:600;color:var(--g);">Routes présentées</div><div class="bsm">A (moins cher) · B (rapide) · C (optimal)</div></div>
+        </div>
+        <div class="step">
+          <div class="step-num" style="background:rgba(234,184,48,.12);border-color:rgba(234,184,48,.28);color:var(--g);">10</div>
+          <div class="fc g4"><div style="font-size:12px;font-weight:600;color:var(--g);">User selects B</div><div class="bsm">Décision utilisateur</div></div>
+        </div>
+        <div class="step">
+          <div class="step-num">11</div>
+          <div class="fc g4"><div style="font-size:12px;font-weight:600;color:var(--bright);">Funding Engine</div><div class="bsm">Vérification & réservation</div></div>
+        </div>
+      </div>
+
+      <!-- Steps 12-16 -->
+      <div class="fc g8">
+        <div class="label" style="font-size:8px;color:var(--dim);">Exécution & Settlement</div>
+        <div class="step">
+          <div class="step-num">12</div>
+          <div class="fc g4"><div style="font-size:12px;font-weight:600;color:var(--bright);">EUR Wallet</div><div class="bsm">Debit / Reservation</div></div>
+        </div>
+        <div class="step">
+          <div class="step-num" style="background:rgba(0,200,255,.12);border-color:rgba(0,200,255,.28);color:var(--c);">13</div>
+          <div class="fc g4"><div style="font-size:12px;font-weight:600;color:var(--c);">Execution Engine</div><div class="bsm">Provider Adapter → Provider</div></div>
+        </div>
+        <div class="step">
+          <div class="step-num">14</div>
+          <div class="fc g4"><div style="font-size:12px;font-weight:600;color:var(--bright);">Webhook</div><div class="bsm">Transaction State update</div></div>
+        </div>
+        <div class="step">
+          <div class="step-num" style="background:rgba(0,212,168,.12);border-color:rgba(0,212,168,.28);color:var(--gr);">15</div>
+          <div class="fc g4"><div style="font-size:12px;font-weight:600;color:var(--gr);">Settlement</div><div class="bsm">→ Reconciliation → Ledger</div></div>
+        </div>
+        <div class="step">
+          <div class="step-num" style="background:rgba(0,212,168,.12);border-color:rgba(0,212,168,.28);color:var(--gr);">16</div>
+          <div class="fc g4"><div style="font-size:12px;font-weight:600;color:var(--gr);">✓ COMPLETED</div><div class="bsm">Notification utilisateur</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="fl">Flux Complet Personal — Partie XXX, Section 68</div>
+    <div class="fr2">NEXUS-DT01-v1.0</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════
+     SLIDE 15 — FLUX BUSINESS & DIFFÉRENCES
+══════════════════════════════════════ -->
+<div class="slide">
+  <div class="bg-grid"></div>
+  <div class="sn">15 / 18</div>
+  <div class="topbar">
+    <div class="logo"><div class="lbox">N</div><div class="ltxt">NEXUS CORP TECHNOLOGIES</div></div>
+    <div class="pill pg">Flux Business & Différences</div>
+  </div>
+
+  <div class="body-sm">
+    <div class="g2" style="gap:40px;align-items:start;">
+
+      <div class="fc g16">
+        <div class="fc g10">
+          <div class="label">Partie XXXI — Business vs Personal</div>
+          <div class="hmd">Même moteur.<br><span class="gg">Workflow différent.</span></div>
+        </div>
+
+        <div class="quote-g quote">
+          <div class="qt" style="font-size:13px;">"La différence principale entre Personal et Business n'est pas le moteur de routing. Le moteur financier est commun."</div>
+        </div>
+
+        <!-- Business Flow -->
+        <div class="label" style="font-size:8px;color:var(--dim);margin-top:12px;">Business Transfer Flow</div>
+        <div class="flow mt6" style="gap:0;">
+          <div class="fn fn-g">BUSINESS WALLET</div>
+          <div class="fa"></div>
+          <div class="fn">EMPLOYEE</div>
+          <div class="fa"></div>
+          <div class="fn fn-g">PAYMENT REQUEST</div>
+          <div class="fa"></div>
+          <div class="fn fn-v">APPROVAL WORKFLOW</div>
+          <div class="fa"></div>
+          <div class="fn">POLICY / RISK</div>
+          <div class="fa"></div>
+          <div class="fn fn-v">ROUTING</div>
+          <div class="fa"></div>
+          <div class="fn fn-c">FUNDING</div>
+          <div class="fa fac"></div>
+          <div class="fn fn-c">EXECUTION</div>
+          <div class="fa"></div>
+          <div class="fn">SETTLEMENT</div>
+          <div class="fa"></div>
+          <div class="fn fn-gr">RECONCILIATION → ACCOUNTING</div>
+        </div>
+
+        <div class="card hi-g mt12" style="padding:14px;">
+          <div class="label-g" style="font-size:8px;margin-bottom:8px;">Approval Engine — Section 46</div>
+          <div class="fr ac g8"><div class="norm nm-not">MUST NOT</div><div class="bsm">L'initiateur ne peut pas approuver seul lorsque la politique impose une séparation des tâches.</div></div>
+        </div>
+      </div>
+
+      <div class="fc g16">
+        <!-- Differences table -->
+        <div class="label" style="font-size:8px;color:var(--dim);">Différences Personal vs Business</div>
+        <div class="card mt6">
+          <div class="trow" style="border-color:var(--border2);">
+            <div class="th">Dimension</div>
+            <div class="th" style="color:var(--c);">Personal</div>
+            <div class="th" style="color:var(--g);">Business</div>
+          </div>
+          <div class="trow"><div class="bsm">Identité</div><div class="bsm ac-c">User</div><div class="bsm ac-g">Organization</div></div>
+          <div class="trow"><div class="bsm">Vérification</div><div class="bsm ac-c">KYC</div><div class="bsm ac-g">KYB + KYC membres</div></div>
+          <div class="trow"><div class="bsm">Permissions</div><div class="bsm ac-c">Utilisateur seul</div><div class="bsm ac-g">RBAC multi-roles</div></div>
+          <div class="trow"><div class="bsm">Approbations</div><div class="bsm ac-c">Auto</div><div class="bsm ac-g">Workflow configurable</div></div>
+          <div class="trow"><div class="bsm">Limites</div><div class="bsm ac-c">Personal caps</div><div class="bsm ac-g">Business caps</div></div>
+          <div class="trow"><div class="bsm">Reporting</div><div class="bsm ac-c">Basique</div><div class="bsm ac-g">Treasury · Accounting</div></div>
+          <div class="trow"><div class="bsm">Mass Payments</div><div class="bsm" style="color:var(--dim);">Non</div><div class="bsm ac-g">Oui</div></div>
+          <div class="trow" style="border-bottom:none;"><div class="bsm">Cards</div><div class="bsm ac-c">Virtuelle / Perso</div><div class="bsm ac-g">Business + règles</div></div>
+        </div>
+
+        <!-- Business Architecture -->
+        <div class="label" style="font-size:8px;color:var(--dim);margin-top:12px;">Business Architecture — Section 45</div>
+        <div class="arch mt6" style="font-size:10px;">
+<span class="key">BUSINESS</span>
+├── <span class="leaf">Organization</span>
+├── <span class="leaf">Members · Roles</span>
+├── <span class="leaf">Wallets · Accounts</span>
+├── <span class="leaf">Beneficiaries</span>
+├── <span class="leaf">Payments · Transfers</span>
+├── <span class="leaf">Treasury</span>
+├── <span class="leaf">Cards</span>
+├── <span class="leaf">Reports</span>
+└── <span class="leaf">Nexus Pro</span>
+        </div>
+
+        <!-- Pro GPM -->
+        <div class="card hi-v mt12" style="padding:14px;">
+          <div class="label-v" style="font-size:8px;margin-bottom:8px;">Nexus Pro GPM — Section 48</div>
+          <div class="code" style="font-size:9px;background:var(--panel2);">
+BUY PRICE + FEES + SPREAD + GAS
++ WITHDRAWAL + FX + TRANSFER
++ SLIPPAGE + RISK
+= <span class="ok">REAL COST</span>
+
+EXIT PRICE - REAL COST = <span class="str">POTENTIAL OPPORTUNITY</span>
+          </div>
+          <div class="fr ac g8 mt10"><div class="norm nm-not">MUST NOT</div><div class="bsm">Jamais présenté comme un rendement garanti.</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="fl">Flux Business & Différences — Parties XVIII, XIX & XXXI, Sections 45–48</div>
+    <div class="fr2">NEXUS-DT01-v1.0</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════
+     SLIDE 16 — API, CONNECT & API RESOURCES
+══════════════════════════════════════ -->
+<div class="slide">
+  <div class="bg-grid"></div>
+  <div class="sn">16 / 18</div>
+  <div class="topbar">
+    <div class="logo"><div class="lbox">N</div><div class="ltxt">NEXUS CORP TECHNOLOGIES</div></div>
+    <div class="pill pgr">API Gateway & Nexus Connect</div>
+  </div>
+
+  <div class="body-sm">
+    <div class="g2" style="gap:40px;align-items:start;">
+
+      <div class="fc g16">
+        <div class="fc g10">
+          <div class="label">Partie XXI — API Gateway & Connect</div>
+          <div class="hmd">API-first.<br><span class="ggr">Nexus Connect.</span></div>
+        </div>
+
+        <!-- API Gateway -->
+        <div class="label" style="font-size:8px;color:var(--dim);">API Gateway Architecture — Section 51</div>
+        <div class="flow mt6" style="gap:0;">
+          <div class="fn fn-v">CLIENT</div>
+          <div class="fa"></div>
+          <div class="fn fn-c">API GATEWAY</div>
+          <div class="fa fac"></div>
+          <div class="fn">AUTH</div>
+          <div class="fa"></div>
+          <div class="fn">RATE LIMIT</div>
+          <div class="fa"></div>
+          <div class="fn fn-g">TENANT ISOLATION</div>
+          <div class="fa"></div>
+          <div class="fn fn-gr">NEXUS SERVICES</div>
+        </div>
+
+        <!-- Nexus Connect -->
+        <div class="label" style="font-size:8px;color:var(--dim);margin-top:16px;">Nexus Connect Flow</div>
+        <div class="flow mt6" style="gap:0;">
+          <div class="fn fn-v">CLIENT API</div>
+          <div class="fa"></div>
+          <div class="fn fn-c">AUTHENTICATION</div>
+          <div class="fa fac"></div>
+          <div class="fn fn-gr">NEXUS CONNECT</div>
+          <div class="fa fagr"></div>
+          <div class="fn fn-v">NEXUS INTELLIGENCE</div>
+          <div class="fa"></div>
+          <div class="fn fn-v">NEXUS CORE</div>
+          <div class="fa"></div>
+          <div class="fn fn-gr">PROVIDER NETWORK</div>
+        </div>
+      </div>
+
+      <div class="fc g16">
+        <!-- API Resources -->
+        <div class="label" style="font-size:8px;color:var(--dim);">API Resources — Section 52</div>
+        <div class="g2 mt6" style="grid-template-columns:1fr 1fr;gap:8px;">
+          <div class="card hi-c" style="padding:10px 14px;"><div class="mono" style="font-size:10px;">/users</div></div>
+          <div class="card hi-c" style="padding:10px 14px;"><div class="mono" style="font-size:10px;">/accounts</div></div>
+          <div class="card hi-g" style="padding:10px 14px;"><div class="mono" style="font-size:10px;">/businesses</div></div>
+          <div class="card" style="padding:10px 14px;"><div class="mono" style="font-size:10px;">/wallets</div></div>
+          <div class="card" style="padding:10px 14px;"><div class="mono" style="font-size:10px;">/beneficiaries</div></div>
+          <div class="card hi-v" style="padding:10px 14px;"><div class="mono mono-v" style="font-size:10px;">/quotes</div></div>
+          <div class="card hi-v" style="padding:10px 14px;"><div class="mono mono-v" style="font-size:10px;">/routes</div></div>
+          <div class="card hi-c" style="padding:10px 14px;"><div class="mono" style="font-size:10px;">/transfers</div></div>
+          <div class="card hi-c" style="padding:10px 14px;"><div class="mono" style="font-size:10px;">/payments</div></div>
+          <div class="card" style="padding:10px 14px;"><div class="mono" style="font-size:10px;">/payouts</div></div>
+          <div class="card" style="padding:10px 14px;"><div class="mono" style="font-size:10px;">/collections</div></div>
+          <div class="card" style="padding:10px 14px;"><div class="mono" style="font-size:10px;">/cards</div></div>
+          <div class="card" style="padding:10px 14px;"><div class="mono" style="font-size:10px;">/providers</div></div>
+          <div class="card" style="padding:10px 14px;"><div class="mono" style="font-size:10px;">/webhooks</div></div>
+        </div>
+
+        <div class="card mt10" style="padding:12px;">
+          <div class="bsm" style="font-style:italic;">Les endpoints définitifs seront spécifiés dans le document API dédié (DT03).</div>
+        </div>
+
+        <!-- Normative banner -->
+        <div class="card hi-c mt12" style="padding:16px;">
+          <div class="label" style="font-size:8px;margin-bottom:10px;">Règles normatives — Section 4 & 0</div>
+          <div class="fc g8">
+            <div class="fr ac g10"><div class="norm nm-must">MUST</div><div class="bsm">Déterministe · Idempotente · Observable</div></div>
+            <div class="fr ac g10"><div class="norm nm-must">MUST</div><div class="bsm">Auditée · Versionnée · Testable</div></div>
+            <div class="fr ac g10"><div class="norm nm-must">MUST</div><div class="bsm">Réconciliable</div></div>
+            <div class="fr ac g10"><div class="norm nm-should">SHOULD</div><div class="bsm">Réversible lorsque le rail le permet</div></div>
+            <div class="fr ac g10"><div class="norm nm-not">MUST NOT</div><div class="bsm">Sortie IA seule = autorisation financière</div></div>
+          </div>
+        </div>
+
+        <!-- Cards Architecture -->
+        <div class="card hi-v mt12" style="padding:14px;">
+          <div class="label-v" style="font-size:8px;margin-bottom:8px;">Cards Architecture — Section 49</div>
+          <div class="fc g6">
+            <div class="arch" style="font-size:10px;background:transparent;border:none;padding:0;">
+<span class="kw">NEXUS</span> → <span class="leaf">Card Service</span> → <span class="str">Issuer</span> → <span class="val">Card Network</span> → <span class="ok">Merchant</span>
+            </div>
+          </div>
+          <div class="fr ac g8 mt10"><div class="norm nm-not">MUST NOT</div><div class="bsm">Cartes activées sans validation du modèle d'émission par juridiction.</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="fl">API Gateway & Nexus Connect — Partie XXI, Sections 51–52</div>
+    <div class="fr2">NEXUS-DT01-v1.0</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════
+     SLIDE 17 — ARCHITECTURE FINALE CONSOLIDÉE
+══════════════════════════════════════ -->
+<div class="slide" style="background:radial-gradient(ellipse at 50% 100%,rgba(0,200,255,.05) 0%,transparent 50%),var(--dark);">
+  <div class="bg-grid"></div>
+  <div class="sn">17 / 18</div>
+  <div class="topbar">
+    <div class="logo"><div class="lbox">N</div><div class="ltxt">NEXUS CORP TECHNOLOGIES</div></div>
+    <div class="pill pc">Architecture Finale Consolidée</div>
+  </div>
+
+  <div class="body-sm">
+    <div class="fc g10">
+      <div class="label">Partie XXXII — Section 69 — Vue consolidée</div>
+      <div class="hmd">L'ensemble.<br><span class="gc">En une vue.</span></div>
+    </div>
+
+    <div class="mt24" style="display:flex;flex-direction:column;align-items:center;gap:0;width:100%;">
+
+      <!-- Experience Row -->
+      <div class="layer layer-c" style="width:100%;margin-bottom:0;">
+        <div style="font-size:9px;font-weight:700;color:var(--c);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;">NEXUS PLATFORM</div>
+        <div class="fr g12" style="justify-content:center;">
+          <div class="layer layer-c" style="padding:8px 16px;width:160px;"><div style="font-size:11px;font-weight:700;color:var(--c);">PERSONAL</div></div>
+          <div class="layer layer-g" style="padding:8px 16px;width:160px;"><div style="font-size:11px;font-weight:700;color:var(--g);">BUSINESS</div></div>
+          <div class="layer layer-gr" style="padding:8px 16px;width:160px;"><div style="font-size:11px;font-weight:700;color:var(--gr);">CONNECT</div></div>
+        </div>
+      </div>
+
+      <div style="width:1px;height:10px;background:var(--border);margin:0 auto;"></div>
+
+      <!-- Core -->
+      <div class="layer" style="width:100%;border-color:rgba(0,200,255,.18);">
+        <div style="font-size:9px;font-weight:700;color:var(--bright);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;">NEXUS CORE</div>
+        <div class="fr g8" style="justify-content:center;flex-wrap:wrap;">
+          <span class="tag">Accounts</span><span class="tag">Wallets</span><span class="tag">Funding</span><span class="tag">Payments</span><span class="tag">Transfers</span>
+        </div>
+      </div>
+
+      <div style="width:1px;height:10px;background:var(--border);margin:0 auto;"></div>
+
+      <!-- Orchestration -->
+      <div class="layer layer-v" style="width:100%;">
+        <div style="font-size:9px;font-weight:700;color:var(--v);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;">NEXUS ORCHESTRATION</div>
+        <div class="fr g8" style="justify-content:center;flex-wrap:wrap;">
+          <span class="tag">Intent</span><span class="tag">Capability</span><span class="tag">Quote</span><span class="tag">Routing</span><span class="tag">Policy</span><span class="tag">Risk</span><span class="tag">Optimization</span><span class="tag">Execution</span><span class="tag">Recovery</span><span class="tag">Reconciliation</span><span class="tag">Ledger</span><span class="tag">Settlement</span>
+        </div>
+      </div>
+
+      <div style="width:1px;height:10px;background:var(--border);margin:0 auto;"></div>
+
+      <!-- Provider -->
+      <div class="layer layer-gr" style="width:100%;">
+        <div style="font-size:9px;font-weight:700;color:var(--gr);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;">PROVIDER NETWORK</div>
+        <div class="fr g8" style="justify-content:center;flex-wrap:wrap;">
+          <span class="tag">Banking · BaaS/EMI</span>
+          <span class="tag">PSP · MoMo</span>
+          <span class="tag">FX Rails</span>
+          <span class="tag">Crypto · Ramp/CEX</span>
+          <span class="tag">Cards · Issuing</span>
+        </div>
+      </div>
+
+      <div style="width:1px;height:10px;background:var(--border);margin:0 auto;"></div>
+
+      <!-- Intelligence + Connect side by side -->
+      <div class="fr g12" style="width:100%;">
+        <div class="layer layer-g" style="flex:1;">
+          <div style="font-size:9px;font-weight:700;color:var(--g);letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;">NEXUS INTELLIGENCE</div>
+          <div class="fr g6" style="justify-content:center;flex-wrap:wrap;">
+            <span class="tag">AI</span><span class="tag">Analytics</span><span class="tag">Pro · GPM</span>
+          </div>
+        </div>
+        <div class="layer layer-c" style="flex:1;">
+          <div style="font-size:9px;font-weight:700;color:var(--c);letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;">NEXUS CONNECT API</div>
+          <div class="fr g6" style="justify-content:center;flex-wrap:wrap;">
+            <span class="tag">API Gateway</span><span class="tag">Embedded</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="card hi-c mt20" style="padding:14px 24px;">
+      <div class="fr ac g16" style="justify-content:center;">
+        <div class="fc g4 tc">
+          <div class="label" style="font-size:8px;">Section 70</div>
+          <div style="font-size:13px;font-weight:600;color:var(--bright);">Nexus n'est jamais une collection d'intégrations providers.</div>
+        </div>
+        <div style="width:1px;height:36px;background:var(--border);"></div>
+        <div class="fc g4 tc">
+          <div class="label" style="font-size:8px;">Section 71</div>
+          <div style="font-size:13px;font-weight:600;color:var(--bright);">Les providers alimentent le réseau. Les données alimentent l'intelligence.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="fl">Architecture Finale — Partie XXXII, Sections 69–71</div>
+    <div class="fr2">NEXUS-DT01-v1.0</div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════
+     SLIDE 18 — CLOSING & STATUT DT01
+══════════════════════════════════════ -->
+<div class="slide cover" style="background:radial-gradient(ellipse at 20% 40%,rgba(0,200,255,.07) 0%,transparent 55%),radial-gradient(ellipse at 80% 70%,rgba(0,212,168,.06) 0%,transparent 50%),var(--dark);">
+  <div class="bg-grid"></div>
+
+  <svg style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;opacity:.2" viewBox="0 0 1280 720">
+    <path d="M0 360 L240 360 L240 180 L560 180 L560 360 L760 360 L760 540 L980 540 L980 360 L1280 360" stroke="#00C8FF" stroke-width=".8" fill="none"/>
+    <circle cx="240" cy="360" r="3" fill="#00C8FF"/>
+    <circle cx="560" cy="180" r="3" fill="#00C8FF"/>
+    <circle cx="760" cy="360" r="3" fill="#00C8FF"/>
+    <circle cx="980" cy="540" r="3" fill="#00C8FF"/>
+    <circle cx="560" cy="360" r="5" fill="none" stroke="#00C8FF" stroke-width="1"/>
+    <circle cx="760" cy="540" r="5" fill="none" stroke="#00D4A8" stroke-width="1"/>
+  </svg>
+
+  <div class="topbar">
+    <div class="logo"><div class="lbox">N</div><div class="ltxt">NEXUS CORP TECHNOLOGIES</div></div>
+    <div class="fr2">NEXUS-DT01-v1.0</div>
+  </div>
+
+  <div style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:60px;position:relative;z-index:2;">
+
+    <div class="pill pc mt12" style="margin-bottom:20px;">Document Technique 01</div>
+
+    <div class="hxl" style="max-width:900px;line-height:1.0;">
+      Architecture <span class="gc">technique</span><br>cible.
+    </div>
+
+    <div class="divc div mt32" style="width:320px;"></div>
+
+    <div class="blg mt24" style="max-width:640px;color:var(--mid);">
+      Nexus est une plateforme d'orchestration financière multi-provider dont l'architecture sépare strictement l'expérience utilisateur, les capacités financières, le routing, le risque, l'exécution, le funding, le settlement et le ledger.
+    </div>
+
+    <div class="fr g16 mt32" style="flex-wrap:wrap;justify-content:center;">
+      <div class="pill pgr">APPROUVÉ COMME ARCHITECTURE CIBLE</div>
+    </div>
+
+    <!-- Next documents -->
+    <div class="card hi-c mt32" style="padding:16px 28px;max-width:800px;width:100%;">
+      <div class="label" style="font-size:8px;margin-bottom:10px;">Documents techniques suivants à produire</div>
+      <div class="fr g8" style="flex-wrap:wrap;justify-content:center;">
+        <span class="tag">DT02 · Data Model</span>
+        <span class="tag">DT03 · API Spec</span>
+        <span class="tag">DT04 · Provider Adapters</span>
+        <span class="tag">DT05 · Routing Engine</span>
+        <span class="tag">DT06 · Ledger & Accounting</span>
+        <span class="tag">DT07 · KYC/KYB</span>
+        <span class="tag">DT08 · Security</span>
+        <span class="tag">DT09 · State Machine</span>
+        <span class="tag">DT10 · Reconciliation</span>
+        <span class="tag">DT11 · Nexus AI</span>
+        <span class="tag">DT12 · Infrastructure</span>
+        <span class="tag">DT13 · Observability</span>
+        <span class="tag">DT14 · DR</span>
+        <span class="tag">DT15 · Business</span>
+        <span class="tag">DT16 · Cards</span>
+        <span class="tag">DT17 · Crypto</span>
+        <span class="tag">DT18 · Connect</span>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="footer">
+    <div class="fl">Confidentiel — Nexus Corp Technologies — Référence technique interne</div>
+    <div class="fr2">NEXUS-DT01-v1.0 · Parent : Maître v5.3 · Août 2026</div>
+  </div>
+</div>
+
+
+</div>
+</body>
+</html>

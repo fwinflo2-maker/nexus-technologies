@@ -1,0 +1,12 @@
+@import './styles/design-system.css';
+@import './styles/dashboard-system.css';
+
+/* ── Particles ───────────────────────────────────────── */
+.particles-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+.auth-page > .particles-layer { z-index: 0; }
+.nexus-dash .particles-bg { z-index: 0; opacity: 0.4; }
