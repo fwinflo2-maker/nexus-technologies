@@ -1,11 +1,9 @@
 import { useState, useEffect } from 'react';
-import { apiGetUserProfile, apiUpdateProfile, apiUpdatePassword, apiGetSessions, apiRevokeSession, type UserProfile, type UserSession } from '../api/client';
+import { useI18n } from '../../context/I18nContext';
+import { apiGetUserProfile, apiUpdateProfile, apiUpdatePassword, apiGetSessions, apiRevokeSession, type UserProfile, type UserSession } from '../../api/client';
 
-/**
- * Page Paramètres — Gestion complète du compte utilisateur.
- * Sections : Profil, Sécurité, Sessions, Préférences.
- */
 export default function SettingsPage() {
+  const { t, lang } = useI18n();
   const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'sessions' | 'preferences'>('profile');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,12 +31,11 @@ export default function SettingsPage() {
 
   // Préférences (locales pour l'instant)
   const [preferences, setPreferences] = useState({
-    language: 'fr',
+    language: lang,
     theme: 'dark',
     notifications_enabled: true,
   });
 
-  // Charger le profil au montage
   useEffect(() => {
     loadProfile();
     loadSessions();
@@ -96,7 +93,7 @@ export default function SettingsPage() {
 
       const response = await apiUpdateProfile(payload);
       if (response.success) {
-        setSuccess('Profil mis à jour avec succès.');
+        setSuccess(t('settings_pref_save'));
         setEditMode(false);
         loadProfile();
       }
@@ -114,7 +111,7 @@ export default function SettingsPage() {
       setSuccess(null);
 
       if (passwordData.new_password.length < 8) {
-        setError('Le nouveau mot de passe doit contenir au moins 8 caractères.');
+        setError(t('reg_err_password_min'));
         return;
       }
 
@@ -125,7 +122,7 @@ export default function SettingsPage() {
 
       const response = await apiUpdatePassword(passwordData);
       if (response.success) {
-        setSuccess('Mot de passe modifié avec succès.');
+        setSuccess(t('settings_pref_save'));
         setPasswordData({
           current_password: '',
           new_password: '',
@@ -160,17 +157,17 @@ export default function SettingsPage() {
     if (!profile) {
       return (
         <div className="card" style={{ padding: 40, textAlign: 'center' }}>
-          <p>Chargement du profil...</p>
+          <p>{t('dash_session_load')}</p>
         </div>
       );
     }
 
     return (
       <div className="settings-section animate-up">
-        <h3 className="section-title">Profil</h3>
+        <h3 className="section-title">{t('settings_tab_profile')}</h3>
         
         <div className="form-group">
-          <label className="form-label">Adresse e-mail</label>
+          <label className="form-label">{t('login_email_label')}</label>
           <input
             type="email"
             value={profile.email}
@@ -178,26 +175,26 @@ export default function SettingsPage() {
             className="input-field"
             style={{ opacity: 0.6, cursor: 'not-allowed' }}
           />
-          <small className="form-hint">L'e-mail ne peut pas être modifié.</small>
+          <small className="form-hint">{t('settings_email_readonly')}</small>
         </div>
 
         <div className="form-group">
-          <label className="form-label">Nom complet</label>
+          <label className="form-label">{t('settings_full_name')}</label>
           {editMode ? (
             <input
               type="text"
               value={formData.full_name}
               onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
               className="input-field"
-              placeholder="Votre nom complet"
+              placeholder={t('settings_full_name')}
             />
           ) : (
-            <div className="static-value">{profile.full_name || 'Non renseigné'}</div>
+            <div className="static-value">{profile.full_name || '—'}</div>
           )}
         </div>
 
         <div className="form-group">
-          <label className="form-label">Téléphone</label>
+          <label className="form-label">{t('settings_phone')}</label>
           {editMode ? (
             <input
               type="tel"
@@ -207,19 +204,19 @@ export default function SettingsPage() {
               placeholder="+242XXXXXXXXX"
             />
           ) : (
-            <div className="static-value">{profile.phone || 'Non renseigné'}</div>
+            <div className="static-value">{profile.phone || '—'}</div>
           )}
         </div>
 
         <div className="form-group">
-          <label className="form-label">Pays de résidence</label>
+          <label className="form-label">{t('settings_residence')}</label>
           {editMode ? (
             <select
               value={formData.country_of_residence}
               onChange={(e) => setFormData({ ...formData, country_of_residence: e.target.value })}
               className="input-field"
             >
-              <option value="">Sélectionner un pays</option>
+              <option value="">— Choose —</option>
               <option value="CG">🇨🇬 Congo</option>
               <option value="CM">🇨🇲 Cameroun</option>
               <option value="GA">🇬🇦 Gabon</option>
@@ -228,24 +225,24 @@ export default function SettingsPage() {
               <option value="CI">🇨🇮 Côte d'Ivoire</option>
             </select>
           ) : (
-            <div className="static-value">{profile.kyc_level === 'none' ? 'Non renseigné' : 'Défini'}</div>
+            <div className="static-value">{profile.kyc_level === 'none' ? t('settings_not_verified') : t('settings_verified_standard')}</div>
           )}
         </div>
 
         <div className="form-group">
-          <label className="form-label">Type de compte</label>
+          <label className="form-label">{t('settings_account_type')}</label>
           <div className="static-value">
-            {profile.account_type === 'business' ? 'Entreprise' : 'Personnel'}
+            {profile.account_type === 'business' ? t('side_business') : t('side_personal')}
           </div>
         </div>
 
         <div className="form-group">
-          <label className="form-label">Statut KYC</label>
+          <label className="form-label">{t('settings_status_kyc')}</label>
           <div className="static-value">
-            {profile.kyc_level === 'none' && '❌ Non vérifié'}
-            {profile.kyc_level === 'basic' && '⚠️ Vérification basique'}
-            {profile.kyc_level === 'standard' && '✅ Vérification standard'}
-            {profile.kyc_level === 'advanced' && '✅✅ Vérification avancée'}
+            {profile.kyc_level === 'none' && '❌ ' + t('settings_not_verified')}
+            {profile.kyc_level === 'basic' && '⚠️ ' + t('settings_verified_basic')}
+            {profile.kyc_level === 'standard' && '✅ ' + t('settings_verified_standard')}
+            {profile.kyc_level === 'advanced' && '✅✅ ' + t('settings_verified_advanced')}
           </div>
         </div>
 
@@ -257,7 +254,7 @@ export default function SettingsPage() {
                 onClick={handleUpdateProfile}
                 disabled={loading}
               >
-                {loading ? 'Enregistrement...' : 'Enregistrer'}
+                {loading ? '...' : t('settings_pref_save')}
               </button>
               <button
                 className="btn btn-secondary"
@@ -268,7 +265,7 @@ export default function SettingsPage() {
                 disabled={loading}
                 style={{ marginLeft: 12 }}
               >
-                Annuler
+                {t('reg_back_btn')}
               </button>
             </>
           ) : (
@@ -277,7 +274,7 @@ export default function SettingsPage() {
               onClick={() => setEditMode(true)}
               disabled={loading}
             >
-              Modifier le profil
+              {t('send_modify')}
             </button>
           )}
         </div>
@@ -288,10 +285,10 @@ export default function SettingsPage() {
   function renderSecuritySection() {
     return (
       <div className="settings-section animate-up">
-        <h3 className="section-title">Sécurité</h3>
+        <h3 className="section-title">{t('settings_tab_security')}</h3>
 
         <div className="form-group">
-          <label className="form-label">Mot de passe actuel</label>
+          <label className="form-label">{t('settings_current_password')}</label>
           <input
             type="password"
             value={passwordData.current_password}
@@ -302,18 +299,18 @@ export default function SettingsPage() {
         </div>
 
         <div className="form-group">
-          <label className="form-label">Nouveau mot de passe</label>
+          <label className="form-label">{t('settings_new_password')}</label>
           <input
             type="password"
             value={passwordData.new_password}
             onChange={(e) => setPasswordData({ ...passwordData, new_password: e.target.value })}
             className="input-field"
-            placeholder="Minimum 8 caractères"
+            placeholder={t('reg_password_ph')}
           />
         </div>
 
         <div className="form-group">
-          <label className="form-label">Confirmer le nouveau mot de passe</label>
+          <label className="form-label">{t('settings_confirm_password')}</label>
           <input
             type="password"
             value={passwordData.confirm_password}
@@ -329,16 +326,16 @@ export default function SettingsPage() {
             onClick={handleUpdatePassword}
             disabled={loading}
           >
-            {loading ? 'Modification...' : 'Changer le mot de passe'}
+            {loading ? '...' : t('settings_pref_save')}
           </button>
         </div>
 
         <div style={{ marginTop: 32, paddingTop: 32, borderTop: '1px solid var(--border)' }}>
-          <h4 style={{ marginBottom: 16 }}>Authentification Google</h4>
+          <h4 style={{ marginBottom: 16 }}>{t('settings_google_auth')}</h4>
           {profile?.auth_provider === 'google' ? (
-            <div className="badge badge-success">Connecté avec Google</div>
+            <div className="badge badge-success">{t('settings_google_connected')}</div>
           ) : (
-            <div className="badge badge-secondary">Authentification locale</div>
+            <div className="badge badge-secondary">{t('settings_local_auth')}</div>
           )}
         </div>
       </div>
@@ -348,28 +345,28 @@ export default function SettingsPage() {
   function renderSessionsSection() {
     return (
       <div className="settings-section animate-up">
-        <h3 className="section-title">Sessions actives</h3>
+        <h3 className="section-title">{t('settings_tab_sessions')}</h3>
         
         {revokedCount > 0 && (
           <div className="alert alert-info" style={{ marginBottom: 20 }}>
-            {revokedCount} session(s) révoquée(s) précédemment.
+            {revokedCount} session(s) revoked.
           </div>
         )}
 
         {sessions.length === 0 ? (
           <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-mid)' }}>
-            Aucune session active affichée.
+            No active sessions.
           </div>
         ) : (
           <div className="table-container">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>JTI</th>
-                  <th>Créée le</th>
-                  <th>Dernière activité</th>
-                  <th>Statut</th>
-                  <th>Action</th>
+                  <th>{t('settings_sessions_jti')}</th>
+                  <th>{t('settings_sessions_created')}</th>
+                  <th>{t('settings_sessions_activity')}</th>
+                  <th>{t('settings_sessions_status')}</th>
+                  <th>{t('settings_sessions_action')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -378,13 +375,13 @@ export default function SettingsPage() {
                     <td style={{ fontFamily: 'monospace', fontSize: 12 }}>
                       {session.jti.substring(0, 16)}...
                     </td>
-                    <td>{new Date(session.created_at).toLocaleDateString('fr-FR')}</td>
-                    <td>{session.last_activity ? new Date(session.last_activity).toLocaleString('fr-FR') : '-'}</td>
+                    <td>{new Date(session.created_at).toLocaleDateString()}</td>
+                    <td>{session.last_activity ? new Date(session.last_activity).toLocaleString() : '-'}</td>
                     <td>
                       {session.is_current ? (
-                        <span className="badge badge-success">Actuelle</span>
+                        <span className="badge badge-success">{t('settings_sessions_current')}</span>
                       ) : (
-                        <span className="badge badge-secondary">Active</span>
+                        <span className="badge badge-secondary">{t('settings_sessions_active')}</span>
                       )}
                     </td>
                     <td>
@@ -396,7 +393,7 @@ export default function SettingsPage() {
                           onClick={() => handleRevokeSession(session.jti)}
                           disabled={loading}
                         >
-                          Révoquer
+                          {t('settings_sessions_revoke')}
                         </button>
                       )}
                     </td>
@@ -413,31 +410,30 @@ export default function SettingsPage() {
   function renderPreferencesSection() {
     return (
       <div className="settings-section animate-up">
-        <h3 className="section-title">Préférences</h3>
+        <h3 className="section-title">{t('settings_tab_preferences')}</h3>
 
         <div className="form-group">
-          <label className="form-label">Langue</label>
-          <select
-            value={preferences.language}
-            onChange={(e) => setPreferences({ ...preferences, language: e.target.value })}
+          <label className="form-label">{t('settings_pref_language')}</label>
+          <input
+            type="text"
+            value={lang.toUpperCase()}
+            disabled
             className="input-field"
-          >
-            <option value="fr">Français</option>
-            <option value="en">English</option>
-          </select>
-          <small className="form-hint">Stocké localement dans votre navigateur.</small>
+            style={{ opacity: 0.6, cursor: 'not-allowed' }}
+          />
+          <small className="form-hint">{t('settings_pref_language_hint')}</small>
         </div>
 
         <div className="form-group">
-          <label className="form-label">Thème</label>
+          <label className="form-label">{t('settings_pref_theme')}</label>
           <select
             value={preferences.theme}
             onChange={(e) => setPreferences({ ...preferences, theme: e.target.value })}
             className="input-field"
           >
-            <option value="dark">Sombre</option>
-            <option value="light">Clair</option>
-            <option value="auto">Automatique</option>
+            <option value="dark">{t('settings_pref_theme_dark')}</option>
+            <option value="light">{t('settings_pref_theme_light')}</option>
+            <option value="auto">{t('settings_pref_theme_auto')}</option>
           </select>
         </div>
 
@@ -448,7 +444,7 @@ export default function SettingsPage() {
               checked={preferences.notifications_enabled}
               onChange={(e) => setPreferences({ ...preferences, notifications_enabled: e.target.checked })}
             />
-            Activer les notifications
+            {t('settings_pref_checkbox')}
           </label>
         </div>
 
@@ -457,11 +453,11 @@ export default function SettingsPage() {
             className="btn btn-primary"
             onClick={() => {
               localStorage.setItem('nexus_preferences', JSON.stringify(preferences));
-              setSuccess('Préférences enregistrées localement.');
+              setSuccess('Preferences saved.');
               setTimeout(() => setSuccess(null), 3000);
             }}
           >
-            Enregistrer les préférences
+            {t('settings_pref_save')}
           </button>
         </div>
       </div>
@@ -471,14 +467,13 @@ export default function SettingsPage() {
   return (
     <div className="page">
       <div className="page-header animate-up">
-        <div className="page-label">COMPTE PERSONNEL</div>
-        <div className="page-title">Paramètres</div>
+        <div className="page-label">{t('side_compte_perso')}</div>
+        <div className="page-title">{t('side_settings')}</div>
         <p className="page-subtitle" style={{ marginTop: 10, fontSize: 14, color: 'var(--text-mid)', maxWidth: 600 }}>
-          Gérez votre profil, votre sécurité et vos préférences de compte.
+          {t('settings_desc')}
         </p>
       </div>
 
-      {/* Messages d'erreur et succès */}
       {error && (
         <div className="alert alert-error animate-up" style={{ marginBottom: 20 }}>
           {error}
@@ -496,25 +491,25 @@ export default function SettingsPage() {
           className={`tab ${activeTab === 'profile' ? 'active' : ''}`}
           onClick={() => setActiveTab('profile')}
         >
-          Profil
+          {t('settings_tab_profile')}
         </button>
         <button
           className={`tab ${activeTab === 'security' ? 'active' : ''}`}
           onClick={() => setActiveTab('security')}
         >
-          Sécurité
+          {t('settings_tab_security')}
         </button>
         <button
           className={`tab ${activeTab === 'sessions' ? 'active' : ''}`}
           onClick={() => setActiveTab('sessions')}
         >
-          Sessions
+          {t('settings_tab_sessions')}
         </button>
         <button
           className={`tab ${activeTab === 'preferences' ? 'active' : ''}`}
           onClick={() => setActiveTab('preferences')}
         >
-          Préférences
+          {t('settings_tab_preferences')}
         </button>
       </div>
 

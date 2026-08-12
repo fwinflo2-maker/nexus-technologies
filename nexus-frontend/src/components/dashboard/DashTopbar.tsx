@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
+import { useI18n } from '../../context/I18nContext';
 import { LanguageSwitcher } from '../LanguageSwitcher';
 import NotificationBell from './NotificationBell';
 
@@ -12,13 +13,14 @@ export default function Topbar({ mode, title, subtitle }: { mode: Mode; title: s
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
+  const { t } = useI18n();
 
   return (
     <header className="topbar">
       <div className="topbar-left">
         <div>
           <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-            Nexus {mode === 'personal' ? 'Personnel' : 'Business'}
+            Nexus {mode === 'personal' ? t('side_personal') : t('side_business')}
           </div>
           <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-bright)', letterSpacing: '-0.3px', marginTop: 1 }}>
             {title}
@@ -28,7 +30,7 @@ export default function Topbar({ mode, title, subtitle }: { mode: Mode; title: s
       </div>
 
       <div className="topbar-right">
-        <div className="pill p-c topbar-pill">EUR → XAF Pilote</div>
+        <div className="pill p-c topbar-pill">{t('dash_balance_pill')}</div>
 
         {/* Centre de notifications */}
         <NotificationBell />
@@ -64,7 +66,7 @@ export default function Topbar({ mode, title, subtitle }: { mode: Mode; title: s
               {user?.name || 'Utilisateur'}
             </div>
             <div style={{ fontSize: 9, color: user?.account_type === 'business' ? 'var(--gold)' : 'var(--green)', fontFamily: 'var(--font-mono)' }}>
-              ● Compte vérifié
+              ● {t('side_compte_verify')}
             </div>
           </div>
         </div>
@@ -75,7 +77,7 @@ export default function Topbar({ mode, title, subtitle }: { mode: Mode; title: s
           onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--red)'; e.currentTarget.style.color = 'var(--red)'; e.currentTarget.style.background = 'rgba(255, 69, 96, 0.05)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-dim)'; e.currentTarget.style.background = 'var(--panel2)'; }}
         >
-          <span style={{ fontSize: 14, lineHeight: 1 }}>⏻</span> Déconnexion
+          <span style={{ fontSize: 14, lineHeight: 1 }}>⏻</span> {t('side_logout')}
         </button>
 
         <div className="topbar-clock" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-dim)' }}>

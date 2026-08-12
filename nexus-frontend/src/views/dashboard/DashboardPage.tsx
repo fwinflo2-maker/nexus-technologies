@@ -12,6 +12,7 @@ import {
   type WalletRatesData,
 } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { useI18n } from '../../context/I18nContext';
 
 type Mode = 'personal' | 'business';
 type Period = '7d' | '30d' | '12m';
@@ -87,6 +88,7 @@ export default function DashboardPage({ mode }: DashboardProps) {
   const [period, setPeriod] = useState<Period>('30d');
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const { t } = useI18n();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -121,9 +123,9 @@ export default function DashboardPage({ mode }: DashboardProps) {
     return (
       <div className="page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
         <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="card card-hi-c" style={{ padding: 40, textAlign: 'center' }}>
-          <h2 style={{ color: 'var(--text-bright)', marginBottom: 10 }}>Impossible de charger le dashboard</h2>
-          <p style={{ color: 'var(--text-mid)', marginBottom: 20 }}>{error || 'Service indisponible.'}</p>
-          <button className="btn btn-cyan" onClick={fetchData}>↻ Réessayer</button>
+          <h2 style={{ color: 'var(--text-bright)', marginBottom: 10 }}>{t('dash_error_load')}</h2>
+          <p style={{ color: 'var(--text-mid)', marginBottom: 20 }}>{error || t('dash_err_unavail')}</p>
+          <button className="btn btn-cyan" onClick={fetchData}>↻ {t('dash_retry')}</button>
         </motion.div>
       </div>
     );
@@ -135,16 +137,16 @@ export default function DashboardPage({ mode }: DashboardProps) {
   const maxVol = Math.max(...series.map((s) => s.volume), 1);
 
   const quickActions = [
-    { icon: '↗', label: 'Envoyer', sub: 'Multi-routes', cls: 'ib-c', href: '/send' },
-    { icon: '↙', label: 'Recevoir', sub: 'SEPA · MoMo', cls: 'ib-gr', href: '/receive' },
-    { icon: '⇌', label: 'Ajouter des fonds', sub: 'Carte · Virement', cls: 'ib-g', href: '/wallet' },
-    { icon: '⇄', label: 'Convertir', sub: 'FX', cls: 'ib-v', href: '/convert' },
+    { icon: '↗', label: t('side_send'), sub: 'Multi-routes', cls: 'ib-c', href: '/send' },
+    { icon: '↙', label: t('side_receive'), sub: 'SEPA · MoMo', cls: 'ib-gr', href: '/receive' },
+    { icon: '⇌', label: t('wallet_topup'), sub: 'Carte · Virement', cls: 'ib-g', href: '/wallet' },
+    { icon: '⇄', label: t('side_convert'), sub: 'FX', cls: 'ib-v', href: '/convert' },
     { icon: '👥', label: 'Bénéficiaires', sub: 'Gestion', cls: 'ib-p', href: '/payments' },
   ];
 
-  if (user.status === 'PENDING') quickActions.push({ icon: '🛡️', label: 'Vérifier identité', sub: 'KYC / KYB', cls: 'ib-v', href: '/kyc' });
+  if (user.status === 'PENDING') quickActions.push({ icon: '🛡️', label: t('dash_verify_req'), sub: 'KYC / KYB', cls: 'ib-v', href: '/kyc' });
   else if (user.account_type === 'business') quickActions.push({ icon: '🏢', label: 'Payer fournisseurs', sub: 'Batch & Invoices', cls: 'ib-v', href: '/payments' });
-  else quickActions.push({ icon: '≡', label: 'Historique', sub: 'Transactions', cls: 'ib-v', href: '/history' });
+  else quickActions.push({ icon: '≡', label: t('side_history'), sub: 'Transactions', cls: 'ib-v', href: '/history' });
 
   return (
     <div className="page" style={{ overflowX: 'hidden' }}>
@@ -172,23 +174,23 @@ export default function DashboardPage({ mode }: DashboardProps) {
       </AnimatePresence>
 
       <motion.div variants={fadeInUp} initial="hidden" animate="visible" custom={0} className="page-header" style={{ marginBottom: 30 }}>
-          <div className="page-label">Nexus {isBiz ? 'Business' : 'Personnel'} — Tableau de bord</div>
+          <div className="page-label">Nexus {isBiz ? t('side_business') : t('side_personal')} — {t('side_dashboard')}</div>
         <div className="page-title" style={{ fontSize: 'clamp(26px, 3vw, 38px)' }}>
-          Bonjour, <span className={isBiz ? 'gg' : 'gc'}>{displayName}</span>
+          {t('dash_welcome')}, <span className={isBiz ? 'gg' : 'gc'}>{displayName}</span>
         </div>
       </motion.div>
 
       <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="g4" style={{ marginBottom: 30, perspective: '1000px' }}>
-        {[{ l: 'Total', v: formatCurrency(totals.total_ref, totals.ref_currency), c: 'var(--cyan)', icon: '💰' },
-          { l: 'Transactions', v: `${kpis.transactions_month}`, c: 'var(--green)', icon: '🔄' },
-          { l: 'Volume 30j', v: formatXAF(kpis.volume_xaf), c: 'var(--gold)', icon: '📊' },
-          { l: 'Temps Moy.', v: `${kpis.avg_exec_time_sec}s`, c: 'var(--violet)', icon: '⏱️' }
+        {[{ l: t('dash_kpi_total'), v: formatCurrency(totals.total_ref, totals.ref_currency), c: 'var(--cyan)', icon: '💰' },
+          { l: t('dash_kpi_tx'), v: `${kpis.transactions_month}`, c: 'var(--green)', icon: '🔄' },
+          { l: t('dash_kpi_vol'), v: formatXAF(kpis.volume_xaf), c: 'var(--gold)', icon: '📊' },
+          { l: t('dash_kpi_speed'), v: `${kpis.avg_exec_time_sec}s`, c: 'var(--violet)', icon: '⏱️' }
         ].map((kpi, i) => (
           <motion.div key={i} variants={fadeInUp} custom={i + 1} whileHover={{ y: -5, scale: 1.02 }}
             className="card glass-card stat-card" style={{ padding: 24, transformStyle: 'preserve-3d' }}>
             <div className="stat-label">{kpi.l}</div>
             <div className="stat-value" style={{ color: kpi.c, fontSize: 28 }}>{kpi.v}</div>
-            <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 4 }}>{kpi.icon} Dernière heure</div>
+            <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 4 }}>{kpi.icon} {t('dash_last_hour')}</div>
           </motion.div>
         ))}
       </motion.div>
@@ -217,7 +219,7 @@ export default function DashboardPage({ mode }: DashboardProps) {
                   transition={{ duration: 1.5, ease: 'easeOut' }} style={{ height: '100%', background: 'linear-gradient(90deg, var(--cyan), var(--green))', borderRadius: 3 }} />
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: 'var(--text-dim)' }}>
-                <span>Disponible</span><span>{formatCurrency(w.available, w.currency)}</span>
+                <span>{t('dash_available')}</span><span>{formatCurrency(w.available, w.currency)}</span>
               </div>
             </motion.div>
           );
@@ -227,40 +229,40 @@ export default function DashboardPage({ mode }: DashboardProps) {
         {/* Taux de change */}
         {rates && (
           <div className="card glass-card" style={{ padding: 24, marginBottom: 30 }}>
-            <div className="page-label">Taux de change</div>
+            <div className="page-label">{t('dash_rates_title')}</div>
             <div style={{ fontSize: 16, fontWeight: 600, marginTop: 8 }}>{rates.base} → XAF</div>
             <div style={{ fontSize: 14, color: 'var(--text-dim)', marginTop: 4 }}>1 {rates.base} = {rates.fx_rate_xaf.toLocaleString('fr-FR', { maximumFractionDigits: 3 })} XAF</div>
-            <Link to="/wallet" className="btn btn-ghost" style={{ marginTop: 12, fontSize: 10 }}>Convertir</Link>
+            <Link to="/wallet" className="btn btn-ghost" style={{ marginTop: 12, fontSize: 10 }}>{t('dash_rates_btn')}</Link>
           </div>
         )}
 
         {/* Vérification du compte */}
         <div className="card glass-card" style={{ padding: 24, marginBottom: 30 }}>
-          <div className="page-label">Vérification du compte</div>
+          <div className="page-label">{t('dash_verify_title')}</div>
           {summary.user.status === 'PENDING' ? (
-            <div className="pill p-r" style={{ fontSize: 10, marginTop: 8 }}>⚠ Vérification requise</div>
+            <div className="pill p-r" style={{ fontSize: 10, marginTop: 8 }}>⚠ {t('dash_verify_req')}</div>
           ) : (
-            <div className="pill p-gr" style={{ fontSize: 10, marginTop: 8 }}>✓ Compte vérifié</div>
+            <div className="pill p-gr" style={{ fontSize: 10, marginTop: 8 }}>✓ {t('dash_verify_ok')}</div>
           )}
-          <Link to="/kyc" className="btn btn-ghost" style={{ marginTop: 12, fontSize: 10 }}>Voir la vérification</Link>
+          <Link to="/kyc" className="btn btn-ghost" style={{ marginTop: 12, fontSize: 10 }}>{t('dash_verify_btn')}</Link>
         </div>
 
         {/* Nexus AI */}
         <div className="card glass-card" style={{ padding: 24, marginBottom: 30 }}>
-          <div className="page-label">Nexus AI</div>
-          <p style={{ marginTop: 8, fontSize: 14, color: 'var(--text-mid)' }}>Votre agent a identifié des recommandations financières.</p>
-          <Link to="/agents" className="btn btn-ghost" style={{ marginTop: 12, fontSize: 10 }}>Voir les recommandations</Link>
+          <div className="page-label">{t('dash_ai_title')}</div>
+          <p style={{ marginTop: 8, fontSize: 14, color: 'var(--text-mid)' }}>{t('dash_ai_recs')}</p>
+          <Link to="/agents" className="btn btn-ghost" style={{ marginTop: 12, fontSize: 10 }}>{t('dash_ai_btn')}</Link>
         </div>
 
         {/* Nexus Pro */}
         <div className="card glass-card" style={{ padding: 24, marginBottom: 30 }}>
-          <div className="page-label">Nexus Pro</div>
+          <div className="page-label">{t('dash_pro_title')}</div>
           {summary.user.account_type === 'business' ? (
-            <div style={{ marginTop: 8, fontSize: 14, color: 'var(--text-bright)' }}>✓ Vous êtes membre Pro</div>
+            <div style={{ marginTop: 8, fontSize: 14, color: 'var(--text-bright)' }}>✓ {t('dash_pro_active')}</div>
           ) : (
-            <div style={{ marginTop: 8, fontSize: 14, color: 'var(--text-mid)' }}>Débloquez davantage de fonctionnalités avancées.</div>
+            <div style={{ marginTop: 8, fontSize: 14, color: 'var(--text-mid)' }}>{t('dash_pro_desc')}</div>
           )}
-          <Link to="/nexus-pro" className="btn btn-ghost" style={{ marginTop: 12, fontSize: 10 }}>{summary.user.account_type === 'business' ? 'Gérer Pro' : 'Découvrir Nexus Pro'}</Link>
+          <Link to="/nexus-pro" className="btn btn-ghost" style={{ marginTop: 12, fontSize: 10 }}>{summary.user.account_type === 'business' ? t('dash_pro_manage') : t('dash_pro_discover')}</Link>
         </div>
 
         {/* Activité et activité récente */}
@@ -269,8 +271,8 @@ export default function DashboardPage({ mode }: DashboardProps) {
         <div className="card glass-card" style={{ padding: 24 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
             <div>
-              <div className="page-label">Activité</div>
-              <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-bright)' }}>Volume & Transactions</div>
+              <div className="page-label">{t('dash_activity_title')}</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-bright)' }}>{t('dash_activity_sub')}</div>
             </div>
             <div className="mode-toggle">
               {(['7d', '30d', '12m'] as Period[]).map((p) => (
@@ -288,7 +290,7 @@ export default function DashboardPage({ mode }: DashboardProps) {
         </div>
 
         <div className="card glass-card" style={{ padding: 24 }}>
-          <div className="page-label">Activité récente</div>
+          <div className="page-label">{t('dash_recent_title')}</div>
           <div style={{ marginTop: 15, display: 'flex', flexDirection: 'column', gap: 12 }}>
             {recent.map((tx: DashboardRecentTx) => (
               <div key={tx.id} className="wi" style={{ background: 'transparent', padding: 12 }}>

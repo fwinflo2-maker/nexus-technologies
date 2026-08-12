@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useI18n } from '../../context/I18nContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   apiCreateQuote,
@@ -7,11 +8,11 @@ import {
 } from '../../api/client';
 
 /**
- * RouteSelectionStep — Étape du workflow /send affichant les routes
+ * RouteSelectionStep — {t('route_step')} du workflow /send affichant les routes
  * proposées par le Routing Engine.
  *
  * Design i-tech engine :
- *   - Pipeline d'exécution animé (chaque moteur s'allume en séquence)
+ *   - {t('route_pipeline_title')} animé (chaque moteur s'allume en séquence)
  *   - Cartes de routes avec animations stagger
  *   - Compte à rebours HUD
  *   - Explication IA dynamique
@@ -63,13 +64,14 @@ function formatCountdown(s: number): string {
 
 /** Pipeline animé — chaque étape s'allume en séquence pendant le chargement. */
 function EnginePipeline({ loaded, activeCount }: { loaded: boolean; activeCount: number }) {
+  const { t } = useI18n();
   const displayedCount = loaded ? PIPELINE.length : activeCount;
   return (
     <div className="card" style={{ padding: 18 }}>
       <div className="page-label" style={{ marginBottom: 12 }}>
-        Pipeline d'exécution
-        {!loaded && <span style={{ color: 'var(--cyan)', marginLeft: 8 }}>● EN COURS</span>}
-        {loaded && <span style={{ color: 'var(--green)', marginLeft: 8 }}>✓ TERMINÉ</span>}
+        {t('route_pipeline_title')}
+        {!loaded && <span style={{ color: 'var(--cyan)', marginLeft: 8 }}>● {t('route_in_progress')}</span>}
+        {loaded && <span style={{ color: 'var(--green)', marginLeft: 8 }}>✓ {t('route_completed')}</span>}
       </div>
       <div className="se-pipeline">
         {PIPELINE.map((s, i) => {
@@ -114,6 +116,7 @@ function RouteCard({
   onSelect: () => void;
   delay: number;
 }) {
+  const { t } = useI18n();
   return (
     <motion.div
       className={`rc se-route-card ${selected ? 'selected' : ''} ${recommended ? 'se-route-recommended' : ''}`}
@@ -131,7 +134,7 @@ function RouteCard({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-bright)' }}>
           ROUTE {route.id}
-          {recommended && <span style={{ fontSize: 9, color: 'var(--cyan)', marginLeft: 6 }}>(recommandée)</span>}
+          {recommended && <span style={{ fontSize: 9, color: 'var(--cyan)', marginLeft: 6 }}>({t('route_recommended')})</span>}
         </div>
         <span className={`pill ${route.badgeCls}`} style={{ fontSize: 8 }}>{route.badge}</span>
       </div>
@@ -145,9 +148,9 @@ function RouteCard({
         </div>
         <div style={{ display: 'flex', gap: 20 }}>
           {([
-            ['Frais', route.fees, 'var(--text-bright)'],
-            ['Délai', route.delay, 'var(--cyan)'],
-            ['Fiabilité', route.reliability, route.reliabilityColor],
+            [t('route_fees'), route.fees, 'var(--text-bright)'],
+            [t('route_delay'), route.delay, 'var(--cyan)'],
+            [t('route_reliability'), route.reliability, route.reliabilityColor],
           ] as [string, string, string][]).map(([lbl, val, col]) => (
             <div key={lbl} style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>{lbl}</div>
@@ -170,6 +173,7 @@ function RouteCard({
 // ─── Composant principal ────────────────────────────────────────────────────
 
 export default function RouteSelectionStep({ intent, onBack }: RouteSelectionStepProps) {
+  const { t } = useI18n();
   const [selected, setSelected] = useState<string>('A');
   const [quote, setQuote] = useState<QuoteData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -262,7 +266,7 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
             <div className="card card-hi-c" style={{ padding: 30 }}>
               <div className="se-boot">
                 <div className="se-boot-ring"><div className="se-boot-core" /></div>
-                <div className="se-boot-log">Analyse des corridors et calcul des routes…</div>
+                <div className="se-boot-log">{t('route_analysing')}</div>
               </div>
               {/* Progress bar */}
               <div style={{ marginTop: 16 }}>
@@ -277,7 +281,7 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
                   <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                    Étape {Math.min(pipeStep, PIPELINE.length)}/{PIPELINE.length}
+                    {t('route_step')} {Math.min(pipeStep, PIPELINE.length)}/{PIPELINE.length}
                   </span>
                   <span style={{ fontSize: 9, color: 'var(--cyan)', fontFamily: 'var(--font-mono)' }}>
                     {pipeStep < PIPELINE.length ? PIPELINE[Math.min(pipeStep, PIPELINE.length - 1)]?.label : 'Terminé'}
@@ -400,7 +404,7 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
 
         {/* Header routes + countdown */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div className="page-label">Routes disponibles</div>
+          <div className="page-label">{t('route_avail_routes')}</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>⏱</span>
@@ -409,7 +413,7 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
               </span>
             </div>
             <button className="se-cta se-cta-ghost" onClick={fetchQuote} disabled={loading} style={{ fontSize: 9, padding: '4px 10px' }}>
-              ⟴ Recalculer
+              ⟴ {t('route_recalculating')}
             </button>
           </div>
         </div>
@@ -439,15 +443,15 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 12, borderBottom: '1px solid var(--border)' }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-bright)' }}>
-                Route {selected} sélectionnée
+                {t('route_selected_summary')} {selected}
               </div>
               <div className="mono" style={{ fontSize: 10, color: 'var(--text-dim)' }}>Quote #{quote?.id ?? '—'}</div>
             </div>
             <div style={{ marginTop: 10 }}>
               {[
-                ['Envoyé', `\u20AC ${amountSent.toLocaleString('fr-FR')},00`, 'var(--white)'],
-                ['Reçu (estimé)', selectedRoute.received, 'var(--green)'],
-                ['Frais total', selectedRoute.fees, 'var(--text-bright)'],
+                [t('side_send'), `\u20AC ${amountSent.toLocaleString('fr-FR')},00`, 'var(--white)'],
+                [t('route_recv_amt'), selectedRoute.received, 'var(--green)'],
+                [t('route_fees'), selectedRoute.fees, 'var(--text-bright)'],
                 ['Provider', selectedRoute.provider, 'var(--cyan)'],
                 ['Méthode', selectedRoute.method, 'var(--text-bright)'],
                 ['Expiration', `\u23F1 ${formatCountdown(remaining)} restantes`, countdownColor],
@@ -459,8 +463,8 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
               ))}
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-              <button className="se-cta se-cta-ghost" onClick={onBack}>← Modifier</button>
-              <button className="se-cta" onClick={handleConfirm} style={{ flex: 1 }}>✓ Confirmer et exécuter</button>
+              <button className="se-cta se-cta-ghost" onClick={onBack}>← {t('send_modify')}</button>
+              <button className="se-cta" onClick={handleConfirm} style={{ flex: 1 }}>✓ {t('route_confirm_btn')}</button>
             </div>
           </motion.div>
         )}

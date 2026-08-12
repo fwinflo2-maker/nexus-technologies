@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
+import { useI18n } from '../../context/I18nContext';
 import {
-  apiWalletsList,
   type WalletTx,
 } from '../../api/client';
 
@@ -17,6 +17,7 @@ const CURRENCY_META: Record<string, { flag: string; symbol: string }> = {
 };
 
 export default function HistoryPage() {
+  const { t } = useI18n();
   const [transactions, setTransactions] = useState<WalletTx[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState<FilterType>('all');
@@ -25,16 +26,6 @@ export default function HistoryPage() {
 
   const fetchTransactions = useCallback(async () => {
     setLoading(true);
-    // Charger les transactions de toutes les devises
-    const currencies = ['EUR', 'USD', 'XAF', 'USDT'];
-    const allTxs: WalletTx[] = [];
-    
-    for (const currency of currencies) {
-      // Simulation - à remplacer par un appel API réel
-      // const resp = await apiWalletTransactions(currency);
-      // if (resp.success && resp.data) allTxs.push(...resp.data.items);
-    }
-    
     // Données de démonstration
     const demoTxs: WalletTx[] = [
       { id: 1, type: 'send', direction: 'out', label: 'Transfert vers Mobile Money', description: 'Envoi vers MTN CG', amount: 500, currency: 'EUR', status: 'completed', provider: 'Thunes', destination: 'Congo', created_at: new Date().toISOString() },
@@ -87,9 +78,9 @@ export default function HistoryPage() {
 
   const typeLabel = (type: string): string => {
     const labels: Record<string, string> = {
-      send: '↗ Envoi',
-      receive: '↙ Réception',
-      convert: '⇄ Conversion',
+      send: '↗ ' + t('side_send'),
+      receive: '↙ ' + t('side_receive'),
+      convert: '⇄ ' + t('side_convert'),
       fx: '⇆ FX',
     };
     return labels[type] || type;
@@ -103,9 +94,9 @@ export default function HistoryPage() {
         animate={{ opacity: 1, y: 0 }}
       >
         <div className="page-label">NEXUS</div>
-        <div className="page-title">Historique des transactions</div>
+        <div className="page-title">{t('history_title')}</div>
         <p style={{ marginTop: 10, fontSize: 13, color: 'var(--text-mid)' }}>
-          Consultez toutes vos opérations financières.
+          {t('history_desc')}
         </p>
       </motion.div>
 
@@ -118,7 +109,7 @@ export default function HistoryPage() {
         transition={{ delay: 0.1 }}
       >
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-          <span style={{ fontSize: 12, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Filtres :</span>
+          <span style={{ fontSize: 12, color: 'var(--text-dim)', textTransform: 'uppercase' }}>{t('history_filters')} :</span>
           
           <select
             value={filterType}
@@ -126,10 +117,10 @@ export default function HistoryPage() {
             className="pill p"
             style={{ cursor: 'pointer', fontSize: 12 }}
           >
-            <option value="all">Tous les types</option>
-            <option value="send">Envoyés</option>
-            <option value="receive">Reçus</option>
-            <option value="convert">Conversions</option>
+            <option value="all">{t('history_all_types')}</option>
+            <option value="send">{t('history_sent')}</option>
+            <option value="receive">{t('history_received')}</option>
+            <option value="convert">{t('history_conversions')}</option>
             <option value="fx">FX</option>
           </select>
 
@@ -139,10 +130,10 @@ export default function HistoryPage() {
             className="pill p"
             style={{ cursor: 'pointer', fontSize: 12 }}
           >
-            <option value="all">Tous les statuts</option>
-            <option value="completed">Terminés</option>
-            <option value="pending">En attente</option>
-            <option value="failed">Échoués</option>
+            <option value="all">{t('history_all_statuses')}</option>
+            <option value="completed">{t('route_completed')}</option>
+            <option value="pending">{t('dash_pending')}</option>
+            <option value="failed">{t('route_reliability')}</option>
           </select>
 
           <select
@@ -151,7 +142,7 @@ export default function HistoryPage() {
             className="pill p"
             style={{ cursor: 'pointer', fontSize: 12 }}
           >
-            <option value="all">Toutes devises</option>
+            <option value="all">{t('history_all_currencies')}</option>
             {Object.keys(CURRENCY_META).map(code => (
               <option key={code} value={code}>{code}</option>
             ))}
@@ -163,7 +154,7 @@ export default function HistoryPage() {
               className="pill p-r"
               style={{ cursor: 'pointer', fontSize: 12 }}
             >
-              ✕ Reset
+              ✕ {t('history_reset')}
             </button>
           )}
         </div>
@@ -173,7 +164,7 @@ export default function HistoryPage() {
       {loading ? (
         <div className="card card-hi-c" style={{ padding: 40, textAlign: 'center' }}>
           <div className="nexus-spinner" />
-          <p style={{ marginTop: 16, color: 'var(--text-mid)' }}>Chargement de l'historique…</p>
+          <p style={{ marginTop: 16, color: 'var(--text-mid)' }}>{t('dash_summary_load')}</p>
         </div>
       ) : filteredTxs.length === 0 ? (
         <motion.div 
@@ -183,8 +174,8 @@ export default function HistoryPage() {
           animate={{ opacity: 1, scale: 1 }}
         >
           <div style={{ fontSize: 48, marginBottom: 16 }}>📭</div>
-          <h3 style={{ color: 'var(--text-bright)', marginBottom: 8 }}>Aucune transaction</h3>
-          <p style={{ color: 'var(--text-mid)' }}>Aucune transaction ne correspond à vos filtres.</p>
+          <h3 style={{ color: 'var(--text-bright)', marginBottom: 8 }}>{t('wallet_no_tx')}</h3>
+          <p style={{ color: 'var(--text-mid)' }}>{t('wallet_no_tx')}</p>
         </motion.div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -218,7 +209,7 @@ export default function HistoryPage() {
                   {formatAmount(tx)}
                 </div>
                 <span className={`pill ${statusClass(tx.status)}`} style={{ fontSize: 10 }}>
-                  {tx.status === 'completed' ? '✓ Terminé' : tx.status === 'pending' ? '⏳ En attente' : tx.status === 'processing' ? '⚙ En cours' : '✕ ' + tx.status}
+                  {tx.status === 'completed' ? '✓ ' + t('route_completed') : tx.status === 'pending' ? '⏳ ' + t('dash_pending') : tx.status === 'processing' ? '⚙ ' + t('route_in_progress') : '✕ ' + tx.status}
                 </span>
               </div>
             </motion.div>

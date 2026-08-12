@@ -11,6 +11,7 @@ import {
 } from '../../api/client';
 import AccountsPanel from './AccountsPanel';
 import PendingHolds from '../../components/dashboard/PendingHolds';
+import { useI18n } from '../../context/I18nContext';
 
 /**
  * WalletPage — Vue unifiée multi-devises (données réelles).
@@ -126,6 +127,7 @@ export default function WalletPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const { t } = useI18n();
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -200,25 +202,25 @@ export default function WalletPage() {
     <div className="page">
       {/* En-tête : solde total (EUR de référence) + actions */}
       <div className="page-header animate-up">
-        <div className="page-label">Nexus Wallet — Vue unifiée</div>
+        <div className="page-label">Nexus {t('side_wallet')} — {t('wallet_title')}</div>
         <div className="page-title">
-          Vue unifiée <span className="gc">multi-devises.</span>
+          {t('wallet_title')}
         </div>
         <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 16 }}>
           <div>
             <div style={{ fontSize: 9, color: 'var(--text-dim)', letterSpacing: '0.15em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
-              Solde total · équivalent EUR
+              {t('wallet_total_ref')}
             </div>
             <div style={{ fontSize: 34, fontWeight: 800, color: 'var(--white)', fontFamily: 'var(--font-mono)', letterSpacing: '-1px', marginTop: 6 }}>
               {formatCurrency(totals.total_ref, 'EUR')}
             </div>
             <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 4 }}>
-              {totals.currencies} devises supportées · {totals.with_funds} avec des fonds
+              {totals.currencies} {t('wallet_currencies')} · {totals.with_funds} {t('wallet_with_funds')}
             </div>
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => setPickerOpen(true)}>+ Recharger</button>
-            <Link to="/send" className="btn btn-cyan" style={{ fontSize: 12, textDecoration: 'none' }}>↗ Envoyer</Link>
+            <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => setPickerOpen(true)}>+ {t('wallet_topup')}</button>
+            <Link to="/send" className="btn btn-cyan" style={{ fontSize: 12, textDecoration: 'none' }}>↗ {t('wallet_send')}</Link>
           </div>
         </div>
       </div>
@@ -226,10 +228,10 @@ export default function WalletPage() {
       {/* KPIs : totaux par état */}
       <div className="g4 animate-up delay-1" style={{ marginBottom: 24 }}>
         {[
-          { label: 'Total portefeuille', val: formatCurrency(totals.total_ref, 'EUR'), color: 'var(--cyan)', sub: 'Équivalent EUR' },
-          { label: 'Disponible', val: formatCurrency(totals.available_ref, 'EUR'), color: 'var(--green)', sub: 'Immédiatement disponible' },
-          { label: 'En attente', val: formatCurrency(totals.pending_ref, 'EUR'), color: 'var(--gold)', sub: 'Créancier — règlement ~24h' },
-          { label: 'En transit', val: formatCurrency(totals.in_transit_ref, 'EUR'), color: 'var(--violet)', sub: 'Vers / depuis un provider' },
+          { label: t('wallet_total_portfolio'), val: formatCurrency(totals.total_ref, 'EUR'), color: 'var(--cyan)', sub: 'Équivalent EUR' },
+          { label: t('dash_available'), val: formatCurrency(totals.available_ref, 'EUR'), color: 'var(--green)', sub: t('wallet_avail_desc') },
+          { label: t('dash_pending'), val: formatCurrency(totals.pending_ref, 'EUR'), color: 'var(--gold)', sub: t('wallet_pend_desc') },
+          { label: t('dash_transit'), val: formatCurrency(totals.in_transit_ref, 'EUR'), color: 'var(--violet)', sub: t('wallet_transit_desc') },
         ].map((s) => (
           <div key={s.label} className="card stat-card">
             <div className="stat-label">{s.label}</div>
@@ -242,9 +244,9 @@ export default function WalletPage() {
       {/* Onglets : Mes devises / Sources / Destinations */}
       <div className="account-tabs animate-up delay-1" style={{ marginBottom: 20, width: 'fit-content' }}>
         {([
-          ['devises', '💱 Mes devises'],
-          ['sources', '🏦 Sources de financement'],
-          ['destinations', '📍 Destinations'],
+          ['devises', '💱 ' + t('wallet_tab_devises')],
+          ['sources', '🏦 ' + t('wallet_tab_sources')],
+          ['destinations', '📍 ' + t('wallet_tab_destinations')],
         ] as const).map(([id, label]) => (
           <button
             key={id}
@@ -264,9 +266,9 @@ export default function WalletPage() {
           {/* Section : soldes par devise + ajout de devise */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
             <div>
-              <div className="page-label" style={{ marginBottom: 4 }}>Soldes par devise</div>
+              <div className="page-label" style={{ marginBottom: 4 }}>{t('wallet_balances_title')}</div>
               <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-bright)' }}>
-                {totals.currencies} devises · {totals.with_funds} actives
+                {totals.currencies} devises · {totals.with_funds} {t('wallet_actives')}
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -280,7 +282,7 @@ export default function WalletPage() {
                 style={{ fontSize: 11 }}
                 onClick={() => setPickerOpen((v) => !v)}
               >
-                {pickerOpen ? '✕ Fermer' : '+ Ajouter une devise'}
+                {pickerOpen ? '✕ ' + t('wallet_close') : '+ ' + t('wallet_add_currency')}
               </button>
             </div>
           </div>
@@ -290,18 +292,18 @@ export default function WalletPage() {
             <div className="card animate-fade" style={{ padding: 20, marginBottom: 20 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
                 <div>
-                  <div className="page-label" style={{ marginBottom: 4 }}>Ajouter une devise</div>
+                  <div className="page-label" style={{ marginBottom: 4 }}>{t('wallet_add_currency')}</div>
                   <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-bright)' }}>
                     Choisissez une devise pour mettre à jour l'aperçu et l'historique.
                   </div>
                 </div>
-                <button className="btn btn-ghost" style={{ fontSize: 10 }} onClick={() => setPickerOpen(false)}>✕ Fermer</button>
+                <button className="btn btn-ghost" style={{ fontSize: 10 }} onClick={() => setPickerOpen(false)}>✕ {t('wallet_close')}</button>
               </div>
 
               <div className="g2" style={{ gap: 16 }}>
                 <div>
                   <div style={{ fontSize: 9, color: 'var(--text-dim)', letterSpacing: '0.15em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)', marginBottom: 8 }}>
-                    Disponibles
+                    {t('dash_available')}
                   </div>
                   <div className="g2" style={{ gap: 8 }}>
                     {wallets.map((w) => {
@@ -324,7 +326,7 @@ export default function WalletPage() {
                             <div style={{ fontSize: 9, color: 'var(--text-dim)' }}>{meta.label}</div>
                           </div>
                           {w.has_funds && <span className="pill p-gr" style={{ fontSize: 7, flexShrink: 0 }}>Actif</span>}
-                          {selected === w.currency && <span className="pill p-c" style={{ fontSize: 7, flexShrink: 0 }}>Sélectionnée</span>}
+                          {selected === w.currency && <span className="pill p-c" style={{ fontSize: 7, flexShrink: 0 }}>{t('wallet_selected')}</span>}
                         </button>
                       );
                     })}
@@ -333,7 +335,7 @@ export default function WalletPage() {
 
                 <div>
                   <div style={{ fontSize: 9, color: 'var(--text-dim)', letterSpacing: '0.15em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)', marginBottom: 8 }}>
-                    Bientôt disponibles
+                    {t('wallet_soon_avail')}
                   </div>
                   <div className="g2" style={{ gap: 8 }}>
                     {COMING_SOON.map((c) => (
@@ -350,7 +352,7 @@ export default function WalletPage() {
                           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-dim)' }}>{c.cur}</div>
                           <div style={{ fontSize: 9, color: 'var(--text-dim)' }}>{c.label}</div>
                         </div>
-                        <span className="pill" style={{ fontSize: 7, flexShrink: 0 }}>Bientôt</span>
+                        <span className="pill" style={{ fontSize: 7, flexShrink: 0 }}>{t('wallet_soon')}</span>
                       </div>
                     ))}
                   </div>
@@ -399,7 +401,7 @@ export default function WalletPage() {
                       </div>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-                      {isSelected && <span className="pill p-c" style={{ fontSize: 7 }}>✓ Sélectionnée</span>}
+                      {isSelected && <span className="pill p-c" style={{ fontSize: 7 }}>✓ {t('wallet_selected')}</span>}
                       <div className={`pill ${meta.crypto ? 'p-v' : 'p-c'}`} style={{ fontSize: 7, height: 22, flexShrink: 0 }}>
                         {meta.crypto ? 'STABLECOIN' : 'FIAT'}
                       </div>
@@ -431,7 +433,7 @@ export default function WalletPage() {
                       <div key={row.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 9, color: 'var(--text-dim)' }}>
                           <span className="dot" style={{ background: row.color }} />
-                          {row.label}
+                          {row.key === 'available' ? t('dash_available') : row.key === 'pending' ? t('dash_pending') : row.key === 'in_transit' ? t('dash_transit') : t('dash_settlement')}
                         </span>
                         <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-bright)', fontFamily: 'var(--font-mono)' }}>
                           {formatCurrency(w[row.key], w.currency)}
@@ -443,10 +445,10 @@ export default function WalletPage() {
                   {/* Pied : % disponible + équivalent EUR */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border-soft)' }}>
                     <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                      {pct}% disponible
+                      {pct}% {t('dash_available').toLowerCase()}
                     </span>
                     <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                      {w.has_funds ? `≈ ${formatCurrency(w.ref_equivalent, 'EUR')}` : 'Sans fonds'}
+                      {w.has_funds ? `≈ ${formatCurrency(w.ref_equivalent, 'EUR')}` : t('wallet_no_funds')}
                     </span>
                   </div>
                 </div>
@@ -458,7 +460,7 @@ export default function WalletPage() {
           <div className="g2 animate-up delay-3" style={{ alignItems: 'start', gap: 20, marginTop: 20 }}>
             {/* ─── Aperçu ─── */}
             <div className="card card-hi-c" style={{ padding: 22 }}>
-              <div className="page-label" style={{ marginBottom: 12 }}>Wallet sélectionné — Aperçu</div>
+              <div className="page-label" style={{ marginBottom: 12 }}>{t('wallet_preview')}</div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <span style={{ fontSize: 26 }}>{(CURRENCY_META[selectedWallet.currency] ?? {}).flag ?? '🌐'}</span>
@@ -483,7 +485,7 @@ export default function WalletPage() {
               <div style={{ fontSize: 10, color: 'var(--text-dim)', marginBottom: 18 }}>
                 {selectedWallet.currency !== 'EUR' && selectedWallet.has_funds
                   ? `≈ ${formatCurrency(selectedWallet.ref_equivalent, 'EUR')}`
-                  : 'Solde comptable'}
+                  : t('wallet_book_bal')}
               </div>
 
               {/* Ventilation par état */}
@@ -492,7 +494,7 @@ export default function WalletPage() {
                   <div className="trow" key={row.key} style={{ padding: '7px 0' }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-mid)' }}>
                       <span className="dot" style={{ background: row.color }} />
-                      {row.label}
+                      {row.key === 'available' ? t('dash_available') : row.key === 'pending' ? t('dash_pending') : row.key === 'in_transit' ? t('dash_transit') : t('dash_settlement')}
                     </span>
                     <span style={{ fontSize: 12, fontWeight: 700, color: row.color, fontFamily: 'var(--font-mono)' }}>
                       {formatCurrency(selectedWallet[row.key], selectedWallet.currency)}
@@ -500,7 +502,7 @@ export default function WalletPage() {
                   </div>
                 ))}
                 <div className="trow" style={{ padding: '8px 0 0' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-mid)' }}>💼 Solde total</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-mid)' }}>💼 {t('wallet_total_portfolio')}</span>
                   <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--white)', fontFamily: 'var(--font-mono)' }}>
                     {formatCurrency(selectedWallet.balance, selectedWallet.currency)}
                   </span>
@@ -521,12 +523,12 @@ export default function WalletPage() {
             <div className="card" style={{ padding: 22 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
                 <div>
-                  <div className="page-label" style={{ marginBottom: 4 }}>Historique récent</div>
+                  <div className="page-label" style={{ marginBottom: 4 }}>{t('wallet_recent_hist')}</div>
                   <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-bright)' }}>
-                    Dernières transactions · {selectedWallet.currency}
+                    {t('wallet_last_txs')} · {selectedWallet.currency}
                   </div>
                 </div>
-                <Link to="/history" className="btn btn-ghost" style={{ fontSize: 10, textDecoration: 'none' }}>Voir tout →</Link>
+                <Link to="/history" className="btn btn-ghost" style={{ fontSize: 10, textDecoration: 'none' }}>{t('wallet_see_all')} →</Link>
               </div>
 
               {txsLoading ? (
@@ -538,14 +540,14 @@ export default function WalletPage() {
               ) : txsError ? (
                 <div className="card" style={{ padding: 20, textAlign: 'center' }}>
                   <div style={{ fontSize: 12, color: 'var(--text-mid)', marginBottom: 12 }}>{txsError}</div>
-                  <button className="btn btn-cyan" style={{ fontSize: 11 }} onClick={() => fetchTxs(selected)}>↻ Réessayer</button>
+                  <button className="btn btn-cyan" style={{ fontSize: 11 }} onClick={() => fetchTxs(selected)}>↻ {t('dash_retry')}</button>
                 </div>
               ) : !txs || txs.length === 0 ? (
                 <div style={{ padding: 32, textAlign: 'center' }}>
                   <div style={{ fontSize: 28, marginBottom: 10 }}>🕘</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-bright)' }}>Aucune transaction</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-bright)' }}>{t('wallet_no_tx')}</div>
                   <p style={{ fontSize: 11, color: 'var(--text-mid)', marginTop: 6 }}>
-                    Aucune opération sur {selectedWallet.currency} pour le moment.
+                    {t('wallet_no_op')} {selectedWallet.currency} {t('wallet_no_op_suffix')}
                   </p>
                 </div>
               ) : (
@@ -588,7 +590,7 @@ export default function WalletPage() {
 
       {tab === 'sources' && (
         <div className="animate-up delay-2">
-          <div className="page-label" style={{ marginBottom: 4 }}>Sources de financement</div>
+          <div className="page-label" style={{ marginBottom: 4 }}>{t('wallet_tab_sources')}</div>
           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-bright)', marginBottom: 14 }}>
             Comptes desquels vous envoyez de l'argent
           </div>
@@ -598,7 +600,7 @@ export default function WalletPage() {
 
       {tab === 'destinations' && (
         <div className="animate-up delay-2">
-          <div className="page-label" style={{ marginBottom: 4 }}>Destinations</div>
+          <div className="page-label" style={{ marginBottom: 4 }}>{t('wallet_tab_destinations')}</div>
           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-bright)', marginBottom: 14 }}>
             Comptes vers lesquels vous recevez de l'argent
           </div>

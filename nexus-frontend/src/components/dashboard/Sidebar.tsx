@@ -1,8 +1,30 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useI18n } from '../../context/I18nContext';
 
 type Mode = 'personal' | 'business';
+
+function getSidebarLabelKey(label: string): string {
+  switch (label) {
+    case 'Tableau de bord': return 'side_dashboard';
+    case 'Portefeuille': return 'side_wallet';
+    case 'Envoyer': return 'side_send';
+    case 'Recevoir': return 'side_receive';
+    case 'Convertir': return 'side_convert';
+    case 'Historique': return 'side_history';
+    case 'Nexus Pro': return 'side_pro';
+    case 'Trésorerie': return 'side_treasury';
+    case 'Paiements': return 'side_payments';
+    case 'Approbations': return 'side_approvals';
+    case 'Équipe & Rôles': return 'side_team';
+    case 'Reporting': return 'side_reporting';
+    case 'Notifications': return 'side_notifications';
+    case 'Agents IA': return 'side_agents';
+    case 'Paramètres': return 'side_settings';
+    default: return 'side_dashboard';
+  }
+}
 
 interface SidebarProps {
   mode: Mode;
@@ -47,6 +69,7 @@ export default function Sidebar({ mode, onModeChange }: SidebarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const drawerRef = useRef<HTMLElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
+  const { t } = useI18n();
 
   const isPersonalOnly = user?.account_type === 'personal';
   const effectiveMode = isPersonalOnly ? 'personal' : mode;
@@ -142,7 +165,7 @@ export default function Sidebar({ mode, onModeChange }: SidebarProps) {
         <div className="sidebar-mode">
           {isPersonalOnly ? (
             <div className="pill p-c" style={{ width: '100%', justifyContent: 'center', padding: '6px 0', fontSize: 9 }}>
-              COMPTE PERSONNEL
+              {t('side_compte_perso')}
             </div>
           ) : (
             <>
@@ -157,14 +180,14 @@ export default function Sidebar({ mode, onModeChange }: SidebarProps) {
                 >B</button>
               </div>
               <div style={{ fontSize: 9, color: 'var(--text-dim)', textAlign: 'center', marginTop: 5, letterSpacing: '0.1em' }}>
-                {effectiveMode === 'personal' ? 'PERSONNEL' : 'BUSINESS'}
+                {effectiveMode === 'personal' ? t('side_personal').toUpperCase() : t('side_business').toUpperCase()}
               </div>
             </>
           )}
         </div>
 
         <nav className="sidebar-nav" aria-label="Navigation principale">
-          <div className="nav-section-label">{effectiveMode === 'personal' ? 'Personnel' : 'Business'}</div>
+          <div className="nav-section-label">{effectiveMode === 'personal' ? t('side_personal') : t('side_business')}</div>
           {nav.map((item) => (
             <NavLink
               key={item.to + item.label}
@@ -176,7 +199,7 @@ export default function Sidebar({ mode, onModeChange }: SidebarProps) {
               }
             >
               <span className="nav-icon" aria-hidden>{item.icon}</span>
-              <span>{item.label}</span>
+              <span>{t(getSidebarLabelKey(item.label))}</span>
             </NavLink>
           ))}
 
@@ -190,7 +213,7 @@ export default function Sidebar({ mode, onModeChange }: SidebarProps) {
               className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
             >
               <span className="nav-icon" aria-hidden>{item.icon}</span>
-              <span>{item.label}</span>
+              <span>{t(getSidebarLabelKey(item.label))}</span>
             </NavLink>
           ))}
         </nav>
@@ -200,14 +223,14 @@ export default function Sidebar({ mode, onModeChange }: SidebarProps) {
             <div className="nb-user-avatar">{effectiveMode === 'personal' ? '👤' : '🏢'}</div>
             <div>
               <div className="nb-user-name">{user?.name || 'Utilisateur'}</div>
-              <div className="nb-user-verified">● Compte vérifié</div>
+              <div className="nb-user-verified">● {t('side_compte_verify')}</div>
             </div>
           </div>
           <button
             className="nb-logout"
             onClick={handleLogout}
           >
-            ⏻ Déconnexion
+            ⏻ {t('side_logout')}
           </button>
         </div>
       </aside>

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { I18nProvider } from './context/I18nContext';
+import { I18nProvider, useI18n } from './context/I18nContext';
 import { NotificationsProvider } from './context/NotificationsContext';
 import { LandingPage } from './views/public/LandingPage';
 import { LoginPage } from './views/auth/LoginPage';
@@ -78,6 +78,7 @@ function PublicRouter() {
 function DashboardLayout() {
   const [mode, setMode] = useState<Mode>('personal');
   const { user } = useAuth();
+  const { t } = useI18n();
 
   // Un compte personal est TOUJOURS en mode personal. Il n'a aucun accès aux fonctions Business.
   const isPersonalAccount = user?.account_type === 'personal';
@@ -98,29 +99,29 @@ function DashboardLayout() {
 
         <div className="main-content">
           <Routes>
-            <Route path="/dashboard" element={<><DashTopbar mode={effectiveMode} title="Tableau de bord" subtitle="Vue d'ensemble" /><DashboardPage mode={effectiveMode} /></>} />
-            <Route path="/wallet" element={<><DashTopbar mode={effectiveMode} title="Portefeuille" subtitle="Multi-devises" /><WalletPage /></>} />
+            <Route path="/dashboard" element={<><DashTopbar mode={effectiveMode} title={t('side_dashboard')} subtitle="Vue d'ensemble" /><DashboardPage mode={effectiveMode} /></>} />
+            <Route path="/wallet" element={<><DashTopbar mode={effectiveMode} title={t('side_wallet')} subtitle="Multi-devises" /><WalletPage /></>} />
             {/* Redirection /routing → /send (routing intégré dans /send) */}
             <Route path="/routing" element={<Navigate to="/send" replace />} />
-            <Route path="/send" element={<><DashTopbar mode={effectiveMode} title="Envoyer" subtitle="Transfert international" /><SendPage /></>} />
-            <Route path="/receive" element={<><DashTopbar mode={effectiveMode} title="Recevoir" subtitle="Recevoir un transfert" /><ReceivePage /></>} />
-            <Route path="/convert" element={<><DashTopbar mode={effectiveMode} title="Convertir" subtitle="Conversion de devises" /><ConvertPage /></>} />
-            <Route path="/history" element={<><DashTopbar mode={effectiveMode} title="Historique" subtitle="Transactions" /><HistoryPage /></>} />
-            <Route path="/nexus-pro" element={<><DashTopbar mode={effectiveMode} title="Nexus Pro" subtitle="Intelligence financière" /><PlaceholderPage /></>} />
-            <Route path="/notifications" element={<><DashTopbar mode={effectiveMode} title="Notifications" subtitle="Centre de notification" /><NotificationsPage /></>} />
+            <Route path="/send" element={<><DashTopbar mode={effectiveMode} title={t('side_send')} subtitle="Transfert international" /><SendPage /></>} />
+            <Route path="/receive" element={<><DashTopbar mode={effectiveMode} title={t('side_receive')} subtitle="Recevoir un transfert" /><ReceivePage /></>} />
+            <Route path="/convert" element={<><DashTopbar mode={effectiveMode} title={t('side_convert')} subtitle="Conversion de devises" /><ConvertPage /></>} />
+            <Route path="/history" element={<><DashTopbar mode={effectiveMode} title={t('side_history')} subtitle="Transactions" /><HistoryPage /></>} />
+            <Route path="/nexus-pro" element={<><DashTopbar mode={effectiveMode} title={t('side_pro')} subtitle="Intelligence financière" /><PlaceholderPage /></>} />
+            <Route path="/notifications" element={<><DashTopbar mode={effectiveMode} title={t('side_notifications')} subtitle="Centre de notification" /><NotificationsPage /></>} />
 
             {/* Routes réservées exclusivement aux comptes Business */}
-            <Route path="/treasury" element={<BusinessRoute><DashTopbar mode={effectiveMode} title="Trésorerie" subtitle="Business" /><PlaceholderPage /></BusinessRoute>} />
-            <Route path="/payments" element={<BusinessRoute><DashTopbar mode={effectiveMode} title="Paiements" subtitle="Business" /><PlaceholderPage /></BusinessRoute>} />
-            <Route path="/approvals" element={<BusinessRoute><DashTopbar mode={effectiveMode} title="Approbations" subtitle="Business" /><PlaceholderPage /></BusinessRoute>} />
-            <Route path="/team" element={<BusinessRoute><DashTopbar mode={effectiveMode} title="Équipe" subtitle="Rôles & permissions" /><PlaceholderPage /></BusinessRoute>} />
-            <Route path="/reporting" element={<BusinessRoute><DashTopbar mode={effectiveMode} title="Reporting" subtitle="Business" /><PlaceholderPage /></BusinessRoute>} />
+            <Route path="/treasury" element={<BusinessRoute><DashTopbar mode={effectiveMode} title={t('side_treasury')} subtitle="Business" /><PlaceholderPage /></BusinessRoute>} />
+            <Route path="/payments" element={<BusinessRoute><DashTopbar mode={effectiveMode} title={t('side_payments')} subtitle="Business" /><PlaceholderPage /></BusinessRoute>} />
+            <Route path="/approvals" element={<BusinessRoute><DashTopbar mode={effectiveMode} title={t('side_approvals')} subtitle="Business" /><PlaceholderPage /></BusinessRoute>} />
+            <Route path="/team" element={<BusinessRoute><DashTopbar mode={effectiveMode} title={t('side_team')} subtitle="Rôles & permissions" /><PlaceholderPage /></BusinessRoute>} />
+            <Route path="/reporting" element={<BusinessRoute><DashTopbar mode={effectiveMode} title={t('side_reporting')} subtitle="Business" /><PlaceholderPage /></BusinessRoute>} />
 
             <Route path="/kyc" element={<><DashTopbar mode={effectiveMode} title="KYC / KYB" subtitle="Conformité" /><PlaceholderPage /></>} />
             {/* /providers est une fonctionnalité du Back Office : plus accessible depuis les dashboards */}
             <Route path="/providers" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/agents" element={<><DashTopbar mode={effectiveMode} title="Agents IA" subtitle="Système intelligent" /><PlaceholderPage /></>} />
-            <Route path="/settings" element={<><DashTopbar mode={effectiveMode} title="Paramètres" subtitle="Gestion du compte" /><SettingsPage /></>} />
+            <Route path="/agents" element={<><DashTopbar mode={effectiveMode} title={t('side_agents')} subtitle="Système intelligent" /><PlaceholderPage /></>} />
+            <Route path="/settings" element={<><DashTopbar mode={effectiveMode} title={t('side_settings')} subtitle="Gestion du compte" /><SettingsPage /></>} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </div>

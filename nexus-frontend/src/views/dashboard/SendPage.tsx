@@ -9,6 +9,7 @@ import {
   type AuthorizedOriginsData,
 } from '../../api/client';
 import RouteSelectionStep from './RouteSelectionStep';
+import { useI18n } from '../../context/I18nContext';
 
 /**
  * SendPage — Moteur de transfert NEXUS (i-tech engine).
@@ -66,16 +67,16 @@ const STEPS: Array<{ num: Step; label: string; sub: string }> = [
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function beneficiaryFieldsForMethod(methodType: string): {
+function beneficiaryFieldsForMethod(methodType: string, t: any): {
   nameLabel: string; refLabel: string; refPlaceholder: string;
   secondaryLabel?: string; secondaryPlaceholder?: string;
 } {
   switch (methodType) {
-    case 'mobile_money': return { nameLabel: 'Nom du bénéficiaire', refLabel: 'Numéro de téléphone', refPlaceholder: '242066123456', secondaryLabel: 'Opérateur' };
-    case 'bank':         return { nameLabel: 'Nom du bénéficiaire', refLabel: 'IBAN / numéro de compte', refPlaceholder: 'FR76 3000 4000 0123 4567 8910 123' };
-    case 'crypto':       return { nameLabel: 'Pseudonyme / label', refLabel: 'Adresse du wallet', refPlaceholder: '0x1234...5678', secondaryLabel: 'Réseau' };
-    case 'cash_pickup':  return { nameLabel: 'Nom du bénéficiaire', refLabel: 'Informations de retrait', refPlaceholder: 'Ville, pièce d\'identité…', secondaryLabel: 'Ville de retrait', secondaryPlaceholder: 'Douala, Abidjan…' };
-    default:             return { nameLabel: 'Nom du bénéficiaire', refLabel: 'Référence', refPlaceholder: '' };
+    case 'mobile_money': return { nameLabel: t('send_beneficiary_name'), refLabel: t('login_phone_label'), refPlaceholder: '242066123456', secondaryLabel: t('send_operator') };
+    case 'bank':         return { nameLabel: t('send_beneficiary_name'), refLabel: 'IBAN / ' + t('send_beneficiary_ref'), refPlaceholder: 'FR76 3000 4000 0123 4567 8910 123' };
+    case 'crypto':       return { nameLabel: t('send_beneficiary_name'), refLabel: t('settings_google_auth'), refPlaceholder: '0x1234...5678', secondaryLabel: 'Réseau' };
+    case 'cash_pickup':  return { nameLabel: t('send_beneficiary_name'), refLabel: 'Informations de retrait', refPlaceholder: 'Ville, pièce d\'identité…', secondaryLabel: 'Ville de retrait', secondaryPlaceholder: 'Douala, Abidjan…' };
+    default:             return { nameLabel: t('send_beneficiary_name'), refLabel: t('send_beneficiary_ref'), refPlaceholder: '' };
   }
 }
 
@@ -134,6 +135,7 @@ function AnimatedValue({ value, format }: { value: number; format: (v: number) =
 
 /** Rail d'étapes animé. */
 function StepRail({ current, completed }: { current: Step; completed: Step[] }) {
+  const { t } = useI18n();
   return (
     <div className="se-railbar">
       {STEPS.map((s, i) => {
@@ -149,8 +151,8 @@ function StepRail({ current, completed }: { current: Step; completed: Step[] }) 
             >
               {done ? '✓' : s.num}
             </motion.div>
-            <span className="se-step-label">{s.label}</span>
-            <span className="se-step-sub">{s.sub}</span>
+            <span className="se-step-label">{s.num === 1 ? t('step_eligibility') : s.num === 2 ? t('step_confirmation') : t('step_routing')}</span>
+            <span className="se-step-sub">{s.num === 1 ? t('step_details') : s.num === 2 ? t('step_summary') : t('step_routes')}</span>
             {i < STEPS.length - 1 && (
               <div className={`se-step-line ${done ? 'se-step-line-done' : ''}`} />
             )}
@@ -169,6 +171,7 @@ function Corridor({
   origin: { flag: string; name: string; code: string } | null;
   destination: { flag: string; name: string; code: string } | null;
 }) {
+  const { t } = useI18n();
   const active = Boolean(origin && destination);
   return (
     <motion.div
@@ -177,7 +180,7 @@ function Corridor({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, ease: BEZIER }}
     >
-      <span className="se-corridor-state">{active ? '● corridor actif' : '○ en attente'}</span>
+      <span className="se-corridor-state">{active ? '● corridor actif' : '○ ' + t('route_in_progress').toLowerCase()}</span>
 
       {/* Origine */}
       <div className="se-corridor-end">
@@ -189,7 +192,7 @@ function Corridor({
               <span className="se-corridor-code">{origin.code}</span>
             </motion.div>
           ) : (
-            <motion.span key="empty-origin" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="se-corridor-empty">Origine</motion.span>
+            <motion.span key="empty-origin" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="se-corridor-empty">{t('send_origin_funds')}</motion.span>
           )}
         </AnimatePresence>
       </div>
@@ -213,7 +216,7 @@ function Corridor({
               <span className="se-corridor-code">{destination.code}</span>
             </motion.div>
           ) : (
-            <motion.span key="empty-dest" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="se-corridor-empty">Destination</motion.span>
+            <motion.span key="empty-dest" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="se-corridor-empty">{t('send_destination')}</motion.span>
           )}
         </AnimatePresence>
       </div>
@@ -237,8 +240,9 @@ function TelemetryPanel({
   sourceCurrenciesCount: number;
   step: Step;
 }) {
+  const { t } = useI18n();
   const kycColor = kycLevel === 'verified' ? 'var(--green)' : kycLevel === 'pending' ? 'var(--gold)' : 'var(--red)';
-  const kycLabel = kycLevel === 'verified' ? 'Vérifié' : kycLevel === 'pending' ? 'En cours' : 'Non vérifié';
+  const kycLabel = kycLevel === 'verified' ? t('side_compte_verify') : kycLevel === 'pending' ? t('dash_pending') : t('settings_not_verified');
   const statusLabel = step === 1 ? 'CONFIGURATION' : step === 2 ? 'VALIDATION' : 'ROUTING ACTIF';
 
   return (
@@ -246,18 +250,18 @@ function TelemetryPanel({
       <div className="se-tele-title">
         <div className="ib ib-c" style={{ width: 28, height: 28, borderRadius: 7, fontSize: 13 }}>⚙</div>
         <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>
-          MOTEUR // STATUS
+          {t('send_tele_status')}
         </span>
         <span className="pill p-c" style={{ fontSize: 7, marginLeft: 'auto' }}>{statusLabel}</span>
       </div>
 
       {/* KYC */}
       <div className="se-tele-row">
-        <span className="se-tele-k">Résidence KYC</span>
+        <span className="se-tele-k">{t('send_residence')}</span>
         <span className="se-tele-v">{residenceCountry ?? '—'}</span>
       </div>
       <div className="se-tele-row">
-        <span className="se-tele-k">Niveau KYC</span>
+        <span className="se-tele-k">{t('send_kyc_level')}</span>
         <span className="se-tele-v" style={{ color: kycColor }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: kycColor, boxShadow: `0 0 6px ${kycColor}` }} />
           {kycLabel}
@@ -268,18 +272,18 @@ function TelemetryPanel({
 
       {/* Sources */}
       <div className="se-tele-row">
-        <span className="se-tele-k">Origines autorisées</span>
+        <span className="se-tele-k">{t('send_authorized_origins')}</span>
         <span className="se-tele-v" style={{ color: originsCount > 0 ? 'var(--cyan)' : 'var(--red)' }}>
           {originsCount}
         </span>
       </div>
       <div className="se-tele-row">
-        <span className="se-tele-k">Devises source</span>
+        <span className="se-tele-k">{t('send_source_currencies')}</span>
         <span className="se-tele-v">{sourceCurrenciesCount}</span>
       </div>
       <div className="se-tele-row">
-        <span className="se-tele-k">Destinations</span>
-        <span className="se-tele-v">{coverageCount} pays</span>
+        <span className="se-tele-k">{t('send_destination')}</span>
+        <span className="se-tele-v">{coverageCount} {t('send_avail_countries')}</span>
       </div>
 
       <div style={{ height: 1, background: 'var(--border-soft)', margin: '8px 0' }} />
@@ -311,6 +315,7 @@ function CountrySelector({
   onSelect: (code: string) => void;
   placeholder?: string;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
@@ -346,7 +351,7 @@ function CountrySelector({
             <span className="mono" style={{ fontSize: 9, color: 'var(--text-dim)' }}>{selected.code}</span>
           </>
         ) : (
-          <span style={{ fontSize: 12, color: 'var(--text-dim)', flex: 1 }}>{placeholder || 'Sélectionner un pays ▼'}</span>
+          <span style={{ fontSize: 12, color: 'var(--text-dim)', flex: 1 }}>{placeholder || t('send_search_country')}</span>
         )}
         <span style={{ fontSize: 9, color: 'var(--text-dim)', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>▼</span>
       </div>
@@ -362,12 +367,12 @@ function CountrySelector({
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 6, marginBottom: 8 }}>
             <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>🔍</span>
-            <input ref={inputRef} type="text" value={query} onChange={e => setQuery(e.target.value)} placeholder="Rechercher un pays…" style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-bright)', fontSize: 11 }} />
+            <input ref={inputRef} type="text" value={query} onChange={e => setQuery(e.target.value)} placeholder={t('send_search_country')} style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-bright)', fontSize: 11 }} />
             {query && <button onClick={() => setQuery('')} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 10 }}>✕</button>}
           </div>
           {filtered.length === 0 ? (
             <div style={{ padding: '16px 8px', textAlign: 'center', fontSize: 11, color: 'var(--text-dim)' }}>
-              Aucun pays trouvé pour « {query} »
+              {t('send_no_country_found')} « {query} »
             </div>
           ) : (
             filtered.map(c => (
@@ -388,7 +393,7 @@ function CountrySelector({
             ))
           )}
           <div style={{ fontSize: 9, color: 'var(--text-dim)', textAlign: 'center', marginTop: 8, paddingTop: 6, borderTop: '1px solid var(--border-soft)' }}>
-            {filtered.length} pays disponible{filtered.length > 1 ? 's' : ''}
+            {filtered.length} {t('send_avail_countries')}{filtered.length > 1 ? 's' : ''}
           </div>
         </motion.div>
       )}
@@ -399,6 +404,7 @@ function CountrySelector({
 // ─── Composant principal ─────────────────────────────────────────────────────
 
 export default function SendPage() {
+  const { t } = useI18n();
   const [step, setStep] = useState<Step>(1);
   const [completedSteps, setCompletedSteps] = useState<Step[]>([]);
 
@@ -478,7 +484,7 @@ export default function SendPage() {
       if (destCountry && !destCurrency) errors.destCurrency = 'Sélectionnez une devise de réception.';
       if (destCountry && destCurrency && !receivingMethod) errors.receivingMethod = 'Sélectionnez un mode de réception.';
       if (receivingMethod) {
-        const fields = beneficiaryFieldsForMethod(receivingMethod);
+        const fields = beneficiaryFieldsForMethod(receivingMethod, t);
         if (fields.nameLabel && !beneficiary.name.trim()) errors.beneficiaryName = `Le champ « ${fields.nameLabel} » est requis.`;
         if (fields.refLabel && !beneficiary.reference.trim()) errors.beneficiaryRef = `Le champ « ${fields.refLabel} » est requis.`;
       }
@@ -561,7 +567,7 @@ export default function SendPage() {
             <div className="page-label">NEXUS TRANSFER ENGINE</div>
             <div className="page-title">Envoyez <span className="gc">intelligemment.</span></div>
           </div>
-          <div className="se-badge"><span className="se-led" /> ENGINE // LIVE</div>
+          <div className="se-badge"><span className="se-led" /> {t('send_tele_status')}</div>
         </div>
       </div>
 
@@ -588,13 +594,13 @@ export default function SendPage() {
               {/* ── ÉTAPE 1 : ÉLIGIBILITÉ ────────────────────────── */}
               {step === 1 && (
                 <div className="card card-hi-c" style={{ padding: 24 }}>
-                  <div className="page-label" style={{ marginBottom: 16 }}>Détails du transfert</div>
+                  <div className="page-label" style={{ marginBottom: 16 }}>{t('send_details')}</div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
                     {/* Montant + devise */}
                     <motion.div {...stagger(0)}>
-                      <div className="se-field-label">Montant</div>
+                      <div className="se-field-label">{t('send_amount')}</div>
                       <div className="se-amount">
                         <select
                           value={sourceCurrency || 'EUR'}
@@ -610,13 +616,13 @@ export default function SendPage() {
 
                     {/* Origine des fonds */}
                     <motion.div {...stagger(1)}>
-                      <div className="se-field-label">Origine des fonds</div>
+                      <div className="se-field-label">{t('send_origin_funds')}</div>
 
                       {authorizedOrigins?.country_of_residence && (
                         <div className="se-residence" style={{ marginBottom: 8 }}>
-                          <span style={{ fontSize: 9, color: 'var(--text-dim)' }}>Résidence KYC :</span>
+                          <span style={{ fontSize: 9, color: 'var(--text-dim)' }}>{t('send_residence')} :</span>
                           <strong>{authorizedOrigins.country_of_residence}</strong>
-                          <span className="se-lock">🔒 non modifiable</span>
+                          <span className="se-lock">🔒 {t('send_residence_lock')}</span>
                         </div>
                       )}
 
@@ -673,14 +679,14 @@ export default function SendPage() {
                           </div>
                         </div>
                         <div style={{ fontSize: 9, color: 'var(--text-dim)', marginTop: 6, textAlign: 'center', fontStyle: 'italic', paddingLeft: 10 }}>
-                          Estimation en temps réel — frais et spread inclus dans les routes finales.
+{t('send_quote_warning')}
                         </div>
                       </motion.div>
                     )}
 
                     {/* Destination */}
                     <motion.div {...stagger(2)}>
-                      <div className="se-field-label">Pays de destination</div>
+                      <div className="se-field-label">{t('send_dest_country')}</div>
                       <CountrySelector countries={coverage.countries} selectedCode={destCountry} onSelect={setDestCountry} placeholder="Sélectionner un pays ▼" />
                       {errors.destCountry && <ErrorText>{errors.destCountry}</ErrorText>}
                     </motion.div>
@@ -688,7 +694,7 @@ export default function SendPage() {
                     {/* Devise réception */}
                     {destCountry && destCurrencies.length > 0 && (
                       <motion.div {...stagger(3)}>
-                        <div className="se-field-label">Devise de réception</div>
+                        <div className="se-field-label">{t('send_dest_currency')}</div>
                         {destCurrencies.length === 1 ? (
                           <div className="se-chip se-chip-locked">
                             <span className="pill p-c" style={{ fontSize: 8 }}>{destCurrencies[0].code}</span>
@@ -697,7 +703,7 @@ export default function SendPage() {
                           </div>
                         ) : (
                           <select className="se-input" value={destCurrency} onChange={e => setDestCurrency(e.target.value)} style={{ cursor: 'pointer' }}>
-                            <option value="">— Choisir —</option>
+                            <option value="">— {t('send_choose')} —</option>
                             {destCurrencies.map(c => <option key={c.code} value={c.code}>{c.code} — {c.name}</option>)}
                           </select>
                         )}
@@ -708,7 +714,7 @@ export default function SendPage() {
                     {/* Mode de réception */}
                     {destCurrency && availableMethods.length > 0 && (
                       <motion.div {...stagger(4)}>
-                        <div className="se-field-label">Mode de réception</div>
+                        <div className="se-field-label">{t('send_recv_method')}</div>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
                           {availableMethods.map(m => (
                             <motion.button
@@ -735,7 +741,7 @@ export default function SendPage() {
                     {/* Opérateur Mobile Money */}
                     {selectedMethod?.type === 'mobile_money' && mobileOperators.length > 0 && (
                       <motion.div {...stagger(5)}>
-                        <div className="se-field-label">Opérateur</div>
+                        <div className="se-field-label">{t('send_operator')}</div>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                           {mobileOperators.map(op => (
                             <button
@@ -752,10 +758,10 @@ export default function SendPage() {
 
                     {/* Champs bénéficiaire */}
                     {receivingMethod && (() => {
-                      const fields = beneficiaryFieldsForMethod(receivingMethod);
+                      const fields = beneficiaryFieldsForMethod(receivingMethod, t);
                       return (
                         <motion.div {...stagger(6)} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                          <div className="se-field-label">Bénéficiaire</div>
+                          <div className="se-field-label">{t('send_beneficiary')}</div>
                           <div>
                             <div className="se-field-label" style={{ marginBottom: 4 }}>{fields.nameLabel}</div>
                             <input className="se-input" value={beneficiary.name} onChange={e => setBeneficiary(b => ({ ...b, name: e.target.value }))} placeholder="Nom complet" />
@@ -788,7 +794,7 @@ export default function SendPage() {
                     {/* Objectif */}
                     {receivingMethod && (
                       <motion.div {...stagger(7)}>
-                        <div className="se-field-label">Objectif du transfert</div>
+                        <div className="se-field-label">{t('send_objective')}</div>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                           {OBJECTIVE_OPTIONS.map(opt => (
                             <button
@@ -796,7 +802,7 @@ export default function SendPage() {
                               onClick={() => setObjective(opt.key)}
                               className={`se-chip ${objective === opt.key ? 'se-chip-selected' : ''}`}
                             >
-                              {opt.icon} {opt.label}
+                              {opt.icon} {t('opt_' + opt.key)}
                             </button>
                           ))}
                         </div>
@@ -805,7 +811,7 @@ export default function SendPage() {
 
                     {/* Navigation */}
                     <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                      <button className="se-cta" onClick={goNext} style={{ flex: 1 }}>Continuer →</button>
+                      <button className="se-cta" onClick={goNext} style={{ flex: 1 }}>{t('send_continue')} →</button>
                     </div>
                   </div>
                 </div>
@@ -814,15 +820,15 @@ export default function SendPage() {
               {/* ── ÉTAPE 2 : CONFIRMATION ────────────────────────── */}
               {step === 2 && (
                 <div className="card card-hi-c" style={{ padding: 24 }}>
-                  <div className="page-label" style={{ marginBottom: 16 }}>Résumé — Validation</div>
+                  <div className="page-label" style={{ marginBottom: 16 }}>{t('send_summary')}</div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
                     {[
-                      ['Vous envoyez', formatCurrencyDisplay(parseFloat(amount) || 0, sourceCurrency), 'var(--white)', true],
-                      ['Origine des fonds', `${selectedOrigin?.flag ?? ''} ${selectedOrigin?.countryName ?? originCountry}`, 'var(--green)', false],
-                      ['Destination', `${selectedCountry?.flag ?? ''} ${selectedCountry?.name ?? destCountry}`, 'var(--text-bright)', false],
-                      ['Devise reçue', destCurrency, 'var(--cyan)', true],
-                      ['Mode de réception', `${selectedMethod?.icon ?? ''} ${selectedMethod?.label ?? ''}${beneficiary.operator ? ` — ${beneficiary.operator}` : ''}`, 'var(--text-bright)', false],
+                      [t('send_you_send'), formatCurrencyDisplay(parseFloat(amount) || 0, sourceCurrency), 'var(--white)', true],
+                      [t('send_origin_funds'), `${selectedOrigin?.flag ?? ''} ${selectedOrigin?.countryName ?? originCountry}`, 'var(--green)', false],
+                      [t('send_destination'), `${selectedCountry?.flag ?? ''} ${selectedCountry?.name ?? destCountry}`, 'var(--text-bright)', false],
+                      [t('send_recv_currency'), destCurrency, 'var(--cyan)', true],
+                      [t('send_recv_method'), `${selectedMethod?.icon ?? ''} ${selectedMethod?.label ?? ''}${beneficiary.operator ? ` — ${beneficiary.operator}` : ''}`, 'var(--text-bright)', false],
                     ].map(([k, v, col, mono], i) => (
                       <motion.div key={k as string} className="trow" {...stagger(i)}>
                         <span style={{ fontSize: 11, color: 'var(--text-mid)' }}>{k as string}</span>
@@ -845,7 +851,7 @@ export default function SendPage() {
                     <motion.div className="trow" {...stagger(6)}>
                       <span style={{ fontSize: 11, color: 'var(--text-mid)' }}>Objectif</span>
                       <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-bright)' }}>
-                        {OBJECTIVE_OPTIONS.find(o => o.key === objective)?.icon} {OBJECTIVE_OPTIONS.find(o => o.key === objective)?.label}
+                        {OBJECTIVE_OPTIONS.find(o => o.key === objective)?.icon} {t('opt_' + objective)}
                       </span>
                     </motion.div>
 
@@ -869,13 +875,13 @@ export default function SendPage() {
                   </div>
 
                   <div style={{ fontSize: 9, color: 'var(--text-dim)', textAlign: 'center', marginTop: 14, padding: '8px 12px', background: 'var(--panel2)', borderRadius: 8, fontStyle: 'italic' }}>
-                    Estimation — Le Routing Engine calculera les frais exacts et les taux en temps réel.
+                    {t('send_quote_warning')}
                   </div>
 
                   <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-                    <button className="se-cta se-cta-ghost" onClick={goBack}>← Modifier</button>
+                    <button className="se-cta se-cta-ghost" onClick={goBack}>← {t('send_modify')}</button>
                     <button className="se-cta" onClick={goToRouting} style={{ flex: 1 }}>
-                      ⚡ Engager le Routing Engine →
+                      ⚡ {t('send_engage')} →
                     </button>
                   </div>
                 </div>
