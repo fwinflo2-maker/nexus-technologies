@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # NEXUS CORP TECHNOLOGIES
 
 Plateforme financière intelligente multi-rails avec frontend React ultra-premium et armée d'agents IA autonomes.
@@ -125,3 +126,6 @@ L'application démarre sur `http://localhost:5173`
 ---
 
 *NEXUS CORP TECHNOLOGIES - août 2026*
+=======
+# nexus-technologies
+>>>>>>> 032547c697d134aef46121b163a73b48bf2e0985
