@@ -16,6 +16,7 @@ use Nexus\Controllers\IntentController;
 use Nexus\Controllers\NotificationController;
 use Nexus\Controllers\ProviderCredentialController;
 use Nexus\Controllers\QuoteController;
+use Nexus\Controllers\UserController;
 use Nexus\Controllers\WalletController;
 use Nexus\Core\Database;
 use Nexus\Core\HttpException;
@@ -146,6 +147,13 @@ $router->get('/intent/authorized-origins', [IntentController::class, 'authorized
 // --- Quote & Routing Engine : devises multi-providers (protégé) ----------
 $router->post('/quotes', [QuoteController::class, 'create']);
 $router->get('/quotes/{id}', [QuoteController::class, 'get']);
+
+// --- User Profile (protégé) ----------------------------------------------------
+$router->get('/users/me', [UserController::class, 'me']);
+$router->put('/users/me', [UserController::class, 'updateProfile']);
+$router->put('/users/me/password', [UserController::class, 'updatePassword']);
+$router->get('/users/me/sessions', [UserController::class, 'sessions']);
+$router->delete('/users/me/sessions/{id}', [UserController::class, 'revokeSession']);
 
 // --- Exécution ------------------------------------------------------------------
 try {
