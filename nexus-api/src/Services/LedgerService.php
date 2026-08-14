@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Nexus\Services;
 
 use Nexus\Core\Database;
+use Nexus\Execution\ExecutionContext;
+use Nexus\Providers\ProviderConfig;
 use PDO;
 use PDOException;
 use RuntimeException;
@@ -95,7 +97,8 @@ final class LedgerService
         string $type = 'deposit',
         ?string $idempotencyKey = null,
         ?string $description = null,
-        ?array $metadata = null
+        ?array $metadata = null,
+        ?ExecutionContext $context = null
     ): string {
         self::assertPositiveAmount($amount);
 
@@ -127,7 +130,10 @@ final class LedgerService
                 $amountDec,
                 $description,
                 $metadata,
-                $idempotencyKey
+                $idempotencyKey,
+                null,
+                null,
+                $context
             );
 
             // Écriture ledger (credit).
@@ -143,7 +149,8 @@ final class LedgerService
                 $description,
                 $type,
                 $operationId,
-                $metadata
+                $metadata,
+                $context?->environmentValue()
             );
 
             // Projection wallets.
@@ -193,7 +200,8 @@ final class LedgerService
         string $type = 'withdrawal',
         ?string $idempotencyKey = null,
         ?string $description = null,
-        ?array $metadata = null
+        ?array $metadata = null,
+        ?ExecutionContext $context = null
     ): string {
         self::assertPositiveAmount($amount);
 
@@ -237,7 +245,10 @@ final class LedgerService
                 null,
                 $description,
                 $metadata,
-                $idempotencyKey
+                $idempotencyKey,
+                null,
+                null,
+                $context
             );
 
             self::insertLedgerEntry(
@@ -252,7 +263,8 @@ final class LedgerService
                 $description,
                 $type,
                 $operationId,
-                $metadata
+                $metadata,
+                $context?->environmentValue()
             );
 
             self::applyBalanceUpdate($pdo, $walletId, $current, $amountDec, /* isDebit */ true);
@@ -325,7 +337,8 @@ final class LedgerService
         ?array $metadata = null,
         ?string $fxRate = null,
         ?string $fxSource = null,
-        ?string $operationId = null
+        ?string $operationId = null,
+        ?ExecutionContext $context = null
     ): string {
         self::assertPositiveAmount($sourceAmount);
         self::assertPositiveAmount($destAmount);
@@ -400,7 +413,8 @@ final class LedgerService
                 $metadata,
                 $idempotencyKey,
                 $fxRate,
-                $fxSource
+                $fxSource,
+                $context
             );
 
             // 2) ledger_entries : debit sur source (sequence 1)
@@ -416,7 +430,8 @@ final class LedgerService
                 $description,
                 $type,
                 $operationId,
-                $metadata
+                $metadata,
+                $context?->environmentValue()
             );
 
             // 3) ledger_entries : credit sur destination (sequence 2)
@@ -432,7 +447,8 @@ final class LedgerService
                 $description,
                 $type,
                 $operationId,
-                $metadata
+                $metadata,
+                $context?->environmentValue()
             );
 
             // 4) Projection wallets : source
@@ -506,6 +522,15 @@ final class LedgerService
             $current = self::lockAndLoadWallet($pdo, $walletId);
             self::assertCurrencyMatches($current, $currency);
 
+            // §10/§13 — l'environnement de la capture est LU depuis
+            // l'opération d'origine, jamais recalculé depuis la
+            // configuration courante : un hold posé en sandbox se capture en
+            // sandbox, même si le serveur a basculé entre-temps.
+            $stmtEnv = $pdo->prepare('SELECT environment FROM wallet_operations WHERE id = :id LIMIT 1');
+            $stmtEnv->execute(['id' => $operationId]);
+            $sourceEnv = $stmtEnv->fetchColumn();
+            $sourceEnv = is_string($sourceEnv) && $sourceEnv !== '' ? $sourceEnv : null;
+
             $amountDec  = self::toDecimalString($amount);
             $currentBal = (string) $current['balance'];
 
@@ -538,7 +563,8 @@ final class LedgerService
                 $description,
                 'hold_capture',
                 $operationId,
-                $metadata
+                $metadata,
+                $sourceEnv
             );
 
             // Projection wallets : balance -= amount, available_balance inchangé
@@ -675,7 +701,8 @@ final class LedgerService
         ?array $metadata,
         ?string $idempotencyKey,
         ?string $fxRate = null,
-        ?string $fxSource = null
+        ?string $fxSource = null,
+        ?ExecutionContext $context = null
     ): void {
         // Si pas de clé d'idempotence fournie, on en génère une déterministe
         // basée sur l'operationId pour respecter la contrainte UNIQUE.
@@ -696,7 +723,7 @@ final class LedgerService
                  fee_amount, fee_currency,
                  fx_rate, fx_source,
                  description, metadata,
-                 idempotency_key, completed_at)
+                 idempotency_key, environment, completed_at)
              VALUES
                 (:id, :uid, :type, :status,
                  :src_wid, :src_cur, :src_amt,
@@ -704,7 +731,7 @@ final class LedgerService
                  0, NULL,
                  :fx_rate, :fx_source,
                  :desc, :meta,
-                 :idem, NOW())'
+                 :idem, :env, NOW())'
         );
 
         $stmt->execute([
@@ -723,6 +750,9 @@ final class LedgerService
             'desc'     => $description,
             'meta'     => $metaJson,
             'idem'     => $idemKey,
+            // §10 — l'environnement de l'opération est fixé à sa création et
+            // reste stable pendant tout son cycle de vie.
+            'env'      => $context?->environmentValue() ?? ProviderConfig::defaultEnvironment(),
         ]);
     }
 
@@ -741,7 +771,8 @@ final class LedgerService
         ?string $description,
         ?string $referenceType,
         ?string $referenceId,
-        ?array $metadata
+        ?array $metadata,
+        ?string $environment = null
     ): void {
         $metaJson = $metadata !== null
             ? json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
@@ -753,13 +784,13 @@ final class LedgerService
                  wallet_id, wallet_currency,
                  amount, balance_after,
                  description, reference_type, reference_id,
-                 metadata)
+                 metadata, environment)
              VALUES
                 (:opid, :seq, :etype,
                  :wid, :cur,
                  :amt, :bal,
                  :desc, :reftype, :refid,
-                 :meta)'
+                 :meta, :env)'
         );
         $stmt->execute([
             'opid'    => $operationId,
@@ -773,6 +804,10 @@ final class LedgerService
             'reftype' => $referenceType,
             'refid'   => $referenceId,
             'meta'    => $metaJson,
+            // §13 — jamais le défaut global du serveur pour une écriture liée
+            // à une opération existante : l'environnement est hérité de la
+            // source, ou résolu par l'appelant.
+            'env'     => $environment ?? ProviderConfig::defaultEnvironment(),
         ]);
     }
 

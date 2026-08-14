@@ -7,6 +7,7 @@ namespace Nexus\Services;
 use Nexus\Core\Currency;
 use Nexus\Core\Database;
 use Nexus\Core\HttpException;
+use Nexus\Execution\EnvironmentGuard;
 use Nexus\Execution\ExecutionContext;
 use Nexus\Providers\ProviderConfig;
 use PDO;
@@ -52,7 +53,7 @@ final class ExecutionEngine
         $operationId  = self::uuid();
 
         if ($useIdem) {
-            $state = IdempotencyService::start($idempotencyKey, $userId, $operationId);
+            $state = IdempotencyService::start($idempotencyKey, $userId, $operationId, $context?->environmentValue());
             if (!$state['created']) {
                 if ($state['status'] === 'completed') {
                     return (array) ($state['response_json'] ?? []);
@@ -72,6 +73,18 @@ final class ExecutionEngine
             // ── 1. Quote (verrou FOR UPDATE : bloque la double exécution) ──
             $quote = self::loadQuoteForUpdate($pdo, $userId, $quoteId);
             self::assertQuoteExecutable($quote);
+
+            // §9 — la quote appartient à un environnement ; l'exécution doit
+            // se dérouler dans le MÊME. Jamais de correction automatique :
+            // ni réécriture de la quote, ni génération silencieuse d'une
+            // nouvelle quote dans l'autre environnement.
+            if ($context !== null) {
+                EnvironmentGuard::assertMatches(
+                    (string) ($quote['environment'] ?? ''),
+                    $context,
+                    'Cette quote'
+                );
+            }
 
             // ── 2. Re-validation de l'origine (défense en profondeur) ─────
             if (!empty($quote['origin_country'])) {
@@ -101,7 +114,7 @@ final class ExecutionEngine
             }
             if ($useIdem) {
                 try {
-                    IdempotencyService::fail($idempotencyKey, $userId, $e->getMessage(), $operationId);
+                    IdempotencyService::fail($idempotencyKey, $userId, $e->getMessage(), $operationId, $context?->environmentValue());
                 } catch (Throwable) {
                     // Meilleur effort : l'erreur métier prime.
                 }
@@ -114,7 +127,7 @@ final class ExecutionEngine
             throw new RuntimeException('Transaction introuvable après exécution.');
         }
         if ($useIdem) {
-            IdempotencyService::complete($idempotencyKey, $userId, $tx, $operationId);
+            IdempotencyService::complete($idempotencyKey, $userId, $tx, $operationId, $context?->environmentValue());
         }
         return $tx;
     }
@@ -142,7 +155,7 @@ final class ExecutionEngine
         $operationId = self::uuid();
 
         if ($useIdem) {
-            $state = IdempotencyService::start($idempotencyKey, $userId, $operationId);
+            $state = IdempotencyService::start($idempotencyKey, $userId, $operationId, $context?->environmentValue());
             if (!$state['created']) {
                 if ($state['status'] === 'completed') {
                     return (array) ($state['response_json'] ?? []);
@@ -178,7 +191,7 @@ final class ExecutionEngine
             }
             if ($useIdem) {
                 try {
-                    IdempotencyService::fail($idempotencyKey, $userId, $e->getMessage(), $operationId);
+                    IdempotencyService::fail($idempotencyKey, $userId, $e->getMessage(), $operationId, $context?->environmentValue());
                 } catch (Throwable) {
                 }
             }
@@ -190,7 +203,7 @@ final class ExecutionEngine
             throw new RuntimeException('Transaction introuvable après exécution.');
         }
         if ($useIdem) {
-            IdempotencyService::complete($idempotencyKey, $userId, $tx, $operationId);
+            IdempotencyService::complete($idempotencyKey, $userId, $tx, $operationId, $context?->environmentValue());
         }
         return $tx;
     }
@@ -249,7 +262,8 @@ final class ExecutionEngine
             $sourceCurrency,
             $holdIdemKey,
             $label !== '' ? $label : sprintf('Envoi %s → %s', $sourceCurrency, $destCurrency),
-            ['operation_id' => $operationId, 'kind' => $type, 'metadata' => $metadata]
+            ['operation_id' => $operationId, 'kind' => $type, 'metadata' => $metadata],
+            $context
         );
 
         WalletService::captureHold((string) $hold['operation_id'], $userId, $captureIdemKey);

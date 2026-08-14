@@ -10,6 +10,8 @@ use Nexus\Core\Database;
 use Nexus\Core\HttpException;
 use Nexus\Core\Request;
 use Nexus\Core\Response;
+use Nexus\Execution\ExecutionContext;
+use Nexus\Providers\ProviderConfig;
 use Nexus\Services\CapabilityEngine;
 use Nexus\Services\FundingSourceEngine;
 use Nexus\Services\IntentParser;
@@ -61,6 +63,10 @@ final class QuoteController
         $request = AuthMiddleware::handle($request);
         $user    = $request->attribute('user');
         $userId  = (int) $user['id'];
+
+        // Une quote est une décision financière : elle appartient à un
+        // environnement, fixé ici et porté par la ligne.
+        $context = ExecutionContext::fromRequest($request, $user);
 
         // ── 0. Validation de l'origine des fonds ──────────────────────
         // Cette étape est CRITIQUE : elle garantit que l'origine provient
@@ -128,6 +134,7 @@ final class QuoteController
             $routes,
             $expiresAt,
             $originCountry,
+            $context,
         );
 
         Response::success([
@@ -239,17 +246,18 @@ final class QuoteController
         array $routes,
         string $expiresAt,
         string $originCountry = '',
+        ?ExecutionContext $context = null,
     ): void {
         $pdo = Database::getConnection();
         $stmt = $pdo->prepare(
             'INSERT INTO quotes
                 (id, user_id, source_currency, origin_country, dest_country, dest_currency,
                  receiving_method, amount_sent, objective, routes_json,
-                 status, expires_at)
+                 status, environment, expires_at)
              VALUES
                 (:id, :uid, :src_cur, :origin_cc, :dest_cc, :dest_cur,
                  :method, :amount, :objective, :routes_json,
-                 :status, :expires_at)'
+                 :status, :env, :expires_at)'
         );
 
         $stmt->execute([
@@ -264,6 +272,7 @@ final class QuoteController
             'objective'   => $intent['objective'],
             'routes_json' => json_encode($routes, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
             'status'      => 'QUOTED',
+            'env'         => $context?->environmentValue() ?? ProviderConfig::defaultEnvironment(),
             'expires_at'  => $expiresAt,
         ]);
     }

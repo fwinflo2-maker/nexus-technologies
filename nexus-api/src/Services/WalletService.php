@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Nexus\Services;
 
 use Nexus\Core\Database;
+use Nexus\Execution\ExecutionContext;
+use Nexus\Providers\ProviderConfig;
 use PDO;
 use PDOException;
 use RuntimeException;
@@ -148,7 +150,8 @@ final class WalletService
         string $currency,
         ?string $idempotencyKey = null,
         ?string $description = null,
-        ?array $metadata = null
+        ?array $metadata = null,
+        ?ExecutionContext $context = null
     ): array {
         self::assertUserId($userId);
         self::assertWalletId($walletId);
@@ -157,7 +160,7 @@ final class WalletService
 
         $useIdempotency = $idempotencyKey !== null && $idempotencyKey !== '';
         if ($useIdempotency) {
-            $cached = IdempotencyService::check($idempotencyKey, $userId);
+            $cached = IdempotencyService::check($idempotencyKey, $userId, $context?->environmentValue());
             if ($cached !== null && $cached['status'] === 'completed') {
                 // Replay : réponse précédente, aucune nouvelle écriture.
                 return [
@@ -179,7 +182,7 @@ final class WalletService
 
         // Réservation de la clé (status = processing) avant toute écriture.
         if ($useIdempotency) {
-            $state = IdempotencyService::start($idempotencyKey, $userId, $operationId);
+            $state = IdempotencyService::start($idempotencyKey, $userId, $operationId, $context?->environmentValue());
             if (!$state['created']) {
                 if ($state['status'] === 'completed') {
                     return [
@@ -237,8 +240,8 @@ final class WalletService
             }
             $expiresAt = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->modify('+' . (int)$ttl . ' seconds')->format('Y-m-d H:i:s');
             $stmtOp = $pdo->prepare(
-                'INSERT INTO wallet_operations (id, user_id, type, status, source_wallet_id, source_currency, source_amount, description, metadata, idempotency_key, expires_at)
-                 VALUES (:id, :uid, \'hold\', \'pending\', :swid, :scur, :samt, :desc, :meta, :idem, :expires_at)'
+                'INSERT INTO wallet_operations (id, user_id, type, status, source_wallet_id, source_currency, source_amount, description, metadata, idempotency_key, environment, expires_at)
+                 VALUES (:id, :uid, \'hold\', \'pending\', :swid, :scur, :samt, :desc, :meta, :idem, :env, :expires_at)'
             );
             $stmtOp->execute([
                 'id' => $operationId,
@@ -249,11 +252,14 @@ final class WalletService
                 'desc' => $description,
                 'meta' => $metadata ? json_encode($metadata) : null,
                 'idem' => $idempotencyKey ?? ('auto:' . $operationId),
+                // Le hold naît dans un environnement et y reste : sa capture
+                // relira cette valeur au lieu de la recalculer.
+                'env' => $context?->environmentValue() ?? ProviderConfig::defaultEnvironment(),
                 'expires_at' => $expiresAt,
             ]);
 
             if ($useIdempotency) {
-                IdempotencyService::complete($idempotencyKey, $userId, ['operation_id' => $operationId, 'status' => 'pending'], $operationId);
+                IdempotencyService::complete($idempotencyKey, $userId, ['operation_id' => $operationId, 'status' => 'pending'], $operationId, $context?->environmentValue());
             }
 
             if ($ownsTransaction) {
@@ -268,7 +274,7 @@ final class WalletService
             // L'échec est mémorisé sur la clé (status=error) pour les replays.
             if ($useIdempotency) {
                 try {
-                    IdempotencyService::fail($idempotencyKey, $userId, $e->getMessage(), $operationId);
+                    IdempotencyService::fail($idempotencyKey, $userId, $e->getMessage(), $operationId, $context?->environmentValue());
                 } catch (Throwable $ignore) {
                     // Ne masque jamais l'erreur d'origine.
                 }
@@ -287,13 +293,33 @@ final class WalletService
      * @return array{operation_id: string, status: string}
      * @throws RuntimeException Si l'opération n'est pas un hold pending ou solde insuffisant.
      */
+    /**
+     * Environnement d'une opération déjà persistée.
+     *
+     * §10 — la reprise d'une opération (capture, annulation) ne recalcule
+     * JAMAIS l'environnement depuis la configuration courante : il est lu
+     * depuis la ligne. Un hold posé en sandbox reste sandbox même si le
+     * serveur a basculé entre-temps.
+     */
+    private static function operationEnvironment(string $operationId): ?string
+    {
+        $stmt = Database::getConnection()->prepare(
+            'SELECT environment FROM wallet_operations WHERE id = :id LIMIT 1'
+        );
+        $stmt->execute(['id' => $operationId]);
+        $env = $stmt->fetchColumn();
+
+        return is_string($env) && $env !== '' ? $env : null;
+    }
+
     public static function captureHold(string $operationId, int $userId, ?string $idempotencyKey = null): array
     {
         self::assertUserId($userId);
+        $opEnv = self::operationEnvironment($operationId);
 
         $useIdempotency = $idempotencyKey !== null && $idempotencyKey !== '';
         if ($useIdempotency) {
-            $cached = IdempotencyService::check($idempotencyKey, $userId);
+            $cached = IdempotencyService::check($idempotencyKey, $userId, $opEnv);
             if ($cached !== null && $cached['status'] === 'completed') {
                 // Replay : réponse précédente, aucune nouvelle écriture.
                 return [
@@ -313,7 +339,7 @@ final class WalletService
 
         // Réservation de la clé (status = processing) avant toute écriture.
         if ($useIdempotency) {
-            $state = IdempotencyService::start($idempotencyKey, $userId, $operationId);
+            $state = IdempotencyService::start($idempotencyKey, $userId, $operationId, $opEnv);
             if (!$state['created']) {
                 if ($state['status'] === 'completed') {
                     return ['operation_id' => $operationId, 'status' => 'completed'];
@@ -394,7 +420,7 @@ final class WalletService
             $updOp->execute(['id' => $operationId]);
 
             if ($useIdempotency) {
-                IdempotencyService::complete($idempotencyKey, $userId, ['operation_id' => $operationId, 'status' => 'completed'], $operationId);
+                IdempotencyService::complete($idempotencyKey, $userId, ['operation_id' => $operationId, 'status' => 'completed'], $operationId, $opEnv);
             }
 
             if ($ownsTransaction) {
@@ -409,7 +435,7 @@ final class WalletService
             // L'échec est mémorisé sur la clé (status=error) pour les replays.
             if ($useIdempotency) {
                 try {
-                    IdempotencyService::fail($idempotencyKey, $userId, $e->getMessage(), $operationId);
+                    IdempotencyService::fail($idempotencyKey, $userId, $e->getMessage(), $operationId, $opEnv);
                 } catch (Throwable $ignore) {
                     // Ne masque jamais l'erreur d'origine.
                 }
@@ -431,10 +457,11 @@ final class WalletService
     public static function releaseHold(string $operationId, int $userId, ?string $idempotencyKey = null): array
     {
         self::assertUserId($userId);
+        $opEnv = self::operationEnvironment($operationId);
 
         $useIdempotency = $idempotencyKey !== null && $idempotencyKey !== '';
         if ($useIdempotency) {
-            $cached = IdempotencyService::check($idempotencyKey, $userId);
+            $cached = IdempotencyService::check($idempotencyKey, $userId, $opEnv);
             if ($cached !== null && $cached['status'] === 'completed') {
                 // Replay : réponse précédente, aucune nouvelle écriture.
                 return [
@@ -454,7 +481,7 @@ final class WalletService
 
         // Réservation de la clé (status = processing) avant toute écriture.
         if ($useIdempotency) {
-            $state = IdempotencyService::start($idempotencyKey, $userId, $operationId);
+            $state = IdempotencyService::start($idempotencyKey, $userId, $operationId, $opEnv);
             if (!$state['created']) {
                 if ($state['status'] === 'completed') {
                     return ['operation_id' => $operationId, 'status' => 'cancelled'];
@@ -524,7 +551,7 @@ final class WalletService
             $updOp->execute(['id' => $operationId]);
 
             if ($useIdempotency) {
-                IdempotencyService::complete($idempotencyKey, $userId, ['operation_id' => $operationId, 'status' => 'cancelled'], $operationId);
+                IdempotencyService::complete($idempotencyKey, $userId, ['operation_id' => $operationId, 'status' => 'cancelled'], $operationId, $opEnv);
             }
 
             if ($ownsTransaction) {
@@ -539,7 +566,7 @@ final class WalletService
             // L'échec est mémorisé sur la clé (status=error) pour les replays.
             if ($useIdempotency) {
                 try {
-                    IdempotencyService::fail($idempotencyKey, $userId, $e->getMessage(), $operationId);
+                    IdempotencyService::fail($idempotencyKey, $userId, $e->getMessage(), $operationId, $opEnv);
                 } catch (Throwable $ignore) {
                     // Ne masque jamais l'erreur d'origine.
                 }

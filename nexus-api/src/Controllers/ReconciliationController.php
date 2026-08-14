@@ -9,6 +9,7 @@ use Nexus\Core\Database;
 use Nexus\Core\HttpException;
 use Nexus\Core\Request;
 use Nexus\Core\Response;
+use Nexus\Execution\ExecutionContext;
 use Nexus\Services\BusinessService;
 
 /**
@@ -34,14 +35,20 @@ final class ReconciliationController
         $status = (string) $request->query('status', '');
         $pdo    = Database::getConnection();
 
+        // §20 — le rapprochement ne mélange JAMAIS les environnements : un
+        // écart de test ne doit pas apparaître dans un rapprochement d'argent
+        // réel, ni l'inverse. Le périmètre suit le contexte de l'appelant.
+        $context = ExecutionContext::fromRequest($request, $actor, $bid);
+
         $sql = "SELECT t.id AS tx_id, t.amount, t.currency, t.dest_amount, t.dest_currency,
                        t.provider, t.destination, t.status AS tx_status, t.created_at,
                        r.id AS item_id, r.provider_reference, r.actual_amount,
                        r.status AS recon_status, r.notes, r.resolved_at
                 FROM transactions t
                 LEFT JOIN reconciliation_items r ON r.transaction_id = t.id AND r.user_id = t.user_id
-                WHERE t.user_id = :uid AND t.type = 'send' AND t.status = 'completed'";
-        $params = ['uid' => $bid];
+                WHERE t.user_id = :uid AND t.type = 'send' AND t.status = 'completed'
+                  AND t.environment = :env";
+        $params = ['uid' => $bid, 'env' => $context->environmentValue()];
         if ($status !== '' && in_array($status, ['pending', 'matched', 'unmatched', 'discrepancy', 'resolved'], true)) {
             if ($status === 'pending') {
                 $sql .= ' AND (r.id IS NULL OR r.status = :s)';

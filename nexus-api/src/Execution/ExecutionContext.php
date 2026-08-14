@@ -133,7 +133,7 @@ final class ExecutionContext
         // de sécurité mais son contournement.
         self::authorize($account, $environment);
 
-        return new self(
+        $context = new self(
             actorUserId:       $actorId,
             subjectUserId:     $subjectUserId ?? $actorId,
             accountType:       (string) ($user['account_type'] ?? 'personal'),
@@ -142,6 +142,10 @@ final class ExecutionContext
             account:           $account,
             requestId:         self::newRequestId(),
         );
+
+        ExecutionAudit::recordGranted($context);
+
+        return $context;
     }
 
     /**
@@ -174,6 +178,15 @@ final class ExecutionContext
         if (ProductionAuthorizationPolicy::isAllowed($account, $environment)) {
             return;
         }
+
+        // §18 — le journal interne conserve le détail ; la réponse au client
+        // reste générique et n'apprend rien sur la configuration.
+        ExecutionAudit::recordDenied(
+            'ENVIRONMENT_NOT_ALLOWED',
+            $account->actorId,
+            $environment->value,
+            ['account_id' => $account->accountId, 'account_type' => $account->accountType]
+        );
 
         throw new HttpException(
             403,
@@ -223,6 +236,13 @@ final class ExecutionContext
             if ($requested !== null) {
                 $normalized = strtolower(trim($requested));
                 if ($normalized !== ExecutionEnvironment::PRODUCTION->value) {
+                    ExecutionAudit::recordDenied(
+                        'ENVIRONMENT_NOT_ALLOWED',
+                        null,
+                        null,
+                        ['requested_raw' => substr($requested, 0, 100), 'reason' => 'production_deployment']
+                    );
+
                     throw new HttpException(
                         403,
                         'Environnement « ' . $requested . ' » refusé : ce déploiement exécute exclusivement en production.',
@@ -242,6 +262,13 @@ final class ExecutionContext
                 // Valeur inconnue : refus explicite. Ne jamais retomber
                 // silencieusement sur un défaut — le client croirait sa
                 // demande honorée.
+                ExecutionAudit::recordDenied(
+                    'ENVIRONMENT_INVALID',
+                    null,
+                    null,
+                    ['requested_raw' => substr($requested, 0, 100)]
+                );
+
                 throw new HttpException(
                     400,
                     'Environnement invalide : « ' . $requested . ' ». Attendu : sandbox ou production.',

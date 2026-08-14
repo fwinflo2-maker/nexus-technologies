@@ -53,6 +53,13 @@ final class ProviderResolver
         // L'environnement est déjà décidé : on EXIGE la credential
         // correspondante. On ne cherche pas « ce qui est disponible ».
         if (!self::hasCredentialFor($slug, $context)) {
+            ExecutionAudit::recordDenied(
+                'PROVIDER_NOT_CONFIGURED_FOR_ENVIRONMENT',
+                $context->actorUserId,
+                $environment,
+                ['provider' => $slug]
+            );
+
             throw new HttpException(
                 409,
                 sprintf(

@@ -137,9 +137,9 @@ final class IdempotencyServiceTest extends TestCase
 
         $stmt = $this->pdo->prepare(
             'INSERT INTO idempotency_keys
-                (idempotency_key, user_id, operation_id, response_json, status, expires_at)
+                (idempotency_key, user_id, operation_id, response_json, status, expires_at, environment)
              VALUES
-                (:key, :uid, :opid, :resp, :status, :exp)'
+                (:key, :uid, :opid, :resp, :status, :exp, :env)'
         );
         $stmt->execute([
             'key'    => $key,
@@ -148,6 +148,10 @@ final class IdempotencyServiceTest extends TestCase
             'resp'   => $responseJson,
             'status' => $status,
             'exp'    => $expiresAt,
+            // Même scope que celui résolu par le service, sinon la fixture
+            // simule une clé d'un AUTRE environnement — qui, désormais, n'entre
+            // légitimement plus en collision.
+            'env'    => \Nexus\Providers\ProviderConfig::defaultEnvironment(),
         ]);
         return (int) $this->pdo->lastInsertId();
     }

@@ -203,14 +203,15 @@ final class WalletServiceTransferTest extends TestCase
     private function insertKeyDirectly(string $key, int $userId, string $status): void
     {
         $stmt = $this->pdo->prepare(
-            'INSERT INTO idempotency_keys (idempotency_key, user_id, operation_id, response_json, status, expires_at)
-             VALUES (:key, :uid, NULL, NULL, :status, :exp)'
+            'INSERT INTO idempotency_keys (idempotency_key, user_id, operation_id, response_json, status, expires_at, environment)
+             VALUES (:key, :uid, NULL, NULL, :status, :exp, :env)'
         );
         $stmt->execute([
             'key'    => $key,
             'uid'    => $userId,
             'status' => $status,
             'exp'    => gmdate('Y-m-d H:i:s', time() + 86400),
+            'env'    => \Nexus\Providers\ProviderConfig::defaultEnvironment(),
         ]);
         $this->created['keys'][] = ['key' => $key, 'userId' => $userId];
     }

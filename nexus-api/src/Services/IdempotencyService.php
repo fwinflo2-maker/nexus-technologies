@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nexus\Services;
 
 use Nexus\Core\Database;
+use Nexus\Providers\ProviderConfig;
 use PDO;
 use PDOException;
 use RuntimeException;
@@ -90,13 +91,13 @@ final class IdempotencyService
      *         - response_json : réponse décodée (uniquement pour 'completed')
      *         - expires_at    : 'Y-m-d H:i:s' (UTC)
      */
-    public static function check(string $key, int $userId): ?array
+    public static function check(string $key, int $userId, ?string $environment = null): ?array
     {
         self::assertKey($key);
         self::assertUserId($userId);
 
         $pdo = Database::getConnection();
-        $row = self::loadRow($pdo, $key, $userId);
+        $row = self::loadRow($pdo, $key, $userId, self::scope($environment));
 
         if ($row === false || self::isExpired($row['expires_at'])) {
             return null;
@@ -124,6 +125,7 @@ final class IdempotencyService
         string $key,
         int $userId,
         ?string $operationId = null,
+        ?string $environment = null,
         int $ttlSeconds = self::DEFAULT_TTL_SECONDS
     ): array {
         self::assertKey($key);
@@ -136,11 +138,12 @@ final class IdempotencyService
             );
         }
 
-        $pdo       = Database::getConnection();
-        $expiresAt = gmdate('Y-m-d H:i:s', time() + $ttlSeconds);
+        $pdo         = Database::getConnection();
+        $expiresAt   = gmdate('Y-m-d H:i:s', time() + $ttlSeconds);
+        $environment = self::scope($environment);
 
         try {
-            self::insertProcessing($pdo, $key, $userId, $operationId, $expiresAt);
+            self::insertProcessing($pdo, $key, $userId, $operationId, $expiresAt, $environment);
             return self::processingState($operationId, $expiresAt, created: true);
         } catch (PDOException $e) {
             // On ne récupère que le duplicate key (contrainte UNIQUE).
@@ -150,7 +153,7 @@ final class IdempotencyService
         }
 
         // Collision : la clé existe déjà pour cet utilisateur.
-        return self::resolveCollision($pdo, $key, $userId, $operationId, $expiresAt);
+        return self::resolveCollision($pdo, $key, $userId, $operationId, $expiresAt, $environment);
     }
 
     /**
@@ -171,14 +174,15 @@ final class IdempotencyService
         string $key,
         int $userId,
         mixed $response,
-        ?string $operationId = null
+        ?string $operationId = null,
+        ?string $environment = null
     ): void {
         self::assertKey($key);
         self::assertUserId($userId);
         self::assertOperationId($operationId);
 
         $responseJson = self::encodeResponse($response, 'réponse');
-        self::transition($key, $userId, 'completed', $responseJson, $operationId);
+        self::transition($key, $userId, 'completed', $responseJson, $operationId, $environment);
     }
 
     /**
@@ -197,7 +201,8 @@ final class IdempotencyService
         string $key,
         int $userId,
         ?string $errorMessage = null,
-        ?string $operationId = null
+        ?string $operationId = null,
+        ?string $environment = null
     ): void {
         self::assertKey($key);
         self::assertUserId($userId);
@@ -207,7 +212,7 @@ final class IdempotencyService
             ? self::encodeResponse(['error' => $errorMessage], 'message d\'erreur')
             : null;
 
-        self::transition($key, $userId, 'error', $errorJson, $operationId);
+        self::transition($key, $userId, 'error', $errorJson, $operationId, $environment);
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -235,16 +240,18 @@ final class IdempotencyService
         int $userId,
         string $targetStatus,
         ?string $responseJson,
-        ?string $operationId
+        ?string $operationId,
+        ?string $environment = null
     ): void {
-        $pdo = Database::getConnection();
+        $pdo         = Database::getConnection();
+        $environment = self::scope($environment);
 
         $ownsTransaction = !$pdo->inTransaction();
         if ($ownsTransaction) {
             $pdo->beginTransaction();
         }
         try {
-            $row = self::loadRowForUpdate($pdo, $key, $userId);
+            $row = self::loadRowForUpdate($pdo, $key, $userId, $environment);
 
             if ($row === false) {
                 throw new RuntimeException(
@@ -326,19 +333,20 @@ final class IdempotencyService
         string $key,
         int $userId,
         ?string $operationId,
-        string $expiresAt
+        string $expiresAt,
+        string $environment
     ): array {
         for ($attempt = 0; $attempt < 2; $attempt++) {
             $pdo->beginTransaction();
             try {
-                $row = self::loadRowForUpdate($pdo, $key, $userId);
+                $row = self::loadRowForUpdate($pdo, $key, $userId, $environment);
 
                 if ($row === false) {
                     // La ligne a disparu entre le duplicate et la relecture
                     // (cas très rare de DELETE concurrent) : on ré-essaie l'INSERT.
                     $pdo->commit();
                     try {
-                        self::insertProcessing($pdo, $key, $userId, $operationId, $expiresAt);
+                        self::insertProcessing($pdo, $key, $userId, $operationId, $expiresAt, $environment);
                         return self::processingState($operationId, $expiresAt, created: true);
                     } catch (PDOException $e) {
                         if ((string) $e->getCode() !== '23000') {
@@ -359,7 +367,7 @@ final class IdempotencyService
                 $stmt->execute(['id' => $row['id']]);
 
                 try {
-                    self::insertProcessing($pdo, $key, $userId, $operationId, $expiresAt);
+                    self::insertProcessing($pdo, $key, $userId, $operationId, $expiresAt, $environment);
                     $pdo->commit();
                     return self::processingState($operationId, $expiresAt, created: true);
                 } catch (PDOException $e) {
@@ -389,6 +397,24 @@ final class IdempotencyService
     // ──────────────────────────────────────────────────────────────────────
 
     /**
+     * Environnement de scope d'une clé.
+     *
+     * §22 — la clé d'idempotence était globale : une même clé utilisée en
+     * sandbox puis en production entrait en collision, et l'appel de
+     * production recevait la réponse mise en cache par la sandbox — sans
+     * jamais exécuter l'opération réelle. Les deux environnements ne
+     * partagent donc plus le même espace de noms.
+     */
+    private static function scope(?string $environment): string
+    {
+        $env = strtolower(trim((string) $environment));
+
+        return $env === 'sandbox' || $env === 'production'
+            ? $env
+            : ProviderConfig::defaultEnvironment();
+    }
+
+    /**
      * Insère une ligne en status `processing`.
      */
     private static function insertProcessing(
@@ -396,19 +422,21 @@ final class IdempotencyService
         string $key,
         int $userId,
         ?string $operationId,
-        string $expiresAt
+        string $expiresAt,
+        string $environment
     ): void {
         $stmt = $pdo->prepare(
             'INSERT INTO idempotency_keys
-                (idempotency_key, user_id, operation_id, status, expires_at)
+                (idempotency_key, user_id, operation_id, status, expires_at, environment)
              VALUES
-                (:key, :uid, :opid, \'processing\', :exp)'
+                (:key, :uid, :opid, \'processing\', :exp, :env)'
         );
         $stmt->execute([
             'key'  => $key,
             'uid'  => $userId,
             'opid' => $operationId,
             'exp'  => $expiresAt,
+            'env'  => $environment,
         ]);
     }
 
@@ -417,15 +445,15 @@ final class IdempotencyService
      *
      * @return array<string,mixed>|false
      */
-    private static function loadRow(PDO $pdo, string $key, int $userId): array|false
+    private static function loadRow(PDO $pdo, string $key, int $userId, string $environment): array|false
     {
         $stmt = $pdo->prepare(
             'SELECT id, idempotency_key, user_id, operation_id, response_json, status, expires_at
              FROM idempotency_keys
-             WHERE idempotency_key = :key AND user_id = :uid
+             WHERE idempotency_key = :key AND user_id = :uid AND environment = :env
              LIMIT 1'
         );
-        $stmt->execute(['key' => $key, 'uid' => $userId]);
+        $stmt->execute(['key' => $key, 'uid' => $userId, 'env' => $environment]);
         return $stmt->fetch();
     }
 
@@ -435,16 +463,16 @@ final class IdempotencyService
      *
      * @return array<string,mixed>|false
      */
-    private static function loadRowForUpdate(PDO $pdo, string $key, int $userId): array|false
+    private static function loadRowForUpdate(PDO $pdo, string $key, int $userId, string $environment): array|false
     {
         $stmt = $pdo->prepare(
             'SELECT id, idempotency_key, user_id, operation_id, response_json, status, expires_at
              FROM idempotency_keys
-             WHERE idempotency_key = :key AND user_id = :uid
+             WHERE idempotency_key = :key AND user_id = :uid AND environment = :env
              LIMIT 1
              FOR UPDATE'
         );
-        $stmt->execute(['key' => $key, 'uid' => $userId]);
+        $stmt->execute(['key' => $key, 'uid' => $userId, 'env' => $environment]);
         return $stmt->fetch();
     }
 

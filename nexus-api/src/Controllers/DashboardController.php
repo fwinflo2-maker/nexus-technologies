@@ -8,6 +8,7 @@ use Nexus\Auth\AuthMiddleware;
 use Nexus\Core\Currency;
 use Nexus\Core\Database;
 use Nexus\Core\Request;
+use Nexus\Execution\ExecutionContext;
 use Nexus\Core\Response;
 use Nexus\Services\WalletService;
 
@@ -44,6 +45,10 @@ final class DashboardController
         $request = AuthMiddleware::handle($request);
         $user    = $request->attribute('user');
         $userId  = (int) $user['id'];
+
+        // §21 — un total financier ne doit jamais additionner de l'argent
+        // réel et des montants de test. Le périmètre suit le contexte.
+        $context = ExecutionContext::fromRequest($request, $user);
 
         $pdo = Database::getConnection();
         $ref = Currency::REF;
@@ -90,7 +95,7 @@ final class DashboardController
         }
 
         // --- KPIs agrégés depuis `transactions` -------------------------------
-        $kpis = self::kpis($pdo, $userId);
+        $kpis = self::kpis($pdo, $userId, $context->environmentValue());
 
         // --- Dernières transactions -------------------------------------------
         $stmt = $pdo->prepare(
@@ -162,6 +167,7 @@ final class DashboardController
             $period = '30d';
         }
 
+        $context = ExecutionContext::fromRequest($request, $user);
         $pdo     = Database::getConnection();
         $series  = [];
         $default = static function (string $label): array {
@@ -177,11 +183,12 @@ final class DashboardController
                         COALESCE(SUM(amount_ref), 0) AS volume,
                         COUNT(*) AS cnt
                  FROM transactions
-                 WHERE user_id = :uid AND status <> 'cancelled' AND created_at >= :since
+                 WHERE user_id = :uid AND environment = :env
+                   AND status <> 'cancelled' AND created_at >= :since
                  GROUP BY period_key
                  ORDER BY period_key ASC"
             );
-            $stmt->execute(['uid' => $userId, 'since' => $since]);
+            $stmt->execute(['uid' => $userId, 'env' => $context->environmentValue(), 'since' => $since]);
             $grouped = [];
             foreach ($stmt->fetchAll() as $row) {
                 $grouped[$row['period_key']] = $row;
@@ -207,11 +214,12 @@ final class DashboardController
                         COALESCE(SUM(amount_ref), 0) AS volume,
                         COUNT(*) AS cnt
                  FROM transactions
-                 WHERE user_id = :uid AND status <> \'cancelled\' AND created_at >= :since
+                 WHERE user_id = :uid AND environment = :env
+                   AND status <> \'cancelled\' AND created_at >= :since
                  GROUP BY period_key
                  ORDER BY period_key ASC'
             );
-            $stmt->execute(['uid' => $userId, 'since' => $since]);
+            $stmt->execute(['uid' => $userId, 'env' => $context->environmentValue(), 'since' => $since]);
             $grouped = [];
             foreach ($stmt->fetchAll() as $row) {
                 $grouped[$row['period_key']] = $row;
@@ -249,24 +257,26 @@ final class DashboardController
      *     fees_total_ref: float
      * }
      */
-    private static function kpis(\PDO $pdo, int $userId): array
+    private static function kpis(\PDO $pdo, int $userId, string $environment): array
     {
         $since30d = date('Y-m-d 00:00:00', strtotime('-29 days'));
 
         // Transactions du mois civil courant.
         $stmt = $pdo->prepare(
             'SELECT COUNT(*) FROM transactions
-             WHERE user_id = :uid AND created_at >= DATE_FORMAT(CURDATE(), \'%Y-%m-01\')'
+             WHERE user_id = :uid AND environment = :env
+               AND created_at >= DATE_FORMAT(CURDATE(), \'%Y-%m-01\')'
         );
-        $stmt->execute(['uid' => $userId]);
+        $stmt->execute(['uid' => $userId, 'env' => $environment]);
         $transactionsMonth = (int) $stmt->fetchColumn();
 
         // Volume total (équivalent XAF), 30 derniers jours.
         $stmt = $pdo->prepare(
             'SELECT COALESCE(SUM(amount_xaf), 0) FROM transactions
-             WHERE user_id = :uid AND status <> \'cancelled\' AND created_at >= :since'
+             WHERE user_id = :uid AND environment = :env
+               AND status <> \'cancelled\' AND created_at >= :since'
         );
-        $stmt->execute(['uid' => $userId, 'since' => $since30d]);
+        $stmt->execute(['uid' => $userId, 'env' => $environment, 'since' => $since30d]);
         $volumeXaf = round((float) $stmt->fetchColumn(), 2);
 
         // Taux de réussite (complétées / exécutées), 30 derniers jours.
@@ -276,9 +286,9 @@ final class DashboardController
                 COALESCE(SUM(status = \'failed\'), 0)     AS failed,
                 COALESCE(SUM(status = \'cancelled\'), 0)  AS cancelled
              FROM transactions
-             WHERE user_id = :uid AND created_at >= :since'
+             WHERE user_id = :uid AND environment = :env AND created_at >= :since'
         );
-        $stmt->execute(['uid' => $userId, 'since' => $since30d]);
+        $stmt->execute(['uid' => $userId, 'env' => $environment, 'since' => $since30d]);
         $counts      = $stmt->fetch();
         $executed    = (int) $counts['completed'] + (int) $counts['failed'] + (int) $counts['cancelled'];
         $successRate = $executed > 0

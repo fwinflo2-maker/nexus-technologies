@@ -37,12 +37,14 @@ CREATE TABLE `audit_logs` (
   `action` varchar(50) NOT NULL,
   `entity_type` varchar(50) DEFAULT NULL,
   `entity_id` bigint(20) unsigned DEFAULT NULL,
+  `environment` enum('sandbox','production') DEFAULT NULL COMMENT 'Environnement de la dÃ©cision. NULL si la demande Ã©tait invalide (aucune valeur valide Ã  consigner).',
   `metadata` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`metadata`)),
   `ip_address` varchar(45) DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `idx_audit_user` (`user_id`),
   KEY `idx_audit_action_time` (`action`,`created_at`),
+  KEY `idx_audit_environment` (`environment`,`created_at`),
   CONSTRAINT `fk_audit_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -88,13 +90,14 @@ CREATE TABLE `idempotency_keys` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `idempotency_key` varchar(64) NOT NULL,
   `user_id` bigint(20) unsigned NOT NULL,
+  `environment` enum('sandbox','production') NOT NULL DEFAULT 'production' COMMENT 'Scope de la clÃ©. Deux environnements ne partagent jamais un espace de noms d''idempotence.',
   `operation_id` varchar(36) DEFAULT NULL,
   `response_json` mediumtext DEFAULT NULL,
   `status` enum('processing','completed','error') NOT NULL DEFAULT 'processing',
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `expires_at` datetime NOT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_idem_key` (`idempotency_key`,`user_id`),
+  UNIQUE KEY `uq_idem_key_env` (`idempotency_key`,`user_id`,`environment`),
   KEY `idx_idem_expires` (`expires_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -147,6 +150,7 @@ CREATE TABLE `ledger_entries` (
   `entry_type` enum('debit','credit') NOT NULL,
   `wallet_id` bigint(20) unsigned NOT NULL,
   `wallet_currency` varchar(5) NOT NULL,
+  `environment` enum('sandbox','production') NOT NULL DEFAULT 'production' COMMENT 'Environnement de l''Ã©criture comptable. HÃ©ritÃ© de l''opÃ©ration source.',
   `amount` decimal(20,8) NOT NULL,
   `balance_after` decimal(20,8) NOT NULL,
   `description` varchar(255) DEFAULT NULL,
@@ -159,6 +163,7 @@ CREATE TABLE `ledger_entries` (
   KEY `idx_ledger_operation` (`operation_id`),
   KEY `idx_ledger_wallet_time` (`wallet_id`,`created_at`),
   KEY `idx_ledger_ref` (`reference_type`,`reference_id`),
+  KEY `idx_ledger_environment` (`environment`,`created_at`),
   CONSTRAINT `fk_ledger_wallet` FOREIGN KEY (`wallet_id`) REFERENCES `wallets` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -306,12 +311,14 @@ CREATE TABLE `quotes` (
   `routes_json` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL CHECK (json_valid(`routes_json`)),
   `selected_route_id` varchar(10) DEFAULT NULL,
   `status` enum('QUOTED','SELECTED','EXECUTED','EXPIRED','CANCELLED') NOT NULL DEFAULT 'QUOTED',
+  `environment` enum('sandbox','production') NOT NULL DEFAULT 'production' COMMENT 'Environnement dans lequel la quote a Ã©tÃ© calculÃ©e. ComparÃ© au contexte lors de l''exÃ©cution.',
   `expires_at` datetime NOT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `idx_quotes_user_status` (`user_id`,`status`),
   KEY `idx_quotes_expires` (`expires_at`,`status`),
+  KEY `idx_quotes_environment` (`environment`,`created_at`),
   CONSTRAINT `fk_quotes_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -434,6 +441,7 @@ CREATE TABLE `wallet_operations` (
   `user_id` bigint(20) unsigned NOT NULL,
   `type` enum('deposit','withdrawal','send','receive','convert','fee','refund','welcome_bonus','hold') NOT NULL,
   `status` enum('initiated','pending','processing','completed','failed','cancelled','reversed') NOT NULL DEFAULT 'initiated',
+  `environment` enum('sandbox','production') NOT NULL DEFAULT 'production' COMMENT 'Environnement de l''opÃ©ration. Lu depuis la ligne lors de la capture/annulation, jamais recalculÃ©.',
   `expires_at` datetime DEFAULT NULL,
   `source_wallet_id` bigint(20) unsigned DEFAULT NULL,
   `source_currency` varchar(5) DEFAULT NULL,
@@ -457,6 +465,7 @@ CREATE TABLE `wallet_operations` (
   KEY `idx_op_user_created` (`user_id`,`created_at`),
   KEY `fk_op_source_wallet` (`source_wallet_id`),
   KEY `fk_op_dest_wallet` (`dest_wallet_id`),
+  KEY `idx_wallet_operations_environment` (`environment`,`created_at`),
   CONSTRAINT `fk_op_dest_wallet` FOREIGN KEY (`dest_wallet_id`) REFERENCES `wallets` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_op_source_wallet` FOREIGN KEY (`source_wallet_id`) REFERENCES `wallets` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_op_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
