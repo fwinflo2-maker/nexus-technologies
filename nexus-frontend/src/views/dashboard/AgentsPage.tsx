@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { useDashT } from '../../data/dashboard-i18n';
 
 const ENGINES = [
   { name: 'Capability Engine', desc: 'Détermine ce que Nexus peut réellement exécuter (pays, devises, providers, KYC, limites).', color: 'var(--cyan)' },
@@ -11,11 +12,12 @@ const ENGINES = [
 
 /** Nexus AI — les moteurs déterministes du Core (aucune donnée fictive). */
 export default function AgentsPage() {
+  const t = useDashT();
   return (
     <div className="page">
       <motion.div className="page-header animate-up" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-        <div className="page-label">NEXUS INTELLIGENCE</div>
-        <div className="page-title">Moteurs du Nexus Core</div>
+        <div className="page-label">{t('page.agents').toUpperCase()}</div>
+        <div className="page-title">{t('page.agents')}</div>
         <p style={{ marginTop: 10, fontSize: 13, color: 'var(--text-mid)', maxWidth: 560 }}>
           L'intelligence de Nexus est déterministe et auditée : chaque moteur est un service backend
           (nexus-api/src/Services) connecté au ledger. Aucun agent ne prend de décision financière seul.

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { apiTeamList, apiTeamAdd, apiTeamUpdate, apiTeamRemove, type TeamMember } from '../../api/client';
 import { pillForStatus } from './ui';
+import { useDashT } from '../../data/dashboard-i18n';
 
 const ROLES = ['admin', 'finance_manager', 'accountant', 'operator', 'viewer'];
 const ROLE_LABEL: Record<string, string> = {
@@ -11,6 +12,7 @@ const ROLE_LABEL: Record<string, string> = {
 
 /** Équipe & permissions (RBAC réel, vérifié côté backend). */
 export default function TeamPage() {
+  const t = useDashT();
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -59,15 +61,15 @@ export default function TeamPage() {
   return (
     <div className="page">
       <motion.div className="page-header animate-up" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-        <div className="page-label">ÉQUIPE & PERMISSIONS</div>
-        <div className="page-title">Équipe</div>
+        <div className="page-label">{t('nav.team').toUpperCase()}</div>
+        <div className="page-title">{t('page.team')}</div>
         <p style={{ marginTop: 10, fontSize: 13, color: 'var(--text-mid)' }}>Rôles : Owner, Admin, Finance Manager, Accountant, Operator, Viewer. Les permissions sont appliquées côté backend.</p>
       </motion.div>
 
       {banner && <div className="card card-hi-c" style={{ padding: 14, marginBottom: 16, fontSize: 13 }}>{banner}</div>}
 
       <div className="card" style={{ padding: 20, marginBottom: 20 }}>
-        <div className="page-label" style={{ marginBottom: 14 }}>Ajouter un membre</div>
+        <div className="page-label" style={{ marginBottom: 14 }}>{t('form.add_member')}</div>
         <form onSubmit={add} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, color: 'var(--text-dim)' }}>Email du compte NEXUS
             <input className="form-control" style={{ width: 260 }} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="membre@exemple.com" required />
@@ -77,7 +79,7 @@ export default function TeamPage() {
               {ROLES.map(r => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
             </select>
           </label>
-          <button className="se-cta" type="submit" disabled={saving} style={{ fontSize: 12 }}>{saving ? 'Ajout…' : '+ Ajouter'}</button>
+          <button className="se-cta" type="submit" disabled={saving} style={{ fontSize: 12 }}>{saving ? '…' : `+ ${t('common.add')}`}</button>
         </form>
       </div>
 
@@ -88,7 +90,7 @@ export default function TeamPage() {
       ) : members.length === 0 ? (
         <div className="card card-hi-c" style={{ padding: 40, textAlign: 'center' }}>
           <div style={{ fontSize: 40, marginBottom: 12 }}>👤</div>
-          <p style={{ color: 'var(--text-mid)' }}>Aucun membre pour le moment. Vous êtes le propriétaire (Owner).</p>
+          <p style={{ color: 'var(--text-mid)' }}>{t('empty.noMembers')}</p>
         </div>
       ) : (
         <div className="card" style={{ padding: 12 }}>
@@ -102,7 +104,7 @@ export default function TeamPage() {
               <select className="form-control" style={{ width: 160 }} value={m.role} onChange={e => changeRole(m, e.target.value)}>
                 {ROLES.map(r => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
               </select>
-              <button className="pill p-r" style={{ cursor: 'pointer', fontSize: 11 }} onClick={() => remove(m)}>Retirer</button>
+              <button className="pill p-r" style={{ cursor: 'pointer', fontSize: 11 }} onClick={() => remove(m)}>{t('common.remove')}</button>
             </div>
           ))}
         </div>

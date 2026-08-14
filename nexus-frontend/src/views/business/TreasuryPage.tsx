@@ -3,9 +3,11 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { apiBusinessTreasury, type BusinessWallet } from '../../api/client';
 import { fmtMoney } from './ui';
+import { useDashT } from '../../data/dashboard-i18n';
 
 /** Trésorerie — multi-devises, liquidité, exposition FX (backend). */
 export default function TreasuryPage() {
+  const t = useDashT();
   const [wallets, setWallets] = useState<BusinessWallet[]>([]);
   const [totals, setTotals] = useState<{ total_assets: number; available: number; ref_currency: string } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -55,7 +57,7 @@ export default function TreasuryPage() {
       {wallets.length === 0 ? (
         <div className="card card-hi-c" style={{ padding: 40, textAlign: 'center' }}>
           <div style={{ fontSize: 40, marginBottom: 12 }}>💼</div>
-          <p style={{ color: 'var(--text-mid)' }}>Aucun wallet pour le moment.</p>
+          <p style={{ color: 'var(--text-mid)' }}>{t('empty.noWallets')}</p>
         </div>
       ) : (
         <div className="card" style={{ padding: 20 }}>

@@ -1,11 +1,13 @@
 import { motion } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
 import { pillForStatus, labelForStatus } from '../business/ui';
+import { useDashT } from '../../data/dashboard-i18n';
 
 const KYC_LEVELS = ['none', 'basic', 'standard', 'advanced'];
 
 /** KYC / KYB — affiche l'état de vérification RÉEL du compte. */
 export default function KycPage() {
+  const t = useDashT();
   const { user } = useAuth();
 
   const status = user?.status ?? 'PENDING';
@@ -21,8 +23,8 @@ export default function KycPage() {
   return (
     <div className="page">
       <motion.div className="page-header animate-up" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-        <div className="page-label">CONFORMITÉ</div>
-        <div className="page-title">KYC / KYB</div>
+        <div className="page-label">{t('page.kyc').toUpperCase()}</div>
+        <div className="page-title">{t('page.kyc')}</div>
         <p style={{ marginTop: 10, fontSize: 13, color: 'var(--text-mid)' }}>État réel de votre vérification d'identité, appliqué par le Policy Engine à chaque opération.</p>
       </motion.div>
 

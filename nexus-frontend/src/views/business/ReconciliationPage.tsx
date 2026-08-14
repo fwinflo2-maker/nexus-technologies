@@ -2,9 +2,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { apiReconciliationList, apiReconciliationUpsert, apiReconciliationResolve, type ReconciliationItem } from '../../api/client';
 import { fmtMoney, pillForStatus, labelForStatus } from './ui';
+import { useDashT } from '../../data/dashboard-i18n';
 
 /** Rapprochement ledger ↔ relevés provider (réel). */
 export default function ReconciliationPage() {
+  const t = useDashT();
   const [items, setItems] = useState<ReconciliationItem[]>([]);
   const [filter, setFilter] = useState('');
   const [loading, setLoading] = useState(true);
@@ -47,8 +49,8 @@ export default function ReconciliationPage() {
   return (
     <div className="page">
       <motion.div className="page-header animate-up" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-        <div className="page-label">RAPPROCHEMENT</div>
-        <div className="page-title">Rapprochement</div>
+        <div className="page-label">{t('nav.reconciliation').toUpperCase()}</div>
+        <div className="page-title">{t('page.reconciliation')}</div>
         <p style={{ marginTop: 10, fontSize: 13, color: 'var(--text-mid)' }}>Comparez le ledger Nexus aux relevés providers. Les écarts sont détectés automatiquement.</p>
       </motion.div>
 
@@ -57,7 +59,7 @@ export default function ReconciliationPage() {
       <div className="card" style={{ padding: 14, marginBottom: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {['', 'pending', 'matched', 'discrepancy', 'resolved'].map(s => (
           <button key={s || 'all'} className={`pill ${filter === s ? 'p-c' : 'p'}`} style={{ cursor: 'pointer', fontSize: 12 }} onClick={() => setFilter(s)}>
-            {s === '' ? 'Tous' : labelForStatus(s)}
+            {s === '' ? t('common.all') : labelForStatus(s)}
           </button>
         ))}
       </div>
@@ -69,7 +71,7 @@ export default function ReconciliationPage() {
       ) : visible.length === 0 ? (
         <div className="card card-hi-c" style={{ padding: 40, textAlign: 'center' }}>
           <div style={{ fontSize: 40, marginBottom: 12 }}>🧾</div>
-          <p style={{ color: 'var(--text-mid)' }}>Aucune transaction sortante à rapprocher.</p>
+          <p style={{ color: 'var(--text-mid)' }}>{t('empty.noReconciliation')}</p>
         </div>
       ) : (
         <div className="card" style={{ padding: 12 }}>
@@ -89,7 +91,7 @@ export default function ReconciliationPage() {
                 <span className={`pill ${pillForStatus(i.status)}`} style={{ fontSize: 10 }}>{labelForStatus(i.status)}</span>
                 {i.status !== 'resolved' && (
                   i.item_id ? (
-                    <button className="pill p-c" style={{ cursor: 'pointer', fontSize: 11 }} onClick={() => resolve(i.item_id!)}>Marquer résolu</button>
+                    <button className="pill p-c" style={{ cursor: 'pointer', fontSize: 11 }} onClick={() => resolve(i.item_id!)}>{t('status.resolved')}</button>
                   ) : (
                     <div style={{ display: 'flex', gap: 6 }}>
                       <input className="form-control" style={{ width: 130 }} placeholder="Réf provider"
@@ -98,7 +100,7 @@ export default function ReconciliationPage() {
                       <input className="form-control" style={{ width: 110 }} type="number" placeholder="Montant réel"
                         value={refInputs[i.transaction_id]?.actual ?? ''}
                         onChange={e => setRefInputs(s => ({ ...s, [i.transaction_id]: { ...s[i.transaction_id], actual: e.target.value } }))} />
-                      <button className="pill p-g" style={{ cursor: 'pointer', fontSize: 11 }} onClick={() => upsert(i.transaction_id)}>Rapprocher</button>
+                      <button className="pill p-g" style={{ cursor: 'pointer', fontSize: 11 }} onClick={() => upsert(i.transaction_id)}>{t('nav.reconciliation')}</button>
                     </div>
                   )
                 )}

@@ -2,9 +2,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { apiBusinessAnalytics, type BusinessOverview } from '../../api/client';
 import { fmtMoney } from './ui';
+import { useDashT } from '../../data/dashboard-i18n';
 
 /** Analytics — volume, cash flow, providers (réponses à de vraies questions métier). */
 export default function AnalyticsPage() {
+  const t = useDashT();
   const [data, setData] = useState<{ volume: BusinessOverview['totals']; cash_flow: BusinessOverview['cash_flow']; providers: BusinessOverview['providers'] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,9 +57,9 @@ export default function AnalyticsPage() {
       </div>
 
       <div className="card" style={{ padding: 20, marginBottom: 20 }}>
-        <div className="page-label" style={{ marginBottom: 14 }}>Flux de trésorerie (30 j)</div>
+        <div className="page-label" style={{ marginBottom: 14 }}>{t('biz.cash_flow')}</div>
         {flow.length === 0 ? (
-          <p style={{ color: 'var(--text-mid)', fontSize: 13 }}>No data yet.</p>
+          <p style={{ color: 'var(--text-mid)', fontSize: 13 }}>{t('common.noData')}</p>
         ) : (
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 160 }}>
             {flow.map(d => (
@@ -75,9 +77,9 @@ export default function AnalyticsPage() {
       </div>
 
       <div className="card" style={{ padding: 20 }}>
-        <div className="page-label" style={{ marginBottom: 14 }}>Performance par provider (30 j)</div>
+        <div className="page-label" style={{ marginBottom: 14 }}>{t('biz.providers_perf')}</div>
         {data.providers.length === 0 ? (
-          <p style={{ color: 'var(--text-mid)', fontSize: 13 }}>Aucun provider utilisé pour le moment.</p>
+          <p style={{ color: 'var(--text-mid)', fontSize: 13 }}>{t('empty.noProviders')}</p>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>

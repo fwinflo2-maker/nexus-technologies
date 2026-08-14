@@ -2,9 +2,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { apiPaymentsList, apiPaymentAction, type Payment } from '../../api/client';
 import { fmtMoney } from './ui';
+import { useDashT } from '../../data/dashboard-i18n';
 
 /** Approbations — file des paiements en attente (approuver / rejeter). */
 export default function ApprovalsPage() {
+  const t = useDashT();
   const [items, setItems] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,8 +34,8 @@ export default function ApprovalsPage() {
   return (
     <div className="page">
       <motion.div className="page-header animate-up" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-        <div className="page-label">APPROBATIONS</div>
-        <div className="page-title">Approbations</div>
+        <div className="page-label">{t('nav.approvals').toUpperCase()}</div>
+        <div className="page-title">{t('page.approvals')}</div>
         <p style={{ marginTop: 10, fontSize: 13, color: 'var(--text-mid)' }}>File des paiements en attente. L'approbation est vérifiée côté backend (rôles Finance Manager / Admin / Owner).</p>
       </motion.div>
 
@@ -46,7 +48,7 @@ export default function ApprovalsPage() {
       ) : items.length === 0 ? (
         <div className="card card-hi-c" style={{ padding: 40, textAlign: 'center' }}>
           <div style={{ fontSize: 40, marginBottom: 12 }}>✓</div>
-          <p style={{ color: 'var(--text-mid)' }}>Aucun paiement en attente d'approbation.</p>
+          <p style={{ color: 'var(--text-mid)' }}>{t('empty.noApprovals')}</p>
         </div>
       ) : (
         <div className="card" style={{ padding: 12 }}>
@@ -61,8 +63,8 @@ export default function ApprovalsPage() {
                   {p.purpose || 'Sans objet'} · {p.provider || '—'} · frais {fmtMoney(p.fee, p.fee_currency)} · créé le {new Date(p.created_at).toLocaleDateString('fr-FR')}
                 </div>
               </div>
-              <button className="pill p-gr" style={{ cursor: 'pointer', fontSize: 12 }} onClick={() => decide(p.id, 'approve')}>✓ Approuver</button>
-              <button className="pill p-r" style={{ cursor: 'pointer', fontSize: 12 }} onClick={() => decide(p.id, 'reject')}>✕ Rejeter</button>
+              <button className="pill p-gr" style={{ cursor: 'pointer', fontSize: 12 }} onClick={() => decide(p.id, 'approve')}>✓ {t('common.approve')}</button>
+              <button className="pill p-r" style={{ cursor: 'pointer', fontSize: 12 }} onClick={() => decide(p.id, 'reject')}>✕ {t('common.reject')}</button>
             </div>
           ))}
         </div>

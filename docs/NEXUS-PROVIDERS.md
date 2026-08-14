@@ -95,6 +95,36 @@ constant), idempotent, journalisé, associé au provider ET à l'environnement.
 `WebhookVerifier` fournit la vérification cryptographique ; aucun endpoint HTTP
 n'est activé tant qu'un provider n'est pas intégré.
 
+## 8bis. Rotation des secrets (§3)
+
+**Rotation d'un credential provider (approche env / secret manager) :**
+
+1. Ajouter la **nouvelle** valeur en parallèle de l'ancienne (par ex. une
+   variable temporaire) ;
+2. Basculer la variable canonique sur la nouvelle valeur ;
+3. Redémarrer l'API (les adaptateurs relisent l'environnement — aucun
+   changement de code) ;
+4. Vérifier `GET /api/providers/status` (statut `configured`, pas d'erreur) ;
+5. Supprimer l'ancienne valeur.
+
+**Rotation de la clé de chiffrement `APP_KEY` (données chiffrées en DB) :**
+
+`Crypto` chiffre les données sensibles (IBAN, références bénéficiaires,
+credentials DB) en AES-256-GCM avec une clé dérivée de `APP_KEY`. Changer
+`APP_KEY` rend les anciens ciphertexts indéchiffrables. Procédure :
+
+1. Démarrer avec l'**ancienne** `APP_KEY` ;
+2. Déchiffrer toutes les valeurs sensibles (bénéficiaires, payment_accounts,
+   provider_credentials) ;
+3. Basculer sur la **nouvelle** `APP_KEY` ;
+4. Ré-chiffrer l'ensemble des valeurs ;
+5. Supprimer l'ancienne clé.
+
+> ⚠️ Cette procédure est **documentée mais pas encore scriptée** : elle sera
+> automatisée (script de ré-encryption) lorsque des credentials réels seront
+> stockés en DB. Pour la v1, privilégier l'environnement / secret manager, où
+> la rotation = changement de variable + redémarrage.
+
 ## 9. Intégration au pipeline
 
 `CapabilityEngine::findEligible()` applique désormais un **Filtre 3** :

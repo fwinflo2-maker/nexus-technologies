@@ -72,9 +72,9 @@ export default function BusinessDashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20, alignItems: 'start' }}>
         {/* Wallets */}
         <div className="card" style={{ padding: 20 }}>
-          <div className="page-label" style={{ marginBottom: 12 }}>Trésorerie par devise</div>
+          <div className="page-label" style={{ marginBottom: 12 }}>{td('biz.treasury_by_currency')}</div>
           {data.wallets.length === 0 ? (
-            <p style={{ color: 'var(--text-mid)', fontSize: 13 }}>Aucun wallet pour le moment.</p>
+            <p style={{ color: 'var(--text-mid)', fontSize: 13 }}>{td('empty.noWallets')}</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {data.wallets.map(w => (
@@ -96,9 +96,9 @@ export default function BusinessDashboard() {
 
         {/* Cash flow + providers */}
         <div className="card" style={{ padding: 20 }}>
-          <div className="page-label" style={{ marginBottom: 12 }}>Flux de trésorerie (30 j)</div>
+          <div className="page-label" style={{ marginBottom: 12 }}>{td('biz.cash_flow')}</div>
           {data.cash_flow.length === 0 ? (
-            <p style={{ color: 'var(--text-mid)', fontSize: 13 }}>No data yet — aucun flux enregistré.</p>
+            <p style={{ color: 'var(--text-mid)', fontSize: 13 }}>{td('empty.noCashFlow')}</p>
           ) : (
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 120 }}>
               {data.cash_flow.map(d => {
@@ -121,9 +121,9 @@ export default function BusinessDashboard() {
 
       {/* Providers */}
       <div className="card" style={{ padding: 20, marginTop: 20 }}>
-        <div className="page-label" style={{ marginBottom: 12 }}>Performance des providers (30 j)</div>
+        <div className="page-label" style={{ marginBottom: 12 }}>{td('biz.providers_perf')}</div>
         {data.providers.length === 0 ? (
-          <p style={{ color: 'var(--text-mid)', fontSize: 13 }}>Aucun provider utilisé pour le moment.</p>
+          <p style={{ color: 'var(--text-mid)', fontSize: 13 }}>{td('empty.noProviders')}</p>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>

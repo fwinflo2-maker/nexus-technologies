@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useMemo, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useMemo, type ReactNode } from 'react';
 import { translations, type LangCode } from '../data/translations';
 
 interface I18nContextValue {
@@ -19,13 +19,18 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     return saved && translations[saved] ? saved : 'fr';
   });
 
+  // RTL : l'arabe bascule le document en direction droite-à-gauche.
+  useEffect(() => {
+    document.documentElement.lang = lang;
+    document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+  }, [lang]);
+
   const value = useMemo<I18nContextValue>(() => {
     const dict = translations[lang];
     const t = (key: string) => dict[key] ?? translations.fr[key] ?? key;
     const setLangFn = (l: LangCode) => {
       setLang(l);
       localStorage.setItem('nexus_lang', l);
-      document.documentElement.lang = l;
     };
     return { lang, setLang: setLangFn, t };
   }, [lang]);

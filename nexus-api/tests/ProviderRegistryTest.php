@@ -180,16 +180,114 @@ final class ProviderRegistryTest extends TestCase
 
     public function test_provider_healthy(): void
     {
-        // On sonde un hôte réellement joignable (port ouvert en sandbox).
+        // Serveur TCP éphémère local : le test est autonome (pas de dépendance
+        // à un port fixe du sandbox).
+        $server = stream_socket_server('tcp://127.0.0.1:0', $errno, $errstr);
+        $this->assertNotFalse($server, "Impossible d'ouvrir un serveur de test : $errstr");
+        $addr = stream_socket_get_name($server, false);
+        [$host, $port] = explode(':', $addr);
+
         putenv('PROVIDERS_CONNECTIVITY_CHECK=true');
         putenv('PROVIDER_STRIPE_ENABLED=true');
         putenv('PROVIDER_STRIPE_ENV=sandbox');
         putenv('PROVIDER_STRIPE_SANDBOX_SECRET_KEY=sk_test_123');
-        putenv('PROVIDER_STRIPE_SANDBOX_BASE_URL=https://127.0.0.1:8080');
+        putenv("PROVIDER_STRIPE_SANDBOX_BASE_URL=http://$host:$port");
 
+        try {
+            $health = ProviderRegistry::adapter('stripe')->healthCheck();
+            $this->assertSame(ProviderStatus::HEALTHY->value, $health['status']);
+            $this->assertTrue($health['healthy']);
+            $this->assertIsInt($health['latency_ms']);
+        } finally {
+            fclose($server);
+        }
+    }
+
+    // ── 6bis. Transitions de statut (§6) ────────────────────────────────────
+
+    public function test_status_transition_missing_to_configured(): void
+    {
+        putenv('PROVIDER_STRIPE_ENABLED=true');
+        putenv('PROVIDER_STRIPE_ENV=sandbox');
+        // 1. Credentials manquants.
+        $this->assertSame(ProviderStatus::MISSING_CREDENTIALS, ProviderRegistry::status('stripe'));
+
+        // 2. Ajout de la clé requise → configured.
+        putenv('PROVIDER_STRIPE_SANDBOX_SECRET_KEY=sk_test_123');
+        $this->assertSame(ProviderStatus::CONFIGURED, ProviderRegistry::status('stripe'));
+    }
+
+    public function test_status_transition_configured_to_unavailable(): void
+    {
+        putenv('PROVIDERS_CONNECTIVITY_CHECK=true');
+        putenv('PROVIDER_STRIPE_ENABLED=true');
+        putenv('PROVIDER_STRIPE_ENV=sandbox');
+        putenv('PROVIDER_STRIPE_SANDBOX_SECRET_KEY=sk_test_123');
+        putenv('PROVIDER_STRIPE_SANDBOX_BASE_URL=https://127.0.0.1:1'); // port fermé
+
+        // configured (validation) mais unavailable (santé).
+        $this->assertSame(ProviderStatus::CONFIGURED, ProviderRegistry::status('stripe'));
         $health = ProviderRegistry::adapter('stripe')->healthCheck();
-        $this->assertSame(ProviderStatus::HEALTHY->value, $health['status']);
-        $this->assertTrue($health['healthy']);
+        $this->assertSame(ProviderStatus::UNAVAILABLE->value, $health['status']);
+    }
+
+    // ── 8. Routing Engine : seuls les providers configurés participent ──────
+
+    public function test_routing_filters_unconfigured_providers(): void
+    {
+        // Seul pawaPay est configuré → le CapabilityEngine ne doit renvoyer
+        // QUE pawaPay pour le corridor EUR→CG mobile_money (les autres
+        // providers mobile_money non configurés sont exclus).
+        putenv('PROVIDER_PAWAPAY_ENABLED=true');
+        putenv('PROVIDER_PAWAPAY_ENV=sandbox');
+        putenv('PROVIDER_PAWAPAY_SANDBOX_API_TOKEN=test_token_123');
+
+        $intent = [
+            'amount'          => 1000.0,
+            'sourceCurrency'  => 'EUR',
+            'destCountry'     => 'CG',
+            'destCurrency'    => 'XAF',
+            'receivingMethod' => 'mobile_money',
+            'objective'       => 'optimized',
+        ];
+
+        $eligible = \Nexus\Services\CapabilityEngine::findEligible($intent);
+        $slugs = array_column($eligible, 'slug');
+
+        $this->assertNotEmpty($slugs);
+        $this->assertSame(['pawapay'], $slugs);
+    }
+
+    // ── 5. DÉMO MODE impossible en production ───────────────────────────────
+
+    public function test_demo_mode_impossible_in_production(): void
+    {
+        // Simulation production : APP_ENV=production (aucun provider configuré).
+        putenv('APP_ENV=production');
+
+        try {
+            // Le mode strict est forcé en production, même sans provider.
+            $this->assertTrue(ProviderRegistry::isStrictMode());
+            // Aucun provider n'étant configuré, AUCUN n'est routable.
+            $this->assertFalse(ProviderRegistry::isAvailableForRouting('stripe'));
+            $this->assertFalse(ProviderRegistry::isAvailableForRouting('pawapay'));
+            // Le CapabilityEngine doit REFUSER (aucun provider éligible).
+            try {
+                \Nexus\Services\CapabilityEngine::findEligible([
+                    'amount'          => 100.0,
+                    'sourceCurrency'  => 'EUR',
+                    'destCountry'     => 'CG',
+                    'destCurrency'    => 'XAF',
+                    'receivingMethod' => 'mobile_money',
+                    'objective'       => 'optimized',
+                ]);
+                $this->fail('Le CapabilityEngine aurait dû refuser (NO_PROVIDER) en production sans provider configuré.');
+            } catch (\Nexus\Core\HttpException $e) {
+                $this->assertSame('NO_PROVIDER', $e->errorCode());
+            }
+        } finally {
+            putenv('APP_ENV');
+        }
     }
 
     // ── Mode strict & disponibilité pour le routing ─────────────────────────

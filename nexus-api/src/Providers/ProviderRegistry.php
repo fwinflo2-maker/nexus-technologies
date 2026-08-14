@@ -58,7 +58,11 @@ final class ProviderRegistry
 
     /**
      * Un provider est-il disponible pour le routing ?
-     * En mode démo : oui (catalogue). En mode strict : seulement s'il est configuré.
+     *
+     * - PRODUCTION  : le mode démo est interdit — seuls les providers
+     *                 CONFIGURÉS participent (jamais le catalogue entier).
+     * - Développement : mode démo (catalogue) tant qu'aucun provider n'est
+     *                 configuré ; mode strict dès qu'au moins un l'est.
      */
     public static function isAvailableForRouting(string $slug): bool
     {
@@ -96,9 +100,12 @@ final class ProviderRegistry
                 'name'              => $provider['name'] ?? $slug,
                 'environment'       => self::environment($slug),
                 'status'            => $config['status']->value,
+                'enabled'           => ProviderConfig::isEnabled($slug),
                 'missing_required'  => $config['missing'],
                 'capabilities'      => $adapter->getCapabilities()['supported_methods'],
                 'base_url'          => ProviderConfig::baseUrl($slug, self::environment($slug)),
+                // Non persisté à ce stade : le health check est à la demande.
+                'last_health_check' => null,
             ];
         }
         return $rows;

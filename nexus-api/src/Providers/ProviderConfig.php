@@ -75,6 +75,13 @@ final class ProviderConfig
      */
     public static function strictMode(): bool
     {
+        // ── RÈGLE CRITIQUE (§5) : le mode démo est INTERDIT en production.
+        // Même sans provider configuré, le routing doit REFUSER, jamais
+        // retomber sur le catalogue en mode démo. ──
+        if (self::isProduction()) {
+            return true;
+        }
+
         $flag = strtolower(trim((string) (getenv('PROVIDERS_STRICT_MODE') ?: '')));
         if (in_array($flag, ['1', 'true', 'yes', 'on'], true)) {
             return true;
@@ -92,6 +99,15 @@ final class ProviderConfig
             }
         }
         return false;
+    }
+
+    /** L'environnement applicatif est-il « production » ? */
+    public static function isProduction(): bool
+    {
+        if (defined('APP_ENV') && APP_ENV === 'production') {
+            return true;
+        }
+        return strtolower(trim((string) (getenv('APP_ENV') ?: ''))) === 'production';
     }
 
     /**

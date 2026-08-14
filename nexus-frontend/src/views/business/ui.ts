@@ -31,6 +31,16 @@ export function labelForStatus(status: string): string {
   return dashTranslate(`status.${status}`);
 }
 
+const METHOD_ICON: Record<string, string> = {
+  mobile_money: '📱', bank: '🏦', crypto: '🔗', cash_pickup: '💵',
+};
+
+/** Libellé de méthode traduit (icône + nom localisé). */
+export function methodLabel(method: string): string {
+  const icon = METHOD_ICON[method] ?? '🌐';
+  return `${icon} ${dashTranslate(`method.${method}`)}`;
+}
+
 export const METHOD_LABEL: Record<string, string> = {
   mobile_money: '📱 Mobile Money',
   bank: '🏦 Banque',
