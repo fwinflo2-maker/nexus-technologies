@@ -140,21 +140,22 @@ try {
     echo "Base `{$testDb}` recréée.\n";
 
     // 2. Application du schéma puis des migrations, dans l'ordre.
-    $files = [
-        __DIR__ . '/database/schema.sql',
-        __DIR__ . '/database/migrations/2026_08_10_oauth_phone.sql',
-        __DIR__ . '/database/migrations/2026_08_10_dashboard.sql',
-        __DIR__ . '/database/migrations/2026_08_10_notifications.sql',
-        __DIR__ . '/database/migrations/2026_08_10_payment_accounts.sql',
-        __DIR__ . '/database/migrations/2026_08_10_provider_credentials.sql',
-        __DIR__ . '/database/migrations/2026_08_10_quotes.sql',
-        __DIR__ . '/database/migrations/2026_08_10_kyc_origins.sql',
-        __DIR__ . '/database/migrations/2026_08_10_wallet_core.sql',
-        __DIR__ . '/database/migrations/2026_08_11_add_hold_operation_type.sql',
-        __DIR__ . '/database/migrations/2026_08_12_add_expires_at_to_wallet_operations.sql',
-        __DIR__ . '/database/migrations/2026_08_14_transfer_execution.sql',
-        __DIR__ . '/database/migrations/2026_08_14_business_suite.sql',
-    ];
+    // Liste lue depuis database/migrations.manifest — SOURCE DE VÉRITÉ UNIQUE.
+    // Une liste codée en dur ici ferait tourner les tests sur un schéma périmé
+    // (et donc verdir des tests qui devraient échouer).
+    $manifest = __DIR__ . '/database/migrations.manifest';
+    if (!is_file($manifest)) {
+        fwrite(STDERR, "Manifeste de migrations introuvable : {$manifest}\n");
+        exit(1);
+    }
+    $files = [__DIR__ . '/database/schema.sql'];
+    foreach (file($manifest, FILE_IGNORE_NEW_LINES) as $line) {
+        $line = trim(preg_replace('/#.*$/', '', $line) ?? '');
+        if ($line === '') {
+            continue;
+        }
+        $files[] = __DIR__ . '/database/migrations/' . $line;
+    }
 
     $pdo = connect($host, $port, $user, $pass, $pdoOptions, $testDb);
 

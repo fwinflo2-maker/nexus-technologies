@@ -14,8 +14,11 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useI18n } from '../context/I18nContext';
 
-// Client ID public fourni par Google Cloud Console (identifiant client OAuth).
-const GOOGLE_CLIENT_ID = '483873643229-7ijb4asiq7mc6v5laps74ueqblstmpu7.apps.googleusercontent.com';
+// §30 : le client ID OAuth provient de la configuration de build, jamais du
+// code source. Le client ID Google est un identifiant public (destiné au
+// navigateur), mais il change selon l'environnement : le coder en dur fait
+// silencieusement pointer la préproduction vers le projet Google de production.
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? '';
 const GIS_SCRIPT_SRC = 'https://accounts.google.com/gsi/client';
 
 interface GoogleButtonProps {
@@ -78,6 +81,13 @@ export function GoogleButton({ onCredential, onError }: GoogleButtonProps) {
         s.onload = () => resolve();
         document.body.appendChild(s);
       });
+
+    // Sans client ID configuré, ne pas initialiser Google Identity : cela
+    // produirait une erreur opaque côté Google plutôt qu'un échec lisible.
+    if (!GOOGLE_CLIENT_ID) {
+      onError?.('Connexion Google indisponible : VITE_GOOGLE_CLIENT_ID non configuré.');
+      return;
+    }
 
     loadScript().then(() => {
       if (!window.google?.accounts?.id) return;

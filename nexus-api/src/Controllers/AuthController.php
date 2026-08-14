@@ -116,7 +116,9 @@ final class AuthController
             $userId = (int) $pdo->lastInsertId();
 
             // Remplacement des INSERT directs par WalletService et LedgerService
-            foreach (self::WELCOME_WALLETS as $wallet) {
+            // §29 : les wallets de bienvenue sont un jeu de démonstration —
+            // jamais crédités automatiquement en production.
+            foreach (\Nexus\Core\DemoMode::seedingAllowed() ? self::WELCOME_WALLETS : [] as $wallet) {
                 $currency = $wallet['currency'];
                 $amount   = $wallet['amount'];
 
@@ -339,7 +341,8 @@ final class AuthController
                     'INSERT INTO wallets (user_id, currency, balance, available_balance)
                      VALUES (:user_id, :currency, :balance, :available_balance)'
                 );
-                foreach (self::WELCOME_WALLETS as $wallet) {
+                // §29 : jamais de solde de démonstration en production.
+                foreach (\Nexus\Core\DemoMode::seedingAllowed() ? self::WELCOME_WALLETS : [] as $wallet) {
                     $walletStmt->execute([
                         'user_id'           => $userId,
                         'currency'          => $wallet['currency'],
@@ -459,6 +462,11 @@ final class AuthController
         }
 
         // Vérification que le token a été émis pour notre application.
+        // §30 : si le client ID n'est pas configuré, on REFUSE. Sans ce garde-fou,
+        // une constante vide pourrait « matcher » un aud vide et valider un jeton.
+        if (GOOGLE_CLIENT_ID === '') {
+            return null;
+        }
         if (($data['aud'] ?? '') !== GOOGLE_CLIENT_ID) {
             return null;
         }
@@ -491,6 +499,11 @@ final class AuthController
      */
     private static function seedDemoTransactions(\PDO $pdo, int $userId): void
     {
+        // §29 : jamais de données de démonstration en production.
+        if (!\Nexus\Core\DemoMode::seedingAllowed()) {
+            return;
+        }
+
         $stmt = $pdo->prepare(
             'INSERT INTO transactions
                 (user_id, type, direction, label, description, amount, currency,

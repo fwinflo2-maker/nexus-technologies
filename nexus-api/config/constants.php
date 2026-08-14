@@ -33,9 +33,11 @@ if (APP_ENV === 'development') {
 
 // --- Google OAuth -----------------------------------------------------------
 // Client ID fourni par Google Cloud Console (identifiant public).
+// §30 : aucune valeur en dur. Le client ID provient EXCLUSIVEMENT de
+// l'environnement. Absent, la constante vaut '' et la vérification du jeton
+// Google échoue explicitement plutôt que de valider contre un ID étranger.
 $googleClientId = getenv('GOOGLE_CLIENT_ID');
-if (APP_ENV === 'development') {
-    defined('GOOGLE_CLIENT_ID') || define('GOOGLE_CLIENT_ID', $googleClientId ?: '483873643229-7ijb4asiq7mc6v5laps74ueqblstmpu7.apps.googleusercontent.com');
-} elseif ($googleClientId !== false && $googleClientId !== '') {
-    defined('GOOGLE_CLIENT_ID') || define('GOOGLE_CLIENT_ID', $googleClientId);
-}
+defined('GOOGLE_CLIENT_ID') || define(
+    'GOOGLE_CLIENT_ID',
+    ($googleClientId !== false && $googleClientId !== '') ? $googleClientId : ''
+);

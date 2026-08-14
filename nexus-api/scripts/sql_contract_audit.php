@@ -100,7 +100,11 @@ foreach ($files as $file) {
 
     // 2a. Tables citées dans FROM / JOIN / INSERT INTO / UPDATE / DELETE FROM
     preg_match_all(
-        '/\b(?:FROM|JOIN|INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+`?([a-z_][a-z0-9_]*)`?/i',
+        // `INSERT IGNORE INTO` doit être reconnu au même titre que `INSERT INTO`,
+        // sinon une table écrite uniquement par un INSERT IGNORE est signalée à
+        // tort comme « jamais référencée » (faux positif observé sur
+        // kyc_webhook_events).
+        '/\b(?:FROM|JOIN|INSERT\s+(?:IGNORE\s+)?INTO|UPDATE|DELETE\s+FROM)\s+`?([a-z_][a-z0-9_]*)`?/i',
         $code,
         $m
     );

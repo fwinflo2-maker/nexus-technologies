@@ -5,12 +5,13 @@ declare(strict_types=1);
 namespace Nexus\Controllers;
 
 use Nexus\Auth\AuthMiddleware;
-use Nexus\Core\Crypto;
 use Nexus\Core\Database;
 use Nexus\Core\Request;
 use Nexus\Core\Response;
+use Nexus\Providers\ProviderCredentialSchema;
 use Nexus\Providers\ProviderRegistry;
 use Nexus\Services\ProviderCatalog;
+use Nexus\Services\ProviderCredentialService;
 
 /**
  * Configuration des providers — métadonnées + identifiants chiffrés.
@@ -156,32 +157,18 @@ final class ProviderCredentialController
             Response::badRequest('Au moins un identifiant doit être fourni.');
         }
 
-        $payload = [
-            'credentials' => array_map(static fn ($v) => $v ?? '', $fields),
-            'updated_by'  => $userId,
-            'updated_at'  => date(DATE_ATOM),
-        ];
-
         $pdo = Database::getConnection();
 
-        // Upsert (INSERT ... ON DUPLICATE KEY UPDATE).
-        $stmt = $pdo->prepare(
-            'INSERT INTO provider_credentials (user_id, provider_slug, environment, credentials_enc, status, updated_at)
-             VALUES (:uid, :slug, :env, :enc, :status, NOW())
-             ON DUPLICATE KEY UPDATE
-                 environment = VALUES(environment),
-                 credentials_enc = VALUES(credentials_enc),
-                 status = VALUES(status),
-                 last_error = NULL,
-                 updated_at = NOW()'
+        // Upsert qualifié par (user_id, provider_slug, environment) — §3.
+        // Enregistrer la production ne doit JAMAIS écraser la sandbox.
+        ProviderCredentialService::upsert(
+            $pdo,
+            $userId,
+            $slug,
+            $env,
+            array_map(static fn ($v) => $v ?? '', $fields),
+            $env === 'sandbox' ? 'sandbox_only' : 'active'
         );
-        $stmt->execute([
-            'uid'    => $userId,
-            'slug'   => $slug,
-            'env'    => $env,
-            'enc'    => Crypto::encrypt(json_encode($payload, JSON_UNESCAPED_UNICODE)),
-            'status' => $env === 'sandbox' ? 'sandbox_only' : 'active',
-        ]);
 
         self::audit($pdo, $userId, 'provider.credentials.upsert', $slug, ['environment' => $env], $request);
 
@@ -211,15 +198,24 @@ final class ProviderCredentialController
             Response::forbidden('Seuls les comptes business peuvent supprimer les credentials.');
         }
 
-        $pdo = Database::getConnection();
-        $pdo->prepare('DELETE FROM provider_credentials WHERE user_id = :uid AND provider_slug = :slug')
-            ->execute(['uid' => $userId, 'slug' => $slug]);
+        // §3 : la suppression DOIT cibler un environnement précis, sinon elle
+        // détruirait aussi les credentials de l'autre environnement.
+        $env = ProviderCredentialService::normalizeEnvironment(
+            $request->body()['environment'] ?? $request->query('environment')
+        );
+        if ($env === null) {
+            Response::badRequest('Paramètre « environment » requis (sandbox|production).');
+        }
 
-        self::audit($pdo, $userId, 'provider.credentials.delete', $slug, [], $request);
+        $pdo     = Database::getConnection();
+        $deleted = ProviderCredentialService::delete($pdo, $userId, $slug, $env);
+
+        self::audit($pdo, $userId, 'provider.credentials.delete', $slug, ['environment' => $env], $request);
 
         Response::success([
             'provider_slug' => $slug,
-            'deleted'       => true,
+            'environment'   => $env,
+            'deleted'       => $deleted > 0,
         ]);
     }
 
@@ -240,20 +236,25 @@ final class ProviderCredentialController
             Response::notFound('Provider inconnu.');
         }
 
-        $pdo = Database::getConnection();
-        $stmt = $pdo->prepare(
-            'SELECT id, environment FROM provider_credentials
-             WHERE user_id = :uid AND provider_slug = :slug LIMIT 1'
+        // §3 : le test doit porter sur un environnement explicite. Sans ce
+        // filtre, un « LIMIT 1 » choisirait arbitrairement entre la ligne
+        // sandbox et la ligne production (comportement non déterministe).
+        $env = ProviderCredentialService::normalizeEnvironment(
+            $request->body()['environment'] ?? $request->query('environment')
         );
-        $stmt->execute(['uid' => $userId, 'slug' => $slug]);
-        $existing = $stmt->fetch();
+        if ($env === null) {
+            Response::badRequest('Paramètre « environment » requis (sandbox|production).');
+        }
 
-        if ($existing === false) {
-            Response::badRequest('Aucun identifiant enregistré pour ce provider.');
+        $pdo      = Database::getConnection();
+        $existing = ProviderCredentialService::findRow($pdo, $userId, $slug, $env);
+
+        if ($existing === null) {
+            Response::badRequest('Aucun identifiant enregistré pour ce provider dans l\'environnement « ' . $env . ' ».');
         }
 
         $provider = ProviderCatalog::get($slug);
-        $url      = ($existing['environment'] === 'production') ? $provider['base_url'] : ($provider['sandbox_url'] ?? $provider['base_url']);
+        $url      = ($env === 'production') ? $provider['base_url'] : ($provider['sandbox_url'] ?? $provider['base_url']);
 
         $parts = parse_url($url);
         $host  = $parts['host'] ?? null;
@@ -275,23 +276,14 @@ final class ProviderCredentialController
         }
         $latency = round((microtime(true) - $start) * 1000);
 
-        $status = $ok ? ($existing['environment'] === 'production' ? 'active' : 'sandbox_only') : 'error';
+        $status = $ok ? ($env === 'production' ? 'active' : 'sandbox_only') : 'error';
 
-        $pdo->prepare(
-            'UPDATE provider_credentials
-             SET last_tested_at = NOW(), status = :status, last_error = :err
-             WHERE user_id = :uid AND provider_slug = :slug'
-        )->execute([
-            'uid'    => $userId,
-            'slug'   => $slug,
-            'status' => $status,
-            'err'    => $err,
-        ]);
+        ProviderCredentialService::markTested($pdo, $userId, $slug, $env, $status, $err);
 
         self::audit($pdo, $userId, 'provider.credentials.test', $slug, [
             'reachable' => $ok,
             'latency_ms'=> $latency,
-            'environment' => $existing['environment'],
+            'environment' => $env,
         ], $request);
 
         Response::success([
@@ -318,14 +310,21 @@ final class ProviderCredentialController
             'countries'   => $provider['countries'],
             'base_url'    => $provider['base_url'],
             'sandbox_url' => $provider['sandbox_url'],
-            'fields'      => array_map(static function (array $f): array {
+            // §6 : la sensibilité de chaque credential est déclarée explicitement.
+            // Par défaut backend-only ; « frontend_exposable » n'est true que si
+            // la documentation officielle du provider l'autorise (schéma vérifié).
+            'schema_verified' => ProviderCredentialSchema::isVerified($slug),
+            'fields'      => array_map(static function (array $f) use ($slug): array {
+                $exposable = ProviderCredentialSchema::isFrontendExposable($slug, (string) $f['key']);
                 return [
-                    'key'         => $f['key'],
-                    'label'       => $f['label'],
-                    'placeholder' => $f['placeholder'] ?? '',
-                    'required'    => $f['required'],
-                    'type'        => $f['type'],
-                    'has_value'   => false,
+                    'key'                => $f['key'],
+                    'label'              => $f['label'],
+                    'placeholder'        => $f['placeholder'] ?? '',
+                    'required'           => $f['required'],
+                    'type'               => $f['type'],
+                    'frontend_exposable' => $exposable,
+                    'sensitivity'        => $exposable ? 'public' : 'secret',
+                    'has_value'          => false,
                 ];
             }, $provider['credentials']),
         ];

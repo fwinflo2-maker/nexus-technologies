@@ -15,6 +15,7 @@ use Nexus\Controllers\BeneficiaryController;
 use Nexus\Controllers\BusinessController;
 use Nexus\Controllers\DashboardController;
 use Nexus\Controllers\IntentController;
+use Nexus\Controllers\KycController;
 use Nexus\Controllers\NotificationController;
 use Nexus\Controllers\PaymentController;
 use Nexus\Controllers\ProviderCredentialController;
@@ -146,6 +147,14 @@ $router->get('/providers/credentials', [ProviderCredentialController::class, 'li
 $router->put('/providers/{slug}/credentials', [ProviderCredentialController::class, 'upsert']);
 $router->delete('/providers/{slug}/credentials', [ProviderCredentialController::class, 'delete']);
 $router->post('/providers/{slug}/test', [ProviderCredentialController::class, 'test']);
+
+// --- KYC / KYB : vérification d'identité (Sumsub) --------------------------
+// status/session : protégés (JWT).
+$router->get('/kyc/status', [KycController::class, 'status']);
+$router->post('/kyc/session', [KycController::class, 'session']);
+// webhook : route PUBLIQUE — l'authentification se fait par SIGNATURE HMAC,
+// pas par JWT (le provider n'a pas de session utilisateur).
+$router->post('/kyc/webhook', [KycController::class, 'webhook']);
 
 // --- Intent Engine : couverture pays/modes/devises pour /send (protégé) ----
 $router->get('/intent/countries', [IntentController::class, 'countries']);

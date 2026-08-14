@@ -39,3 +39,5 @@
 2026_08_14_business_suite.sql
 # 0.11 — Contraintes d'intégrité (unicité ledger, séparation sandbox/prod)
 2026_08_14_integrity_constraints.sql
+# 0.12 — Persistance KYC/KYB provider (exception documentée au freeze)
+2026_08_14_kyc_verifications.sql

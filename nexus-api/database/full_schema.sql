@@ -100,6 +100,46 @@ CREATE TABLE `idempotency_keys` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `kyc_verifications` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint(20) unsigned NOT NULL,
+  `provider` varchar(50) NOT NULL,
+  `environment` enum('sandbox','production') NOT NULL DEFAULT 'sandbox',
+  `subject_type` enum('individual','company') NOT NULL DEFAULT 'individual',
+  `applicant_id` varchar(128) NOT NULL,
+  `level_name` varchar(100) DEFAULT NULL,
+  `status` enum('not_started','in_progress','pending','verified','resubmission_requested','rejected','on_hold') NOT NULL DEFAULT 'not_started',
+  `reason` varchar(500) DEFAULT NULL,
+  `reviewed_at` datetime DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_kyc_user_subject` (`user_id`,`provider`,`environment`,`subject_type`),
+  UNIQUE KEY `uq_kyc_applicant` (`provider`,`environment`,`applicant_id`),
+  KEY `idx_kyc_status` (`status`),
+  CONSTRAINT `fk_kyc_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `kyc_webhook_events` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `provider` varchar(50) NOT NULL,
+  `environment` enum('sandbox','production') NOT NULL DEFAULT 'sandbox',
+  `event_id` varchar(191) NOT NULL,
+  `applicant_id` varchar(128) DEFAULT NULL,
+  `verification_id` bigint(20) unsigned DEFAULT NULL,
+  `status` varchar(50) DEFAULT NULL,
+  `processed_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_kyc_event` (`provider`,`environment`,`event_id`),
+  KEY `idx_kyc_event_applicant` (`applicant_id`),
+  KEY `fk_kyc_event_verification` (`verification_id`),
+  CONSTRAINT `fk_kyc_event_verification` FOREIGN KEY (`verification_id`) REFERENCES `kyc_verifications` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
 CREATE TABLE `ledger_entries` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `operation_id` varchar(36) NOT NULL,

@@ -319,8 +319,10 @@ final class ProviderCatalog
             'category'    => 'payout_network',
             'icon'        => '🌏',
             'auth_type'   => 'api_key',
-            'base_url'    => 'https://www.airwallex.com/api/v1',
-            'sandbox_url' => 'https://demo-api.airwallex.com/api/v1',
+            // Source : docs.nium.com/apis/reference/nium-environments
+            // (l'entrée pointait par erreur vers les URLs d'Airwallex).
+            'base_url'    => 'https://api.spend.nium.com/api',
+            'sandbox_url' => 'https://gateway.nium.com/api',
             'credentials' => [
                 ['key' => 'client_id',     'label' => 'Client ID',     'placeholder' => 'Votre client_id Nium',    'required' => true, 'type' => 'text'],
                 ['key' => 'client_secret', 'label' => 'Client Secret', 'placeholder' => 'Votre client_secret Nium', 'required' => true, 'type' => 'password'],

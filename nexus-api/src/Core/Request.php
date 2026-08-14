@@ -28,11 +28,18 @@ final class Request
      *                         le corps est toujours lu depuis `php://input`, qui
      *                         n'est pas rejouable depuis PHPUnit.
      */
+    /** Corps brut mémorisé (php://input n'est lisible qu'une fois). */
+    private ?string $rawBody = null;
+
+    /** Corps injecté au constructeur (contexte de test). */
+    private ?array $injectedBody = null;
+
     public function __construct(?array $body = null)
     {
         $this->method  = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
         $this->headers = $this->parseHeaders();
         $this->query   = $_GET ?? [];
+        $this->injectedBody = $body;
         $this->body    = $body ?? $this->parseBody();
         $this->path    = $this->parsePath();
     }
@@ -170,12 +177,39 @@ final class Request
         return $path;
     }
 
+    /**
+     * Corps BRUT de la requête, tel que reçu.
+     *
+     * Indispensable à la vérification des signatures de webhooks (§25) :
+     * un HMAC porte sur les octets exacts transmis. Ré-encoder le JSON
+     * décodé change les espaces et invalide la signature.
+     */
+    /** Tous les en-têtes HTTP normalisés (vérification de signatures webhook). */
+    public function headers(): array
+    {
+        return $this->headers;
+    }
+
+    public function rawBody(): string
+    {
+        if ($this->rawBody === null) {
+            // Corps injecté (tests) : on le restitue tel quel plutôt que de
+            // lire php://input, indisponible hors contexte HTTP réel.
+            if ($this->injectedBody !== null) {
+                return $this->rawBody = (string) json_encode($this->injectedBody, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            }
+            $raw = file_get_contents('php://input');
+            $this->rawBody = $raw === false ? '' : $raw;
+        }
+        return $this->rawBody;
+    }
+
     private function parseBody(): array
     {
-        $raw = file_get_contents('php://input');
+        $raw = $this->rawBody();
 
         if (str_contains((string) $this->header('Content-Type', ''), 'application/json')) {
-            if ($raw === false || $raw === '') {
+            if ($raw === '') {
                 return [];
             }
             $decoded = json_decode($raw, true);
@@ -191,7 +225,7 @@ final class Request
             // PUT/PATCH/DELETE : PHP ne remplit pas $_POST → corps brut.
             // (multipart pour ces méthodes non supporté : API en JSON.)
             $data = [];
-            parse_str($raw ?? '', $data);
+            parse_str($raw, $data);
             return $data ?: [];
         }
 

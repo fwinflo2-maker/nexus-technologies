@@ -89,6 +89,11 @@ final class AccountController
 
     public static function seedDemoAccountsAtLogin(\PDO $pdo, int $userId): void
     {
+        // §29 : jamais de données de démonstration en production.
+        if (!\Nexus\Core\DemoMode::seedingAllowed()) {
+            return;
+        }
+
         $stmt = $pdo->prepare('SELECT COUNT(*) FROM payment_accounts WHERE user_id = :uid');
         $stmt->execute(['uid' => $userId]);
         if ((int) $stmt->fetchColumn() > 0) {
