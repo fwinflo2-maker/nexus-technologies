@@ -9,6 +9,7 @@ use Nexus\Core\Crypto;
 use Nexus\Core\Database;
 use Nexus\Core\Request;
 use Nexus\Core\Response;
+use Nexus\Providers\ProviderRegistry;
 use Nexus\Services\ProviderCatalog;
 
 /**
@@ -51,6 +52,24 @@ final class ProviderCredentialController
             'categories' => ProviderCatalog::CATEGORIES,
             'providers'  => $providers,
             'total'      => count($providers),
+        ]);
+    }
+
+    /**
+     * GET /api/providers/status
+     * Statut de configuration & santé de tous les providers (SANS AUCUN secret).
+     *
+     * Destiné au futur Admin Dashboard (§11) et aux diagnostics : seuls les
+     * statuts (configured / missing_credentials / disabled / …) sont exposés.
+     * Jamais une valeur de credential.
+     */
+    public static function status(Request $request): void
+    {
+        AuthMiddleware::handle($request);
+
+        Response::success([
+            'strict_mode' => ProviderRegistry::isStrictMode(),
+            'providers'   => ProviderRegistry::summary(),
         ]);
     }
 

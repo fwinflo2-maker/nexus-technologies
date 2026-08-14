@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nexus\Services;
 
 use Nexus\Core\HttpException;
+use Nexus\Providers\ProviderRegistry;
 
 /**
  * Capability Engine — détermine les providers éligibles pour un corridor donné.
@@ -118,6 +119,17 @@ final class CapabilityEngine
             // On étend « EU » vers les pays individuels
             $providerCountries = self::expandCountries($provider['countries']);
             if (!in_array($countryCode, $providerCountries, true)) {
+                continue;
+            }
+
+            // ── Filtre 3 : disponibilité réelle (§12, §13) ────────
+            // En mode démo (aucun provider configuré via l'environnement),
+            // tous les providers du catalogue restent éligibles (comportement
+            // historique). Dès qu'au moins un provider est réellement configuré
+            // (mode strict), seuls les providers CONFIGURÉS participent au
+            // routing : un provider désactivé ou sans credentials est ignoré,
+            // et ne casse jamais le Core.
+            if (!ProviderRegistry::isAvailableForRouting($slug)) {
                 continue;
             }
 

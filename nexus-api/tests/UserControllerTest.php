@@ -72,22 +72,15 @@ final class UserControllerTest extends TestCase
         self::$secondUserId = (string) $pdo->lastInsertId();
 
         // Générer un token JWT pour le premier utilisateur
-        require_once BASE_PATH . '/src/Auth/Jwt.php';
-        self::$authToken = \Nexus\Auth\Jwt::sign([
+        self::$authToken = \Nexus\Auth\Jwt::encode([
             'sub' => self::$testUserId,
             'email' => self::$testUserEmail,
-            'iat' => time(),
-            'exp' => time() + 3600,
-            'jti' => bin2hex(random_bytes(16)),
         ]);
 
         // Générer un token JWT pour le deuxième utilisateur
-        self::$secondUserToken = \Nexus\Auth\Jwt::sign([
+        self::$secondUserToken = \Nexus\Auth\Jwt::encode([
             'sub' => self::$secondUserId,
             'email' => $secondEmail,
-            'iat' => time(),
-            'exp' => time() + 3600,
-            'jti' => bin2hex(random_bytes(16)),
         ]);
     }
 

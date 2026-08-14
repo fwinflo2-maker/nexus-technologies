@@ -230,3 +230,79 @@ Les fonds visibles en **environnement de développement / sandbox** ne sont
 - Le sélecteur de langue est présent dans le topbar du dashboard
   (`LanguageSwitcher variant="dashboard"`).
 
+## Providers — configuration (sans secrets dans le code)
+
+Le Nexus Core est **provider-agnostic** : il ne connaît aucune clé et ne parle
+jamais à un provider directement.
+
+```text
+Nexus Core → ProviderRegistry → ProviderAdapter → Credentials (env) → Provider API
+```
+
+### Où placer les credentials
+
+Dans **l'environnement** (`.env` local, non versionné, ou secret manager).
+**Jamais** dans le code, dans Git, ni en clair dans MySQL.
+
+Convention (les slugs et les champs viennent de `ProviderCatalog`) :
+
+```bash
+PROVIDER_STRIPE_ENABLED=true
+PROVIDER_STRIPE_ENV=sandbox
+PROVIDER_STRIPE_SANDBOX_API_KEY=sk_test_...      # scope sandbox (prioritaire)
+PROVIDER_STRIPE_PRODUCTION_API_KEY=sk_live_...  # scope production (prioritaire)
+```
+
+- `PROVIDER_{SLUG}_{ENV}_{CHAMP}` est lu **en priorité** ; sinon
+  `PROVIDER_{SLUG}_{CHAMP}` (générique, appliqué à l'environnement actif).
+- La séparation sandbox / production est **stricte** : une clé sandbox ne peut
+  jamais être utilisée en production (et inversement).
+
+### Activer / désactiver un provider
+
+- `PROVIDER_{SLUG}_ENABLED=true|false`.
+- Tant qu'**aucun** provider n'est activé/renseigné, Nexus reste en « mode démo » :
+  tous les providers du catalogue sont éligibles au routing.
+- Dès qu'**au moins un** provider est configuré, le **mode strict** s'active :
+  seuls les providers configurés participent au routing (les autres sont ignorés
+  sans casser le Core). Forcer : `PROVIDERS_STRICT_MODE=true`.
+
+### Vérifier la configuration & le health check
+
+```bash
+# Statut de tous les providers (configuré / manquant / désactivé) — SANS secrets
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/providers/status
+```
+
+Statuts possibles : `configured`, `missing_credentials`, `invalid_configuration`,
+`disabled` (configuration) puis `healthy`, `degraded`, `unavailable` (santé).
+`configured` ≠ `healthy` : la connectivité n'est testée que si
+`PROVIDERS_CONNECTIVITY_CHECK=true` (sinon « connectivité non testée »).
+
+### Changer sandbox → production
+
+1. Renseigner les credentials `..._PRODUCTION_...` dans l'environnement ;
+2. `PROVIDER_{SLUG}_ENV=production` ;
+3. redémarrer l'API.
+
+### Rotation d'une clé
+
+Modifier la variable d'environnement correspondante et redémarrer — aucun
+changement de code nécessaire (les adaptateurs relisent l'environnement).
+
+### Webhooks
+
+Architecture préparée (`Nexus\Providers\WebhookVerifier`) : vérification HMAC en
+temps constant, formats `hex` ou `sha256=hex`. Aucun endpoint de webhook n'est
+exposé tant qu'un provider n'est pas réellement intégré — ne jamais accepter
+aveuglément un webhook externe.
+
+### Tests
+
+```bash
+cd nexus-api && php vendor/bin/phpunit          # suite complète
+php vendor/bin/phpunit --filter ProviderRegistryTest   # architecture providers
+```
+
+
+

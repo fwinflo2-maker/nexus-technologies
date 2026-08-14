@@ -176,7 +176,7 @@ PHP;
 
         file_put_contents($runnerFile, $runnerCode);
 
-        $cmd = 'C:\\xampp\\php\\php.exe ' . escapeshellarg($runnerFile) . ' 2>&1';
+        $cmd = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($runnerFile) . ' 2>&1';
         exec($cmd, $execOutput, $returnCode);
 
         $content = @file_get_contents($tmpFile);

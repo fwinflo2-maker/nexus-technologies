@@ -1,5 +1,9 @@
 <?php
 
+// Racine du projet (mirroir de public/index.php : BASE_PATH + APP_KEY requis).
+define('BASE_PATH', dirname(__DIR__));
+define('APP_KEY', 'nexus-dev-data-key-change-me');
+
 define('DB_HOST', '127.0.0.1');
 define('DB_PORT', 3306);
 define('DB_NAME', 'nexus_test');

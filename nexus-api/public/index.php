@@ -141,6 +141,7 @@ $router->get('/accounts/authorized-origins', [AccountController::class, 'authori
 
 // --- Providers : catalogue + credentials chiffrées (protégé) ---------------
 $router->get('/providers', [ProviderCredentialController::class, 'catalog']);
+$router->get('/providers/status', [ProviderCredentialController::class, 'status']);
 $router->get('/providers/credentials', [ProviderCredentialController::class, 'list']);
 $router->put('/providers/{slug}/credentials', [ProviderCredentialController::class, 'upsert']);
 $router->delete('/providers/{slug}/credentials', [ProviderCredentialController::class, 'delete']);

@@ -3,3 +3,6 @@
 
 # Journaux
 *.log
+
+# Cache de tests PHPUnit
+.phpunit.cache/
