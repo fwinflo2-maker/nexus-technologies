@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Nexus\Services;
 
+use Nexus\Core\HttpException;
+
 use Nexus\Models\FXRate;
 use RuntimeException;
 
@@ -42,7 +44,14 @@ final class ManualRateProvider
         $base = strtoupper($baseCurrency);
         $quote = strtoupper($quoteCurrency);
         if (!isset(self::MANUAL_RATES[$base][$quote])) {
-            throw new RuntimeException("Manual FX rate not defined for {$base} → {$quote}");
+            // Ni faute du client, ni panne : le corridor n'a simplement pas de
+            // taux configuré. 422 avec un code explicite, pour que l'appelant
+            // sache que la demande est recevable mais non servie.
+            throw new HttpException(
+                422,
+                sprintf('Aucun taux de change configuré pour %s → %s.', $base, $quote),
+                'FX_RATE_NOT_AVAILABLE'
+            );
         }
         $def = self::MANUAL_RATES[$base][$quote];
         $now = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));

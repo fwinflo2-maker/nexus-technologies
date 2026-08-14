@@ -510,6 +510,30 @@ export async function apiCreateQuote(payload: {
 }
 
 /**
+ * Conversion réelle entre deux devises du compte (POST /api/wallets/convert).
+ *
+ * Le bouton « Convertir » exécutait auparavant un setTimeout de deux secondes
+ * puis vidait le formulaire : l'utilisateur voyait une conversion réussie
+ * alors qu'aucun argent n'avait bougé. Cette fonction appelle le moteur réel
+ * (débit, crédit, écritures comptables, idempotence).
+ *
+ * Aucun identifiant de wallet n'est transmis : le serveur les résout à partir
+ * du jeton, donc on ne peut pas désigner le wallet d'un autre compte.
+ */
+export async function apiWalletConvert(payload: {
+  amount: string;
+  source_currency: string;
+  dest_currency: string;
+  idempotency_key?: string;
+}): Promise<ApiResponse<{ conversion: Record<string, unknown> }>> {
+  return request<{ conversion: Record<string, unknown> }>(
+    'POST',
+    '/wallets/convert',
+    payload as unknown as Record<string, unknown>,
+  );
+}
+
+/**
  * Récupère une quote existante par son ID.
  * GET /api/quotes/:id
  */

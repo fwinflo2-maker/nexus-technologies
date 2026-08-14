@@ -128,6 +128,10 @@ $router->get('/wallets/{currency}/transactions', [WalletController::class, 'tran
 
 // --- Wallet : Hold Lifecycle (protégé) ---------------------------------------
 $router->get('/wallets/holds', [WalletController::class, 'pendingHolds']);
+// Conversion entre deux wallets du même utilisateur. Relie l'interface au
+// moteur transferMultiCurrency, jusqu'ici appelé uniquement par les tests :
+// le bouton « Convertir » simulait un succès sans mouvement d'argent.
+$router->post('/wallets/convert', [WalletController::class, 'convert']);
 $router->post('/wallets/hold', [WalletController::class, 'hold']);
 $router->post('/wallets/hold/capture', [WalletController::class, 'captureHold']);
 $router->post('/wallets/hold/release', [WalletController::class, 'releaseHold']);

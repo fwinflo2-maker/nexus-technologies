@@ -757,25 +757,40 @@ final class WalletService
         self::assertCurrency($sourceCurrency);
         self::assertCurrency($destCurrency);
 
-        $sourceWallet = self::loadWalletById($sourceWalletId);
-        $destWallet   = self::loadWalletById($destWalletId);
+        // ISOLATION MULTI-TENANT (correctif CRITICAL).
+        //
+        // `source_wallet_id` et `dest_wallet_id` viennent du CLIENT, `userId`
+        // du jeton. Sans ce contrôle, un utilisateur authentifié convertissait
+        // depuis le wallet d'autrui : les fonds de la victime étaient débités
+        // et crédités sur le wallet de l'attaquant. Reproduit par test avant
+        // correctif (HTTP 200 sur le wallet d'un tiers).
+        //
+        // Le contrôle porte sur les DEUX wallets : créditer le wallet d'un
+        // tiers reste une écriture non autorisée sur un compte qui n'est pas
+        // le sien.
+        $sourceWallet = self::loadOwnedWalletById($sourceWalletId, $userId);
+        $destWallet   = self::loadOwnedWalletById($destWalletId, $userId);
 
         if (strtoupper((string) $sourceWallet['currency']) !== strtoupper($sourceCurrency)) {
-            throw new RuntimeException(
+            throw new HttpException(
+                422,
                 sprintf(
                     'Devise incohérente pour le wallet source : wallet=%s, demandé=%s.',
                     $sourceWallet['currency'],
                     $sourceCurrency
-                )
+                ),
+                'CURRENCY_MISMATCH'
             );
         }
         if (strtoupper((string) $destWallet['currency']) !== strtoupper($destCurrency)) {
-            throw new RuntimeException(
+            throw new HttpException(
+                422,
                 sprintf(
                     'Devise incohérente pour le wallet destination : wallet=%s, demandé=%s.',
                     $destWallet['currency'],
                     $destCurrency
-                )
+                ),
+                'CURRENCY_MISMATCH'
             );
         }
 
@@ -1001,6 +1016,31 @@ final class WalletService
      * @return array<string,mixed> Ligne wallets (id, user_id, currency, balance,
      *                             available_balance, hold_balance).
      */
+    /**
+     * Charge un wallet en exigeant qu'il APPARTIENNE à l'utilisateur.
+     *
+     * Le message ne distingue pas « wallet inexistant » de « wallet
+     * d'autrui » : les distinguer transformerait l'endpoint en oracle
+     * d'énumération des wallets existants (même raisonnement que
+     * `createHold`).
+     *
+     * @return array<string,mixed>
+     */
+    private static function loadOwnedWalletById(int $walletId, int $userId): array
+    {
+        $wallet = self::loadWalletById($walletId);
+
+        if ((int) $wallet['user_id'] !== $userId) {
+            throw new HttpException(
+                404,
+                sprintf('Wallet introuvable (id=%d).', $walletId),
+                'WALLET_NOT_FOUND'
+            );
+        }
+
+        return $wallet;
+    }
+
     private static function loadWalletById(int $walletId): array
     {
         $pdo = Database::getConnection();
@@ -1014,8 +1054,11 @@ final class WalletService
         $row = $stmt->fetch();
 
         if ($row === false) {
-            throw new RuntimeException(
-                sprintf('Wallet introuvable (id=%d).', $walletId)
+            // Même code que « wallet d'autrui » : ne pas révéler l'existence.
+            throw new HttpException(
+                404,
+                sprintf('Wallet introuvable (id=%d).', $walletId),
+                'WALLET_NOT_FOUND'
             );
         }
         return $row;

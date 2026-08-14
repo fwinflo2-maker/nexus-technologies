@@ -131,8 +131,12 @@ final class FXServiceTest extends TestCase
         $stmt = $this->pdo->prepare('DELETE FROM fx_rates_cache WHERE base_currency = :b AND quote_currency = :q');
         $stmt->execute(['b' => 'USD', 'q' => 'GBP']);
 
+        // Le message est passé en français et le type s'est précisé :
+        // l'absence de taux est un refus 422 FX_RATE_NOT_AVAILABLE, pas une
+        // panne serveur. HttpException étend RuntimeException, donc
+        // l'attente de type reste valide.
         $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('Manual FX rate not defined');
+        $this->expectExceptionMessage('Aucun taux de change configuré');
 
         FXService::resolve('USD', 'GBP');
     }

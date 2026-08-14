@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nexus\Services;
 
 use Nexus\Core\Database;
+use Nexus\Core\HttpException;
 use Nexus\Execution\ExecutionContext;
 use Nexus\Providers\ProviderConfig;
 use PDO;
@@ -376,13 +377,18 @@ final class LedgerService
             // devises soient identiques ou différentes.
             $sourceAvailable = (string) $source['available_balance'];
             if (bccomp($sourceAvailable, $srcAmountDec, 8) < 0) {
-                throw new RuntimeException(
+                // Refus MÉTIER, pas panne serveur : HttpException étend
+                // RuntimeException, donc les `catch (RuntimeException)`
+                // existants continuent de fonctionner.
+                throw new HttpException(
+                    422,
                     sprintf(
                         'Solde disponible insuffisant pour le transfert (disponible: %s, demandé: %s, devise: %s).',
                         $sourceAvailable,
                         $srcAmountDec,
                         $sourceCurrency
-                    )
+                    ),
+                    'INSUFFICIENT_AVAILABLE_BALANCE'
                 );
             }
 

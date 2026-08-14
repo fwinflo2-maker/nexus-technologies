@@ -4,6 +4,7 @@ import {
   apiWalletsList,
   apiIntentCoverage,
   apiCreateQuote,
+  apiWalletConvert,
   type WalletState,
   type IntentCoverageData,
   type QuoteData,
@@ -28,6 +29,8 @@ export default function ConvertPage() {
   const [loading, setLoading] = useState(false);
   const [converting, setConverting] = useState(false);
   const [countdown, setCountdown] = useState<number>(0);
+  const [convertError, setConvertError] = useState<string | null>(null);
+  const [convertDone, setConvertDone] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     const [walletRes, coverageRes] = await Promise.all([
@@ -73,13 +76,38 @@ export default function ConvertPage() {
   };
 
   const handleConvert = async () => {
+    // Cette fonction exécutait un setTimeout de deux secondes puis vidait le
+    // formulaire : l'utilisateur voyait une conversion réussie alors
+    // qu'aucun argent n'avait bougé. Elle appelle désormais le moteur réel.
     setConverting(true);
-    // Simulation d'exécution - à connecter au backend
-    setTimeout(() => {
-      setConverting(false);
-      setAmount('');
-      setQuote(null);
-    }, 2000);
+    setConvertError(null);
+    setConvertDone(null);
+
+    // Clé d'idempotence : un double-clic ou un retry réseau ne doit pas
+    // convertir deux fois. Elle est générée ICI, avant l'envoi, pour que les
+    // deux tentatives portent la même clé.
+    const idempotencyKey = `convert-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+    const res = await apiWalletConvert({
+      amount,
+      source_currency: fromCurrency,
+      dest_currency: toCurrency,
+      idempotency_key: idempotencyKey,
+    });
+
+    setConverting(false);
+
+    if (!res.success) {
+      // Le message du backend est affiché tel quel : il porte le motif exact
+      // du refus (solde insuffisant, devise non supportée, environnement).
+      setConvertError(res.error ?? 'La conversion a échoué.');
+      return;
+    }
+
+    setConvertDone(`Conversion effectuée : ${amount} ${fromCurrency} → ${toCurrency}.`);
+    setAmount('');
+    setQuote(null);
+    void fetchData(); // recharge les soldes réels
   };
 
   return (
@@ -226,6 +254,28 @@ export default function ConvertPage() {
               </button>
             </div>
           </motion.div>
+        )}
+
+        {/* Résultat réel de la conversion. Un échec doit être VISIBLE : la
+            version précédente ne pouvait afficher que du succès. */}
+        {convertError && (
+          <div
+            className="card"
+            style={{ padding: 14, borderColor: 'var(--danger, #e5484d)', color: 'var(--danger, #e5484d)', fontSize: 13 }}
+            role="alert"
+          >
+            {convertError}
+          </div>
+        )}
+
+        {convertDone && (
+          <div
+            className="card"
+            style={{ padding: 14, borderColor: 'var(--success, #30a46c)', color: 'var(--success, #30a46c)', fontSize: 13 }}
+            role="status"
+          >
+            {convertDone}
+          </div>
         )}
       </div>
     </div>

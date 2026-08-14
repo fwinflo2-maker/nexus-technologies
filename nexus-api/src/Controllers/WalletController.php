@@ -8,6 +8,7 @@ use Nexus\Auth\AuthMiddleware;
 use Nexus\Core\Currency;
 use Nexus\Core\Database;
 use Nexus\Core\Request;
+use Nexus\Models\TransferRequest;
 use Nexus\Execution\ExecutionContext;
 use Nexus\Core\HttpException;
 use Nexus\Core\Response;
@@ -33,6 +34,114 @@ final class WalletController
 
     /** Taux fixe MVP : 1 EUR = 655,957 XAF (sera remplacé par un service FX réel). */
     private const EUR_TO_XAF = 655.957;
+
+    /**
+     * POST /api/wallets/convert
+     * Conversion entre deux wallets de l'utilisateur.
+     *
+     * LE DÉFAUT CORRIGÉ (faux succès)
+     * ───────────────────────────────
+     * `WalletService::transferMultiCurrency()` est complet et lourdement
+     * testé, mais n'était appelé QUE par les tests : aucune route ne
+     * l'exposait. Côté interface, « Convertir » exécutait un `setTimeout` de
+     * deux secondes puis vidait le formulaire — l'utilisateur voyait une
+     * conversion réussie alors qu'aucun argent n'avait bougé.
+     *
+     * Cette route relie l'interface au moteur réel. Elle n'invente aucune
+     * règle : montants, taux, atomicité, idempotence et écritures comptables
+     * restent entièrement la responsabilité de `transferMultiCurrency`.
+     */
+    public static function convert(Request $request): void
+    {
+        $request = AuthMiddleware::handle($request);
+        $user    = $request->attribute('user');
+        $userId  = (int) $user['id'];
+
+        $amount         = trim((string) $request->input('amount', ''));
+        $sourceCurrency = strtoupper(trim((string) $request->input('source_currency', '')));
+        $destCurrency   = strtoupper(trim((string) $request->input('dest_currency', '')));
+        $idemKey        = trim((string) $request->input('idempotency_key', ''));
+
+        // Validation d'entrée : 422, jamais 500. Ces refus sont la faute du
+        // client, et le message doit lui permettre de corriger.
+        if ($sourceCurrency === '' || $destCurrency === '') {
+            Response::error('Les devises source et destination sont requises.', 422, 'CURRENCY_REQUIRED');
+        }
+
+        if ($sourceCurrency === $destCurrency) {
+            Response::error(
+                'Les devises source et destination doivent être différentes.',
+                422,
+                'SAME_CURRENCY'
+            );
+        }
+
+        if ($amount === '' || !is_numeric($amount) || (float) $amount <= 0) {
+            Response::error('Le montant doit être un nombre strictement positif.', 422, 'INVALID_AMOUNT');
+        }
+
+        // Les wallets sont résolus À PARTIR DU JETON, jamais d'un identifiant
+        // fourni par le client. L'utilisateur désigne une DEVISE — un concept
+        // qui lui appartient — et le serveur retrouve le wallet correspondant.
+        // Aucun identifiant de wallet ne transite, donc aucune énumération
+        // possible : on ne peut pas cibler le wallet d'autrui.
+        $sourceWallet = WalletService::getWallet($userId, $sourceCurrency);
+        if ($sourceWallet === null) {
+            Response::error(
+                sprintf('Aucun wallet %s sur ce compte.', $sourceCurrency),
+                404,
+                'WALLET_NOT_FOUND'
+            );
+        }
+
+        // Le wallet de destination est créé au besoin : convertir vers une
+        // devise que l'on ne détient pas encore est un usage normal.
+        $destWallet = WalletService::ensureWallet($userId, $destCurrency);
+
+        $sourceWalletId = (int) $sourceWallet['id'];
+        $destWalletId   = (int) $destWallet['id'];
+
+        if ($sourceWalletId === $destWalletId) {
+            Response::error(
+                'Les wallets source et destination doivent être différents.',
+                422,
+                'SAME_WALLET'
+            );
+        }
+
+        // L'environnement vient du contexte de la requête, jamais de la
+        // configuration du serveur au moment de l'exécution.
+        $context = ExecutionContext::fromRequest($request, $user);
+
+        try {
+            $result = WalletService::transferMultiCurrency(new TransferRequest(
+                userId:         $userId,
+                sourceWalletId: $sourceWalletId,
+                destWalletId:   $destWalletId,
+                sourceAmount:   $amount,
+                sourceCurrency: $sourceCurrency,
+                destCurrency:   $destCurrency,
+                type:           'convert',
+                idempotencyKey: $idemKey !== '' ? $idemKey : null,
+                description:    (string) $request->input('description', 'Conversion de devises'),
+                metadata:       null,
+                fxSource:       null,
+                context:        $context
+            ));
+
+        } catch (HttpException $e) {
+            Response::error($e->getMessage(), $e->statusCode(), $e->errorCode());
+        } catch (\Throwable $e) {
+            error_log('[wallet] convert: ' . $e::class . ': ' . $e->getMessage());
+            Response::serverError('Conversion impossible pour le moment.');
+        }
+
+        // La réponse est émise HORS du try : `Response::success()` lève une
+        // ResponseSent (qui étend RuntimeException) pour interrompre le
+        // traitement. Émise à l'intérieur, elle serait rattrapée par le
+        // `catch (\Throwable)` ci-dessus et un SUCCÈS deviendrait un 500.
+        Response::success(['conversion' => $result->toArray()]);
+    }
 
     /**
      * POST /api/wallets/hold
