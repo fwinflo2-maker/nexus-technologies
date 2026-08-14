@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useDashT } from '../../data/dashboard-i18n';
 
 type Mode = 'personal' | 'business';
 
@@ -18,29 +19,29 @@ interface NavItem {
 
 /* ── Gestion du compte ── */
 const navAccountPersonal: NavItem[] = [
-  { to: '/dashboard', icon: '◈', label: 'Tableau de bord', end: true },
-  { to: '/wallet', icon: '◉', label: 'Portefeuille' },
-  { to: '/history', icon: '↻', label: 'Historique' },
+  { to: '/dashboard', icon: '◈', label: 'nav.dashboard', end: true },
+  { to: '/wallet', icon: '◉', label: 'nav.wallet' },
+  { to: '/history', icon: '↻', label: 'nav.history' },
 ];
 
 const navAccountBusiness: NavItem[] = [
-  { to: '/dashboard', icon: '◈', label: 'Tableau de bord', end: true },
-  { to: '/treasury', icon: '◉', label: 'Trésorerie' },
-  { to: '/payments', icon: '↗', label: 'Paiements' },
-  { to: '/approvals', icon: '✓', label: 'Approbations' },
-  { to: '/beneficiaries', icon: '👥', label: 'Bénéficiaires' },
-  { to: '/reconciliation', icon: '⇌', label: 'Rapprochement' },
-  { to: '/team', icon: '⊕', label: 'Équipe' },
-  { to: '/reporting', icon: '≡', label: 'Reporting' },
+  { to: '/dashboard', icon: '◈', label: 'nav.dashboard', end: true },
+  { to: '/treasury', icon: '◉', label: 'nav.treasury' },
+  { to: '/payments', icon: '↗', label: 'nav.payments' },
+  { to: '/approvals', icon: '✓', label: 'nav.approvals' },
+  { to: '/beneficiaries', icon: '👥', label: 'nav.beneficiaries' },
+  { to: '/reconciliation', icon: '⇌', label: 'nav.reconciliation' },
+  { to: '/team', icon: '⊕', label: 'nav.team' },
+  { to: '/reporting', icon: '≡', label: 'nav.reporting' },
 ];
 
 /* ── Actions financières (uniquement ce qui existe réellement) ── */
-const navAction: NavItem[] = [{ to: '/send', icon: '↗', label: 'Envoyer' }];
+const navAction: NavItem[] = [{ to: '/send', icon: '↗', label: 'nav.send' }];
 
 /* ── Système ── */
 const navSystem: NavItem[] = [
-  { to: '/kyc', icon: '⊗', label: 'KYC / KYB' },
-  { to: '/agents', icon: '⚙', label: 'Agents IA' },
+  { to: '/kyc', icon: '⊗', label: 'nav.kyc' },
+  { to: '/agents', icon: '⚙', label: 'nav.agents' },
 ];
 
 /**
@@ -54,6 +55,7 @@ const navSystem: NavItem[] = [
 export default function Navbar({ mode, onModeChange }: NavbarProps) {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const t = useDashT();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -131,7 +133,7 @@ export default function Navbar({ mode, onModeChange }: NavbarProps) {
       <span className="nb-icon" aria-hidden>
         {item.icon}
       </span>
-      <span className="nb-label">{item.label}</span>
+      <span className="nb-label">{t(item.label)}</span>
     </NavLink>
   );
 

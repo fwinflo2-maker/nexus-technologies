@@ -1,5 +1,7 @@
 /** Helpers d'affichage partagés par les pages Business. */
 
+import { dashTranslate } from '../../data/dashboard-i18n';
+
 export const SYMBOL: Record<string, string> = {
   EUR: '€', USD: '$', GBP: '£', XAF: 'XAF', XOF: 'XOF', USDT: 'USDT', USDC: 'USDC',
 };
@@ -26,26 +28,7 @@ export function pillForStatus(status: string): string {
 }
 
 export function labelForStatus(status: string): string {
-  const labels: Record<string, string> = {
-    draft: 'Brouillon',
-    pending_approval: 'En attente d\'approbation',
-    approved: 'Approuvé',
-    executing: 'Exécution',
-    completed: 'Terminé',
-    failed: 'Échoué',
-    rejected: 'Rejeté',
-    cancelled: 'Annulé',
-    pending: 'En attente',
-    matched: 'Rapproché',
-    unmatched: 'Non rapproché',
-    discrepancy: 'Écart détecté',
-    resolved: 'Résolu',
-    active: 'Actif',
-    inactive: 'Inactif',
-    verified: 'Vérifié',
-    unverified: 'Non vérifié',
-  };
-  return labels[status] ?? status;
+  return dashTranslate(`status.${status}`);
 }
 
 export const METHOD_LABEL: Record<string, string> = {

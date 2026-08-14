@@ -23,22 +23,46 @@ NEXUS CORP TECHNOLOGIES/
 ## Prérequis
 
 - **Node.js** ≥ 18
-- **XAMPP** (Apache + MySQL) ou MySQL 8+
-- **PHP 8.1+** (inclus dans XAMPP)
+- **XAMPP** (Apache + MySQL) ou **MariaDB / MySQL 8+**
+- **PHP 8.1+** avec les extensions **obligatoires** suivantes :
+  - `pdo_mysql` — accès base de données
+  - `bcmath` — arithmétique décimale du ledger (hold/capture, FX)
+  - `mbstring` — validation des chaînes (inscription, KYC)
+  - `openssl` — chiffrement des données sensibles (IBAN, références bénéficiaires)
+
+  Vérifier avec : `php -m | grep -E "pdo_mysql|bcmath|mbstring|openssl"`
+  (Debian/Ubuntu : `sudo apt install php-cli php-mysql php-bcmath php-mbstring php-openssl`)
+
+> ⚠️ Sans `bcmath` ou `mbstring`, l'API démarre mais `/register` renvoie une
+> erreur interne silencieuse (`Call to undefined function`).
 
 ## Lancement
 
-### 1. Base de données MySQL
+### 1. Base de données MySQL / MariaDB
 
 Lancer **XAMPP Control Panel** → démarrer **MySQL** et **Apache**.
 
-Créer la base `nexus` avec le schéma :
+**Méthode canonique : le runner de migrations** (schéma + toutes les migrations
+en ordre de version, idempotent — ré-exécutable sans effet) :
 
 ```bash
-mysql -u root < nexus-api/database/schema.sql
+cd nexus-api
+bash database/migrate.sh [hôte] [utilisateur] [motdepasse]
+# défauts : 127.0.0.1 / nexus / nexus_dev_pw
 ```
 
-Ou via phpMyAdmin : importer `nexus-api/database/schema.sql`.
+Créer l'utilisateur applicatif au préalable (une seule fois) :
+
+```sql
+CREATE USER IF NOT EXISTS 'nexus'@'127.0.0.1' IDENTIFIED BY 'nexus_dev_pw';
+GRANT ALL PRIVILEGES ON nexus.* TO 'nexus'@'127.0.0.1';
+FLUSH PRIVILEGES;
+```
+
+> Les migrations couvrent : auth étendue, wallets à états, notifications,
+> comptes de paiement, credentials providers, quotes, KYC/origines, ledger
+> double-entrée, holds, exécution de transfert, suite Business (bénéficiaires,
+> paiements, équipe, rapprochement).
 
 ### 2. Backend PHP (API)
 
@@ -178,3 +202,31 @@ cd nexus-frontend && npm run lint
 - **Dashboard** : classes `dashboard-system.css` (fond sombre, cyan #00C8FF, or #EAB830)
 - Ne jamais réinventer le style — toujours réutiliser les classes existantes
 - Chaque écran gère : chargement, erreur, état vide
+
+## ⚠️ SANDBOX vs REAL FUNDING (séparation explicite)
+
+Les fonds visibles en **environnement de développement / sandbox** ne sont
+**PAS** de vrais dépôts financiers :
+
+| Élément de démo | Où | Ce que c'est |
+|---|---|---|
+| `welcome_bonus` (wallets EUR/USD/GBP/XAF/USDT/USDC à l'inscription) | `AuthController::register` | Bonus de bienvenue sandbox, crédité via le ledger (`LedgerService::credit`) |
+| `seedDemoTransactions()` | `AuthController` | Historique de transactions fictives (alimente les KPI du dashboard) |
+| `seedDemoAccountsAtLogin()` | `AccountController` | Comptes de financement de démo (Swan FR, wallet crypto…) marqués « vérifiés » pour permettre les parcours |
+| `database/seed_dashboard.php` | script CLI | Seed optionnel pour les utilisateurs sans transactions |
+
+- Ces seeds passent **par le ledger** (écritures réelles, traçables), mais leur
+  **origine** est simulée : ils ne correspondent à aucun règlement bancaire.
+- Un **vrai dépôt** devra passer par une intégration provider (carte / banque /
+  virement) — **aucun faux endpoint de dépôt ne doit être créé** en attendant.
+- En production, ces seeds doivent être **désactivés** (feature flag / env).
+
+## Internationalisation
+
+- **7 langues** : `fr`, `en`, `es`, `pt`, `de`, `ar`, `zh`.
+- Pages publiques & auth : `data/translations.ts` (via `useI18n()`).
+- Dashboards (navigation, statuts, KPI) : `data/dashboard-i18n.ts` (via
+  `useDashT()` / `dashTranslate()`).
+- Le sélecteur de langue est présent dans le topbar du dashboard
+  (`LanguageSwitcher variant="dashboard"`).
+

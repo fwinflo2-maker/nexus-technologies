@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { apiBusinessOverview, type BusinessOverview } from '../../api/client';
 import { fmtMoney } from './ui';
+import { useDashT } from '../../data/dashboard-i18n';
 
 /** Business Dashboard — Financial Operations Console (données 100 % backend). */
 export default function BusinessDashboard() {
@@ -34,17 +35,18 @@ export default function BusinessDashboard() {
   if (!data) return null;
 
   const t = data.totals;
+  const td = useDashT();
   const kpis: [string, string, string][] = [
-    ['Total des actifs', fmtMoney(t.total_assets, t.ref_currency), 'var(--cyan)'],
-    ['Disponible', fmtMoney(t.available, t.ref_currency), 'var(--green)'],
-    ['En attente', fmtMoney(t.pending, t.ref_currency), 'var(--gold)'],
-    ['En transit', fmtMoney(t.in_transit, t.ref_currency), 'var(--violet)'],
-    ['Règlement', fmtMoney(t.settlement, t.ref_currency), 'var(--gold)'],
-    ['À payer (payables)', fmtMoney(t.payables, t.ref_currency), 'var(--red)'],
-    ['Volume 30 j', fmtMoney(t.volume_xaf, 'XAF'), 'var(--cyan)'],
-    ['Frais 30 j', fmtMoney(t.fees_ref, t.ref_currency), 'var(--text-mid)'],
-    ['Taux de réussite', `${t.success_rate} %`, 'var(--green)'],
-    ['Temps d\'exécution moy.', t.avg_exec_sec ? `${t.avg_exec_sec} s` : '—', 'var(--text-mid)'],
+    [td('biz.total_assets'), fmtMoney(t.total_assets, t.ref_currency), 'var(--cyan)'],
+    [td('biz.available'), fmtMoney(t.available, t.ref_currency), 'var(--green)'],
+    [td('biz.pending'), fmtMoney(t.pending, t.ref_currency), 'var(--gold)'],
+    [td('biz.in_transit'), fmtMoney(t.in_transit, t.ref_currency), 'var(--violet)'],
+    [td('biz.settlement'), fmtMoney(t.settlement, t.ref_currency), 'var(--gold)'],
+    [td('biz.payables'), fmtMoney(t.payables, t.ref_currency), 'var(--red)'],
+    [td('biz.volume_30d'), fmtMoney(t.volume_xaf, 'XAF'), 'var(--cyan)'],
+    [td('biz.fees_30d'), fmtMoney(t.fees_ref, t.ref_currency), 'var(--text-mid)'],
+    [td('biz.success_rate'), `${t.success_rate} %`, 'var(--green)'],
+    [td('biz.avg_exec'), t.avg_exec_sec ? `${t.avg_exec_sec} s` : '—', 'var(--text-mid)'],
   ];
 
   return (

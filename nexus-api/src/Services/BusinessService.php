@@ -69,6 +69,16 @@ final class BusinessService
     {
         $actorId = (int) $actor['id'];
         if (($actor['account_type'] ?? '') === 'business') {
+            // Un compte Business n'opère que sur son PROPRE espace.
+            // Toute tentative de cibler un autre business_id est refusée.
+            $provided = (int) ($businessIdInput ?? 0);
+            if ($provided > 0 && $provided !== $actorId) {
+                throw new HttpException(
+                    403,
+                    'Accès refusé : un compte Business ne peut accéder qu\'à son propre espace.',
+                    'FORBIDDEN_CROSS_BUSINESS'
+                );
+            }
             return $actorId;
         }
         $businessId = (int) ($businessIdInput ?? 0);

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useDashT } from '../../data/dashboard-i18n';
 
 type Mode = 'personal' | 'business';
 
@@ -10,30 +11,30 @@ interface SidebarProps {
 }
 
 const navPersonal = [
-  { to: '/dashboard', icon: '◈', label: 'Tableau de bord' },
-  { to: '/wallet', icon: '◉', label: 'Portefeuille' },
-  { to: '/send', icon: '↗', label: 'Envoyer' },
-  { to: '/receive', icon: '↙', label: 'Recevoir' },
-  { to: '/convert', icon: '⇄', label: 'Convertir' },
-  { to: '/history', icon: '≡', label: 'Historique' },
+  { to: '/dashboard', icon: '◈', label: 'nav.dashboard' },
+  { to: '/wallet', icon: '◉', label: 'nav.wallet' },
+  { to: '/send', icon: '↗', label: 'nav.send' },
+  { to: '/receive', icon: '↙', label: 'nav.receive' },
+  { to: '/convert', icon: '⇄', label: 'nav.convert' },
+  { to: '/history', icon: '≡', label: 'nav.history' },
 ];
 
 const navBusiness = [
-  { to: '/dashboard', icon: '◈', label: 'Tableau de bord' },
-  { to: '/treasury', icon: '◉', label: 'Trésorerie' },
-  { to: '/payments', icon: '↗', label: 'Paiements' },
-  { to: '/approvals', icon: '✓', label: 'Approbations' },
-  { to: '/beneficiaries', icon: '👥', label: 'Bénéficiaires' },
-  { to: '/reconciliation', icon: '⇌', label: 'Rapprochement' },
-  { to: '/team', icon: '⊕', label: 'Équipe & Rôles' },
-  { to: '/reporting', icon: '≡', label: 'Reporting' },
+  { to: '/dashboard', icon: '◈', label: 'nav.dashboard' },
+  { to: '/treasury', icon: '◉', label: 'nav.treasury' },
+  { to: '/payments', icon: '↗', label: 'nav.payments' },
+  { to: '/approvals', icon: '✓', label: 'nav.approvals' },
+  { to: '/beneficiaries', icon: '👥', label: 'nav.beneficiaries' },
+  { to: '/reconciliation', icon: '⇌', label: 'nav.reconciliation' },
+  { to: '/team', icon: '⊕', label: 'nav.team' },
+  { to: '/reporting', icon: '≡', label: 'nav.reporting' },
 ];
 
 // NB: /providers est une fonctionnalité du Back Office, absente des dashboards personal/business.
 const navCommon = [
-  { to: '/notifications', icon: '🔔', label: 'Notifications' },
-  { to: '/agents', icon: '⚙', label: 'Agents IA' },
-  { to: '/settings', icon: '⚙', label: 'Paramètres' },
+  { to: '/notifications', icon: '🔔', label: 'nav.notifications' },
+  { to: '/agents', icon: '⚙', label: 'nav.agents' },
+  { to: '/settings', icon: '⚙', label: 'nav.settings' },
 ];
 
 /**
@@ -44,6 +45,7 @@ const navCommon = [
 export default function Sidebar({ mode, onModeChange }: SidebarProps) {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const t = useDashT();
   const [menuOpen, setMenuOpen] = useState(false);
   const drawerRef = useRef<HTMLElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -164,7 +166,7 @@ export default function Sidebar({ mode, onModeChange }: SidebarProps) {
         </div>
 
         <nav className="sidebar-nav" aria-label="Navigation principale">
-          <div className="nav-section-label">{effectiveMode === 'personal' ? 'Personnel' : 'Business'}</div>
+          <div className="nav-section-label">{effectiveMode === 'personal' ? t('nav.personal') : t('nav.business')}</div>
           {nav.map((item) => (
             <NavLink
               key={item.to + item.label}
@@ -176,11 +178,11 @@ export default function Sidebar({ mode, onModeChange }: SidebarProps) {
               }
             >
               <span className="nav-icon" aria-hidden>{item.icon}</span>
-              <span>{item.label}</span>
+              <span>{t(item.label)}</span>
             </NavLink>
           ))}
 
-          <div className="nav-section-label" style={{ marginTop: 8 }}>Système</div>
+          <div className="nav-section-label" style={{ marginTop: 8 }}>{t('nav.system')}</div>
           {navCommon.map((item) => (
             <NavLink
               key={item.to}
@@ -190,7 +192,7 @@ export default function Sidebar({ mode, onModeChange }: SidebarProps) {
               className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
             >
               <span className="nav-icon" aria-hidden>{item.icon}</span>
-              <span>{item.label}</span>
+              <span>{t(item.label)}</span>
             </NavLink>
           ))}
         </nav>
