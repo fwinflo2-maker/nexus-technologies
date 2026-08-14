@@ -453,3 +453,137 @@ désormais verrouillé par 24 tests qui échoueraient si un adaptateur se mettai
 | HIGH ouverts | 3 (non détectés) | **0** |
 | Chemins financiers sans contexte | 1 | **0** |
 | Courses critiques sur les statuts | 4 | **0** |
+
+---
+
+## Boucles 7 à 9 — privilège, reprise, divulgation
+
+Trois défauts qu'aucun test ne couvrait, chacun trouvé en cherchant autre
+chose. Le fil conducteur : **un mécanisme de sécurité qui repose sur une
+valeur contrôlée par le client, ou qu'un fourre-tout masque, ne protège
+rien.**
+
+### Boucle 7 — `account_type` n'est pas un privilège (CRITICAL)
+
+L'administration des credentials providers et le Control Center étaient
+gardés par `account_type === 'business'`. Or ce champ est **choisi librement
+par l'utilisateur au moment de l'inscription**.
+
+Exploitation reproduite en HTTP réel avant correctif :
+
+```
+POST /register  { account_type: "business" }                    -> 200 + jeton
+PUT  /providers/stripe/credentials
+     { environment: "production", secret_key: "sk_live_…" }     -> 200 OK
+```
+
+N'importe qui pouvait injecter une credential de **production** et lire l'état
+complet de l'infrastructure. La cause est une confusion de deux notions :
+
+| Champ | Répond à la question |
+|---|---|
+| `account_type` | **qui est le client** (personal / business) |
+| `platform_role` | **qui exploite Nexus** (user … superadmin) |
+
+Un client business est un client : il n'hérite d'aucun privilège d'exploitant.
+
+Correctif : colonne `users.platform_role` (migration 0.16, aucun compte
+promu), et `PlatformRole` comme autorité unique — deny-by-default, capacités
+granulaires (`credentials`, `operations`, `maintenance`, `superadmin`), rôle
+inconnu ramené à `user`, capacité inconnue refusée. Les rôles internes
+déclarés mais non implémentés se comportent exactement comme `user` : un rôle
+n'accorde jamais un pouvoir qui n'existe pas encore.
+
+**Aucun chemin d'auto-promotion** : la promotion se fait en base. Un test
+vérifie qu'`AuthController` et `UserController` n'écrivent jamais ce champ.
+
+Piège rencontré : sans ajouter `platform_role` au `SELECT` d'`AuthMiddleware`,
+la garde voyait toujours `user` et refusait **même un superadmin**.
+
+### Boucle 8 — un paiement interrompu restait bloqué à vie (HIGH)
+
+`PaymentController::execute` réserve le paiement (`executing`) hors
+transaction SQL puis lance la saga. Le `catch` couvre les exceptions, pas un
+arrêt brutal du processus. Le paiement devenait alors **définitivement**
+inexécutable (`execute` exige `approved`), inannulable (`cancel` part de
+`draft`), et gonflait les payables pour toujours.
+
+La reprise est sûre parce que la clé d'idempotence est **déterministe**
+(`payment:{id}:execute`) : `idempotency_keys` est le journal d'exécution de la
+saga. L'issue réelle se **lit**, elle ne se devine pas.
+
+| Journal | Fait établi | Statut |
+|---|---|---|
+| `completed` | l'argent est parti | `completed` |
+| `error` | échec propre | `failed` |
+| `processing` | **issue inconnue** | on ne touche à rien |
+| aucune clé | saga jamais démarrée | `approved` |
+
+Aucune opération financière n'est rejouée : le service réconcilie un statut
+avec un fait déjà écrit. Le cas `processing` est le cœur du sujet — c'est là
+qu'un balayage naïf trancherait le sort d'un transfert peut-être vivant. Face
+à l'incertitude, le service **s'abstient**, et l'anomalie reste visible plutôt
+que faussement résolue.
+
+**BLOCKED (non simulé)** : une saga `processing` depuis très longtemps est
+morte en vol. Statuer exige d'interroger le provider — l'argent est-il parti ?
+Les opérations métier des adaptateurs n'étant pas implémentées, ce cas est
+signalé (`requires_provider_reconciliation`), jamais deviné.
+
+Surface d'exploitation, avec **voir ≠ agir** :
+
+| Route | Capacité | Effet |
+|---|---|---|
+| `GET /control/maintenance/stuck-payments` | `operations` | diagnostic, lecture seule |
+| `POST /control/maintenance/recover-payments` | `maintenance` | écriture, `confirm: true` requis, plancher 300 s |
+
+### Boucle 9 — le fourre-tout `catch → 400` (HIGH, puis CRITICAL)
+
+Cinq sites renvoyaient au client `$e->getMessage()` d'une exception non
+maîtrisée, soit sur erreur PDO : `SQLSTATE[42S22]: … Unknown column 'x'`.
+Le SGBD, les tables et les colonnes, offerts sur les routes de hold et de
+solde. Et un `400` faisait porter au client la faute d'une panne serveur.
+
+**En corrigeant, un défaut plus grave est apparu** : le `400` uniforme
+masquait un oracle. Une fois les statuts réels visibles —
+
+```
+wallet inexistant  -> 500        wallet d'autrui -> 404 WALLET_NOT_FOUND
+```
+
+— alors que le contrôle de propriété répond 404 **précisément** pour ne pas
+confirmer l'existence du wallet visé. La différence de réponse annulait cette
+précaution : comparer les deux énumérait les wallets existants. Les deux cas
+sont désormais strictement identiques.
+
+Corollaire : des refus légitimes remontaient en 500. `HttpException` étendant
+`RuntimeException`, ils ont été typés sans casser les `catch` existants —
+`422 INVALID_WALLET_ID`, `CURRENCY_MISMATCH`, `CURRENCY_NOT_SUPPORTED`,
+`INSUFFICIENT_AVAILABLE_BALANCE`.
+
+Un test verrouille l'ordre des blocs : `HttpException` **avant** `Throwable`.
+Les inverser transformerait chaque refus métier en erreur générique sans
+qu'aucun test fonctionnel ne bronche.
+
+### Deux mutations ont survécu — et ont révélé de vrais trous de test
+
+C'est le résultat le plus utile de ces trois boucles.
+
+1. **Filtre d'ancienneté supprimé** : aucun test ne tombait. Le cas « paiement
+   récent » utilisait une saga `processing`, dont la protection masquait le
+   filtre d'âge. Test réécrit pour isoler l'ancienneté **seule**.
+2. **Oracle réintroduit** : le test d'isolation acceptait n'importe quelle
+   exception. Il compare désormais **statut et code** entre les deux cas.
+
+Un test vert ne prouve rien tant qu'on n'a pas vérifié qu'il sait échouer.
+
+### Chiffres
+
+| Élément | Boucle 7 | Fin boucle 9 |
+|---|---|---|
+| Tests / assertions | 367 / 1613 | **389 / 1664** |
+| CRITICAL ouverts | 2 (non détectés) | **0** |
+| HIGH ouverts | 2 (non détectés) | **0** |
+| Privilège fondé sur une valeur client | 2 surfaces | **0** |
+| États financiers terminaux sans reprise | 1 | **0** |
+| Fuites de structure interne | 5 sites | **0** |
