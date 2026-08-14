@@ -65,6 +65,18 @@ final class SecretRedactor
     public static function redactArray(array $input): array
     {
         foreach ($input as $key => $value) {
+            // Descente RÉCURSIVE.
+            //
+            // La version précédente ne parcourait que le premier niveau : un
+            // secret imbriqué (réponse de provider, corps de webhook,
+            // metadata structurée) traversait la redaction intact. Les
+            // charges utiles réelles étant presque toujours imbriquées, la
+            // protection ne couvrait en pratique que le cas le plus simple.
+            if (is_array($value)) {
+                $input[$key] = self::redactArray($value);
+                continue;
+            }
+
             if (is_string($key) && self::isSensitiveKey($key) && is_string($value)) {
                 $input[$key] = self::redact($value);
             }
