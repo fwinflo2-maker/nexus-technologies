@@ -21,21 +21,24 @@ OUT="$DIR/database/full_schema.sql"
 MYSQL=(mysql -h"$HOST" -P3306 -u"$USER" -p"$PASS")
 
 # Ordre canonique, identique à migrate.sh.
-FILES=(
-  "database/schema.sql"
-  "database/migrations/2026_08_10_oauth_phone.sql"
-  "database/migrations/2026_08_10_dashboard.sql"
-  "database/migrations/2026_08_10_notifications.sql"
-  "database/migrations/2026_08_10_payment_accounts.sql"
-  "database/migrations/2026_08_10_provider_credentials.sql"
-  "database/migrations/2026_08_10_quotes.sql"
-  "database/migrations/2026_08_10_kyc_origins.sql"
-  "database/migrations/2026_08_10_wallet_core.sql"
-  "database/migrations/2026_08_11_add_hold_operation_type.sql"
-  "database/migrations/2026_08_12_add_expires_at_to_wallet_operations.sql"
-  "database/migrations/2026_08_14_transfer_execution.sql"
-  "database/migrations/2026_08_14_business_suite.sql"
-)
+# Liste des fichiers SQL : lue depuis database/migrations.manifest
+# (source de vérité unique, partagée avec database/migrate.sh).
+MANIFEST="$DIR/database/migrations.manifest"
+if [[ ! -f "$MANIFEST" ]]; then
+  echo "ERREUR : manifeste introuvable : $MANIFEST" >&2
+  exit 1
+fi
+FILES=("database/schema.sql")
+while IFS= read -r line; do
+  line="${line%%#*}"
+  line="$(echo "$line" | xargs)"
+  [[ -z "$line" ]] && continue
+  FILES+=("database/migrations/$line")
+done < "$MANIFEST"
+if [[ ${#FILES[@]} -eq 0 ]]; then
+  echo "ERREUR : aucune migration listée dans $MANIFEST" >&2
+  exit 1
+fi
 
 echo "==> Reconstruction de \`$BUILD_DB\` via les migrations"
 "${MYSQL[@]}" -e "DROP DATABASE IF EXISTS \`$BUILD_DB\`;

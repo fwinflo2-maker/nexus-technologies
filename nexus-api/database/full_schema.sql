@@ -115,6 +115,7 @@ CREATE TABLE `ledger_entries` (
   `metadata` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`metadata`)),
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_ledger_operation_sequence` (`operation_id`,`sequence`),
   KEY `idx_ledger_operation` (`operation_id`),
   KEY `idx_ledger_wallet_time` (`wallet_id`,`created_at`),
   KEY `idx_ledger_ref` (`reference_type`,`reference_id`),
@@ -244,7 +245,7 @@ CREATE TABLE `provider_credentials` (
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_provider_creds` (`user_id`,`provider_slug`),
+  UNIQUE KEY `uq_provider_creds_env` (`user_id`,`provider_slug`,`environment`),
   CONSTRAINT `fk_provider_creds_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;

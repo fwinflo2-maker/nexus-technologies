@@ -25,29 +25,24 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 echo "==> Schéma de base (schema.sql)"
 "${MYSQL[@]}" < "$DIR/schema.sql"
 
-MIGRATIONS=(
-  # 0.2 — Auth étendue (Google OAuth + téléphone)
-  "2026_08_10_oauth_phone.sql"
-  # 0.3 — Dashboard (états de solde sur wallets)
-  "2026_08_10_dashboard.sql"
-  # 0.4 — Notifications + comptes de paiement
-  "2026_08_10_notifications.sql"
-  "2026_08_10_payment_accounts.sql"
-  # 0.5 — Credentials providers (chiffrées)
-  "2026_08_10_provider_credentials.sql"
-  # 0.6 — Quotes + KYC résidence/origines
-  "2026_08_10_quotes.sql"
-  "2026_08_10_kyc_origins.sql"
-  # 0.7 — Wallet Core (ledger double-entrée, holds, idempotence, fx cache)
-  "2026_08_10_wallet_core.sql"
-  # 0.8 — Hold lifecycle + expiration des opérations
-  "2026_08_11_add_hold_operation_type.sql"
-  "2026_08_12_add_expires_at_to_wallet_operations.sql"
-  # 0.9 — Transfer execution (traçabilité quote/route/montants)
-  "2026_08_14_transfer_execution.sql"
-  # 0.10 — Business suite (bénéficiaires, paiements, équipe, réconciliation)
-  "2026_08_14_business_suite.sql"
-)
+# Liste des migrations : lue depuis database/migrations.manifest
+# (source de vérité unique, partagée avec build_full_schema.sh et compare_schemas.sh).
+MANIFEST="$DIR/migrations.manifest"
+if [[ ! -f "$MANIFEST" ]]; then
+  echo "ERREUR : manifeste introuvable : $MANIFEST" >&2
+  exit 1
+fi
+MIGRATIONS=()
+while IFS= read -r line; do
+  line="${line%%#*}"
+  line="$(echo "$line" | xargs)"
+  [[ -z "$line" ]] && continue
+  MIGRATIONS+=("$line")
+done < "$MANIFEST"
+if [[ ${#MIGRATIONS[@]} -eq 0 ]]; then
+  echo "ERREUR : aucune migration listée dans $MANIFEST" >&2
+  exit 1
+fi
 
 for m in "${MIGRATIONS[@]}"; do
   echo "==> Migration $m"

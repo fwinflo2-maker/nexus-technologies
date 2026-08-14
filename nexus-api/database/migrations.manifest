@@ -1,0 +1,41 @@
+# NEXUS — Manifeste des migrations (SOURCE DE VÉRITÉ UNIQUE).
+#
+# Ordre d'application des migrations, appliqué APRÈS database/schema.sql.
+#
+# Ce fichier est lu par :
+#   - database/migrate.sh          (installation par migrations)
+#   - scripts/build_full_schema.sh (génération de database/full_schema.sql)
+#   - scripts/compare_schemas.sh   (contrôle d'équivalence des deux chemins)
+#
+# POURQUOI : ces trois scripts embarquaient chacun leur propre copie de la
+# liste. Ajouter une migration sans mettre à jour les trois produisait un
+# `full_schema.sql` périmé ET un compare_schemas.sh qui affichait PASS en
+# comparant deux installations périmées identiques — un faux PASS silencieux.
+#
+# RÈGLE : toute nouvelle migration s'ajoute ICI, et nulle part ailleurs.
+# Format : un nom de fichier par ligne (relatif à database/migrations/).
+# Les lignes vides et celles commençant par # sont ignorées.
+
+# 0.2 — Auth étendue (Google OAuth + téléphone)
+2026_08_10_oauth_phone.sql
+# 0.3 — Dashboard (états de solde sur wallets)
+2026_08_10_dashboard.sql
+# 0.4 — Notifications + comptes de paiement
+2026_08_10_notifications.sql
+2026_08_10_payment_accounts.sql
+# 0.5 — Credentials providers (chiffrées)
+2026_08_10_provider_credentials.sql
+# 0.6 — Quotes + KYC résidence/origines
+2026_08_10_quotes.sql
+2026_08_10_kyc_origins.sql
+# 0.7 — Wallet Core (ledger double-entrée, holds, idempotence, fx cache)
+2026_08_10_wallet_core.sql
+# 0.8 — Hold lifecycle + expiration des opérations
+2026_08_11_add_hold_operation_type.sql
+2026_08_12_add_expires_at_to_wallet_operations.sql
+# 0.9 — Transfer execution (traçabilité quote/route/montants)
+2026_08_14_transfer_execution.sql
+# 0.10 — Business suite (bénéficiaires, paiements, équipe, réconciliation)
+2026_08_14_business_suite.sql
+# 0.11 — Contraintes d'intégrité (unicité ledger, séparation sandbox/prod)
+2026_08_14_integrity_constraints.sql
