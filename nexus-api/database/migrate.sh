@@ -55,3 +55,8 @@ for m in "${MIGRATIONS[@]}"; do
 done
 
 echo "==> Terminé : schéma + ${#MIGRATIONS[@]} migrations appliquées."
+echo
+echo "Structure seule : aucune donnée de démonstration n'a été insérée."
+echo "Jeux de démo (SANDBOX UNIQUEMENT, jamais en production) :"
+echo "  mysql ... < database/seeds/demo_fx_rates.sql"
+echo "  (echo 'SET @NEXUS_ALLOW_DEMO_SEED = 1;'; cat database/seeds/demo_payment_accounts.sql) | mysql ..."

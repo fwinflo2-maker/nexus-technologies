@@ -163,20 +163,15 @@ CREATE TABLE IF NOT EXISTS fx_rates_cache (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ==========================================================================
--- Seed de démonstration FX (taux issus de l'audit, cohérents avec les
--- taux hardcodés actuels dans Currency.php, QuoteEngine, IntentEngine).
--- TTL 24 h à partir de l'application de la migration.
+-- Seed FX de démonstration — DÉPLACÉ
+--
+-- Cette migration préchargeait 12 taux de change dans `fx_rates_cache` avec
+-- un TTL de 24 h. Ce sont des données d'exploitation, pas de la structure :
+-- en production, le cache doit être alimenté par une source de taux réelle,
+-- pas par des valeurs figées dans une migration (§8).
+--
+-- Aucune régression fonctionnelle : `ManualRateProvider` fournit déjà ces
+-- mêmes taux en PHP lorsque le cache ne contient pas la paire demandée.
+--
+-- Jeu de démonstration : database/seeds/demo_fx_rates.sql  (SANDBOX ONLY)
 -- ==========================================================================
-INSERT INTO fx_rates_cache (base_currency, quote_currency, rate, source, fetched_at, expires_at) VALUES
-    ('EUR', 'USD',  1.08700000, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
-    ('EUR', 'GBP',  0.85500000, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
-    ('EUR', 'XAF',  655.95700000, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
-    ('EUR', 'XOF',  655.95700000, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
-    ('EUR', 'NGN',  1650.00000000, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
-    ('EUR', 'GHS',  14.80000000, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
-    ('EUR', 'KES',  141.00000000, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
-    ('EUR', 'USDT', 1.08700000, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
-    ('EUR', 'USDC', 1.08700000, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
-    ('USD', 'EUR',  0.92000000, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
-    ('GBP', 'EUR',  1.17000000, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
-    ('XAF', 'EUR',  0.00152400, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR));

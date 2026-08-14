@@ -72,35 +72,14 @@ WHERE country_of_residence IS NULL
   AND kyc_level != 'none';
 
 -- ==========================================================================
--- 6. Origine de démonstration : ajouter un compte source Ghana vérifié
---    pour illustrer le cas multi-origine (résidence CG, sources CG + GH)
+-- 6. Origine de démonstration — DÉPLACÉE
+--
+-- Cette migration insérait un compte source « Mobile Money Ghana — MTN »
+-- marqué `verified` pour un maximum de 10 utilisateurs réels. Une migration
+-- de structure ne doit pas créer de source de financement vérifiée : une
+-- source vérifiée autorise des transferts (§4), et une donnée de démo n'a
+-- rien à faire dans un schéma de production (§8).
+--
+-- Le jeu de démonstration vit désormais dans :
+--     database/seeds/demo_payment_accounts.sql   (SANDBOX / DEVELOPMENT ONLY)
 -- ==========================================================================
-
-INSERT INTO payment_accounts
-    (user_id, role, kind, label, holder_name, country, currency,
-     operator, phone_enc, is_default, verification_status,
-     supported_for_transfer, status, created_at)
-SELECT
-    u.id,
-    'source',
-    'mobile_money',
-    'Mobile Money Ghana — MTN',
-    u.full_name,
-    'GH',
-    'GHS',
-    'MTN Mobile Money',
-    -- phone_enc chiffré : valeur de démo (le Crypto::encrypt PHP ne peut pas
-    -- être reproduit en SQL pur — on laisse NULL pour le seed SQL ;
-    -- le seed PHP dans AccountController le chiffre correctement)
-    NULL,
-    0,
-    'verified',
-    1,
-    'active',
-    NOW()
-FROM users u
-WHERE NOT EXISTS (
-    SELECT 1 FROM payment_accounts pa
-    WHERE pa.user_id = u.id AND pa.role = 'source' AND pa.country = 'GH'
-)
-LIMIT 10;
