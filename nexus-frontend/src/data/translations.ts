@@ -152,6 +152,7 @@ export const translations: Record<LangCode, TranslationDict> = {
     reg_terms_and: 'et la',
     reg_terms_privacy: 'politique de confidentialité.',
     fp_err_email: 'Veuillez entrer une adresse e-mail valide.',
+    fp_err_unavailable: "La réinitialisation par e-mail n'est pas encore disponible. Contactez le support pour retrouver l'accès à votre compte.",
     // Auth - Google OAuth
     auth_google_btn: 'Continuer avec Google',
     auth_google_separator: 'ou avec',
@@ -355,6 +356,7 @@ export const translations: Record<LangCode, TranslationDict> = {
     reg_terms_and: 'and the',
     reg_terms_privacy: 'privacy policy.',
     fp_err_email: 'Please enter a valid email address.',
+    fp_err_unavailable: 'Email password reset is not available yet. Please contact support to regain access to your account.',
     // Auth - Google OAuth
     auth_google_btn: 'Continue with Google',
     auth_google_separator: 'or with',
@@ -557,6 +559,7 @@ export const translations: Record<LangCode, TranslationDict> = {
     reg_terms_and: 'y la',
     reg_terms_privacy: 'política de privacidad.',
     fp_err_email: 'Introduzca una dirección de correo válida.',
+    fp_err_unavailable: 'El restablecimiento por correo aún no está disponible. Contacte con soporte para recuperar el acceso a su cuenta.',
     dash_balance_pill: 'EUR → XAF Piloto',
     dash_logout: 'Cerrar sesión',
     // Landing
@@ -755,6 +758,7 @@ export const translations: Record<LangCode, TranslationDict> = {
     reg_terms_and: 'e a',
     reg_terms_privacy: 'política de privacidade.',
     fp_err_email: 'Digite um endereço de e-mail válido.',
+    fp_err_unavailable: 'A redefinição por e-mail ainda não está disponível. Contacte o suporte para recuperar o acesso à sua conta.',
     dash_balance_pill: 'EUR → XAF Piloto',
     dash_logout: 'Sair',
     // Landing
@@ -953,6 +957,7 @@ export const translations: Record<LangCode, TranslationDict> = {
     reg_terms_and: 'und die',
     reg_terms_privacy: 'Datenschutzrichtlinie.',
     fp_err_email: 'Bitte geben Sie eine gültige E-Mail-Adresse ein.',
+    fp_err_unavailable: 'Das Zurücksetzen per E-Mail ist noch nicht verfügbar. Bitte wenden Sie sich an den Support, um wieder Zugang zu Ihrem Konto zu erhalten.',
     dash_balance_pill: 'EUR → XAF Pilot',
     dash_logout: 'Abmelden',
     // Landing
@@ -1151,6 +1156,7 @@ export const translations: Record<LangCode, TranslationDict> = {
     reg_terms_and: 'و',
     reg_terms_privacy: 'سياسة الخصوصية.',
     fp_err_email: 'يرجى إدخال عنوان بريد إلكتروني صالح.',
+    fp_err_unavailable: 'إعادة تعيين كلمة المرور عبر البريد الإلكتروني غير متاحة بعد. يرجى الاتصال بالدعم لاستعادة الوصول إلى حسابك.',
     dash_balance_pill: 'EUR → XAF تجريبي',
     dash_logout: 'تسجيل الخروج',
     // Landing
@@ -1349,6 +1355,7 @@ export const translations: Record<LangCode, TranslationDict> = {
     reg_terms_and: '和',
     reg_terms_privacy: '隐私政策。',
     fp_err_email: '请输入有效的邮箱地址。',
+    fp_err_unavailable: '暂不支持通过邮箱重置密码。请联系客服以恢复账户访问权限。',
     dash_balance_pill: 'EUR → XAF 试点',
     dash_logout: '退出登录',
     // Landing

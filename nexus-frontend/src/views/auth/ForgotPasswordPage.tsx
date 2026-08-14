@@ -8,8 +8,6 @@ import { ParticlesBackground } from '../../components/ParticlesBackground';
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
-  const [sent, setSent] = useState(false);
-  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { t } = useI18n();
 
@@ -20,10 +18,21 @@ export default function ForgotPasswordPage() {
       setError(t('fp_err_email'));
       return;
     }
-    setLoading(true);
-    await new Promise(r => setTimeout(r, 1000));
-    setLoading(false);
-    setSent(true);
+    // FAUX SUCCÈS SUPPRIMÉ.
+    //
+    // Cette fonction attendait une seconde puis affichait « e-mail envoyé ».
+    // Aucun e-mail n'était envoyé : il n'existe AUCUNE route de
+    // réinitialisation côté API, aucune table de jetons, et aucune capacité
+    // d'envoi d'e-mail configurée (ni SMTP, ni service tiers).
+    //
+    // Un utilisateur qui a réellement perdu son mot de passe attendait donc
+    // indéfiniment un message qui n'arriverait jamais.
+    //
+    // La fonctionnalité est BLOQUÉE sur une dépendance externe (fournisseur
+    // d'e-mail transactionnel + décision produit sur la durée de vie du
+    // jeton). Tant qu'elle n'est pas implémentée côté backend, l'interface
+    // doit le DIRE, et orienter l'utilisateur vers un canal qui fonctionne.
+    setError(t('fp_err_unavailable'));
   }
 
   return (
@@ -41,51 +50,32 @@ export default function ForgotPasswordPage() {
               <LanguageSwitcher />
             </div>
 
-            {!sent ? (
-              <>
-                <h1 className="auth-title">{t('fp_title')}</h1>
-                <p className="auth-subtitle">
-                  {t('fp_subtitle')}
-                </p>
+              <h1 className="auth-title">{t('fp_title')}</h1>
+              <p className="auth-subtitle">
+                {t('fp_subtitle')}
+              </p>
 
-                <form className="auth-form" onSubmit={handleSubmit} noValidate>
-                  <div>
-                    <label htmlFor="reset-email" className="form-label">{t('fp_email_label')}</label>
-                    <input
-                      id="reset-email"
-                      type="email"
-                      className="form-control"
-                      placeholder={t('fp_email_placeholder')}
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      autoFocus
-                      autoComplete="email"
-                    />
-                  </div>
+              <form className="auth-form" onSubmit={handleSubmit} noValidate>
+                <div>
+                  <label htmlFor="reset-email" className="form-label">{t('fp_email_label')}</label>
+                  <input
+                    id="reset-email"
+                    type="email"
+                    className="form-control"
+                    placeholder={t('fp_email_placeholder')}
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    autoFocus
+                    autoComplete="email"
+                  />
+                </div>
 
-                  {error && <div className="auth-error">{error}</div>}
+                {error && <div className="auth-error">{error}</div>}
 
-                  <button type="submit" className="btn btn-glow btn-block btn-lg" disabled={loading}>
-                    {loading ? <><span className="spinner" /> {t('fp_sending')}</> : t('fp_submit')}
-                  </button>
-                </form>
-              </>
-            ) : (
-              <div style={{ textAlign: 'center', padding: '2rem 0' }}>
-                <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>✉️</div>
-                <h1 className="auth-title">{t('fp_sent_title')}</h1>
-                <p className="auth-subtitle">
-                  {t('fp_sent_text').replace('{email}', email)}
-                </p>
-                <button
-                  className="btn btn-ghost btn-lg"
-                  style={{ marginTop: '1.5rem' }}
-                  onClick={() => navigate('/login')}
-                >
-                  {t('fp_back_login')}
+                <button type="submit" className="btn btn-glow btn-block btn-lg">
+                  {t('fp_submit')}
                 </button>
-              </div>
-            )}
+              </form>
           </div>
 
           <aside className="auth-panel-side">
