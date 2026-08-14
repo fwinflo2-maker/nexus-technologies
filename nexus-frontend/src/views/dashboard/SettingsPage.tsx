@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { apiGetUserProfile, apiUpdateProfile, apiUpdatePassword, apiGetSessions, apiRevokeSession, type UserProfile, type UserSession } from '../api/client';
+import { apiGetUserProfile, apiUpdateProfile, apiUpdatePassword, apiGetSessions, apiRevokeSession, type UserProfile, type UserSession } from '../../api/client';
 
 /**
  * Page Paramètres — Gestion complète du compte utilisateur.

@@ -16,6 +16,7 @@ use Nexus\Controllers\IntentController;
 use Nexus\Controllers\NotificationController;
 use Nexus\Controllers\ProviderCredentialController;
 use Nexus\Controllers\QuoteController;
+use Nexus\Controllers\TransferController;
 use Nexus\Controllers\UserController;
 use Nexus\Controllers\WalletController;
 use Nexus\Core\Database;
@@ -147,6 +148,11 @@ $router->get('/intent/authorized-origins', [IntentController::class, 'authorized
 // --- Quote & Routing Engine : devises multi-providers (protégé) ----------
 $router->post('/quotes', [QuoteController::class, 'create']);
 $router->get('/quotes/{id}', [QuoteController::class, 'get']);
+
+// --- Transfer Execution : saga réelle (protégé) -----------------------------
+$router->post('/transfers', [TransferController::class, 'execute']);
+$router->get('/transfers', [TransferController::class, 'index']);
+$router->get('/transfers/{id}', [TransferController::class, 'show']);
 
 // --- User Profile (protégé) ----------------------------------------------------
 $router->get('/users/me', [UserController::class, 'me']);

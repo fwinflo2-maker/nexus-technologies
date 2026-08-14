@@ -20,7 +20,7 @@ const CURRENCY_META: Record<string, { flag: string; symbol: string; label: strin
 
 export default function ConvertPage() {
   const [wallets, setWallets] = useState<WalletState[]>([]);
-  const [coverage, setCoverage] = useState<IntentCoverageData | null>(null);
+  const [, setCoverage] = useState<IntentCoverageData | null>(null);
   const [fromCurrency, setFromCurrency] = useState<string>('EUR');
   const [toCurrency, setToCurrency] = useState<string>('XAF');
   const [amount, setAmount] = useState<string>('');
@@ -81,8 +81,6 @@ export default function ConvertPage() {
       setQuote(null);
     }, 2000);
   };
-
-  const availableCurrencies = wallets.map(w => w.currency);
 
   return (
     <div className="page">

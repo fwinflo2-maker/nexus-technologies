@@ -202,6 +202,40 @@ export interface WalletTxListData {
   items: WalletTx[];
 }
 
+/** Transaction de transfert exécutée (source : table `transactions`). */
+export interface TransferTx {
+  id: number;
+  quote_id: string | null;
+  route_id: string | null;
+  type: 'send' | 'receive' | 'fx' | 'convert';
+  direction: 'in' | 'out' | 'fx';
+  label: string;
+  description: string | null;
+  amount: number;
+  currency: string;
+  amount_ref: number | null;
+  ref_currency: string | null;
+  amount_xaf: number | null;
+  dest_amount: number | null;
+  dest_currency: string | null;
+  fx_rate: number | null;
+  fee: number | null;
+  fee_currency: string | null;
+  status: 'completed' | 'processing' | 'pending' | 'failed' | 'cancelled';
+  provider: string | null;
+  destination: string | null;
+  execution_time_seconds: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TransfersListData {
+  items: TransferTx[];
+  page: number;
+  per_page: number;
+  total: number;
+}
+
 export type NotificationType = 'transfert' | 'quote' | 'kyc' | 'securite' | 'business' | 'systeme';
 
 export interface ApiNotification {
@@ -481,6 +515,53 @@ export async function apiCreateQuote(payload: {
  */
 export async function apiGetQuote(id: string): Promise<ApiResponse<QuoteDetailData>> {
   return request<QuoteDetailData>('GET', `/quotes/${encodeURIComponent(id)}`);
+}
+
+/**
+ * Exécute une route de quote (POST /api/transfers).
+ * Déclenche la saga réelle : hold → capture → ledger → transaction.
+ */
+export async function apiExecuteTransfer(payload: {
+  quote_id: string;
+  route_id: string;
+  idempotency_key?: string;
+}): Promise<ApiResponse<TransferTx>> {
+  const res = await request<{ transaction: TransferTx }>(
+    'POST',
+    '/transfers',
+    payload as unknown as Record<string, unknown>,
+  );
+  if (res.success && res.data) {
+    return { success: true, data: res.data.transaction };
+  }
+  return { success: false, error: res.error, code: res.code };
+}
+
+/** Historique réel des transferts (GET /api/transfers). */
+export async function apiTransfersList(params?: {
+  page?: number;
+  per_page?: number;
+  type?: string;
+  status?: string;
+  currency?: string;
+}): Promise<ApiResponse<TransfersListData>> {
+  const q = new URLSearchParams();
+  if (params?.page) q.set('page', String(params.page));
+  if (params?.per_page) q.set('per_page', String(params.per_page));
+  if (params?.type) q.set('type', params.type);
+  if (params?.status) q.set('status', params.status);
+  if (params?.currency) q.set('currency', params.currency);
+  const qs = q.toString();
+  return request<TransfersListData>('GET', `/transfers${qs ? `?${qs}` : ''}`);
+}
+
+/** Détail d'une transaction (GET /api/transfers/:id). */
+export async function apiTransferDetail(id: number): Promise<ApiResponse<TransferTx>> {
+  const res = await request<{ transaction: TransferTx }>('GET', `/transfers/${id}`);
+  if (res.success && res.data) {
+    return { success: true, data: res.data.transaction };
+  }
+  return { success: false, error: res.error, code: res.code };
 }
 
 // --- Helpers -----------------------------------------------------------------
@@ -865,14 +946,14 @@ export async function apiGetUserProfile(): Promise<ApiResponse<{ user: UserProfi
 export async function apiUpdateProfile(
   payload: UpdateProfilePayload,
 ): Promise<ApiResponse<{ updated: boolean }>> {
-  return request<{ updated: boolean }>('PUT', '/users/me', payload);
+  return request<{ updated: boolean }>('PUT', '/users/me', payload as unknown as Record<string, unknown>);
 }
 
 /** Change le mot de passe (PUT /api/users/me/password). */
 export async function apiUpdatePassword(
   payload: UpdatePasswordPayload,
 ): Promise<ApiResponse<{ updated: boolean }>> {
-  return request<{ updated: boolean }>('PUT', '/users/me/password', payload);
+  return request<{ updated: boolean }>('PUT', '/users/me/password', payload as unknown as Record<string, unknown>);
 }
 
 /** Liste les sessions actives (GET /api/users/me/sessions). */

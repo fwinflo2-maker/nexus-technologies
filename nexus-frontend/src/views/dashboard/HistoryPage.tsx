@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import {
-  apiWalletsList,
-  type WalletTx,
+  apiTransfersList,
+  type TransferTx,
 } from '../../api/client';
 
 type FilterType = 'all' | 'send' | 'receive' | 'convert' | 'fx';
@@ -17,34 +17,29 @@ const CURRENCY_META: Record<string, { flag: string; symbol: string }> = {
 };
 
 export default function HistoryPage() {
-  const [transactions, setTransactions] = useState<WalletTx[]>([]);
+  const [transactions, setTransactions] = useState<TransferTx[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<FilterType>('all');
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
   const [filterCurrency, setFilterCurrency] = useState<string>('all');
 
+  // L'historique provient EXCLUSIVEMENT de l'API (GET /api/transfers).
+  // Aucune donnée fictive : si l'utilisateur n'a pas de transactions,
+  // l'état vide est affiché proprement.
   const fetchTransactions = useCallback(async () => {
     setLoading(true);
-    // Charger les transactions de toutes les devises
-    const currencies = ['EUR', 'USD', 'XAF', 'USDT'];
-    const allTxs: WalletTx[] = [];
-    
-    for (const currency of currencies) {
-      // Simulation - à remplacer par un appel API réel
-      // const resp = await apiWalletTransactions(currency);
-      // if (resp.success && resp.data) allTxs.push(...resp.data.items);
+    setError(null);
+
+    const res = await apiTransfersList({ per_page: 100 });
+
+    if (!res.success || !res.data) {
+      setError(res.error || 'Impossible de charger l\'historique.');
+      setLoading(false);
+      return;
     }
-    
-    // Données de démonstration
-    const demoTxs: WalletTx[] = [
-      { id: 1, type: 'send', direction: 'out', label: 'Transfert vers Mobile Money', description: 'Envoi vers MTN CG', amount: 500, currency: 'EUR', status: 'completed', provider: 'Thunes', destination: 'Congo', created_at: new Date().toISOString() },
-      { id: 2, type: 'receive', direction: 'in', label: 'Réception virement SEPA', description: null, amount: 1200, currency: 'EUR', status: 'completed', provider: null, destination: null, created_at: new Date(Date.now() - 86400000).toISOString() },
-      { id: 3, type: 'convert', direction: 'fx', label: 'Conversion EUR → XAF', description: null, amount: 300, currency: 'EUR', status: 'completed', provider: 'Internal', destination: null, created_at: new Date(Date.now() - 172800000).toISOString() },
-      { id: 4, type: 'send', direction: 'out', label: 'Transfert vers IBAN', description: null, amount: 750, currency: 'EUR', status: 'pending', provider: 'Onafriq', destination: 'Cameroun', created_at: new Date(Date.now() - 259200000).toISOString() },
-      { id: 5, type: 'receive', direction: 'in', label: 'Réception Mobile Money', description: null, amount: 50000, currency: 'XAF', status: 'completed', provider: 'pawaPay', destination: null, created_at: new Date(Date.now() - 345600000).toISOString() },
-    ];
-    
-    setTransactions(demoTxs);
+
+    setTransactions(res.data.items);
     setLoading(false);
   }, []);
 
@@ -57,7 +52,7 @@ export default function HistoryPage() {
     return true;
   });
 
-  const formatAmount = (tx: WalletTx): string => {
+  const formatAmount = (tx: TransferTx): string => {
     const meta = CURRENCY_META[tx.currency];
     const formatted = tx.amount.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const sign = tx.direction === 'in' ? '+' : tx.direction === 'out' ? '−' : '';
@@ -85,6 +80,17 @@ export default function HistoryPage() {
     }
   };
 
+  const statusLabel = (status: string): string => {
+    switch (status) {
+      case 'completed': return '✓ Terminé';
+      case 'pending': return '⏳ En attente';
+      case 'processing': return '⚙ En cours';
+      case 'failed': return '✕ Échoué';
+      case 'cancelled': return 'Annulé';
+      default: return status;
+    }
+  };
+
   const typeLabel = (type: string): string => {
     const labels: Record<string, string> = {
       send: '↗ Envoi',
@@ -105,7 +111,7 @@ export default function HistoryPage() {
         <div className="page-label">NEXUS</div>
         <div className="page-title">Historique des transactions</div>
         <p style={{ marginTop: 10, fontSize: 13, color: 'var(--text-mid)' }}>
-          Consultez toutes vos opérations financières.
+          Consultez toutes vos opérations financières enregistrées dans le ledger.
         </p>
       </motion.div>
 
@@ -166,14 +172,29 @@ export default function HistoryPage() {
               ✕ Reset
             </button>
           )}
+
+          <button
+            onClick={fetchTransactions}
+            className="pill p-c"
+            style={{ cursor: 'pointer', fontSize: 12, marginLeft: 'auto' }}
+          >
+            ↻ Actualiser
+          </button>
         </div>
       </motion.div>
 
-      {/* Liste des transactions */}
+      {/* États : chargement / erreur / vide / liste */}
       {loading ? (
         <div className="card card-hi-c" style={{ padding: 40, textAlign: 'center' }}>
           <div className="nexus-spinner" />
           <p style={{ marginTop: 16, color: 'var(--text-mid)' }}>Chargement de l'historique…</p>
+        </div>
+      ) : error ? (
+        <div className="card card-hi-g" style={{ padding: 40, textAlign: 'center' }}>
+          <div style={{ fontSize: 34, marginBottom: 12 }}>⚠️</div>
+          <h3 style={{ color: 'var(--text-bright)', marginBottom: 8 }}>Erreur de chargement</h3>
+          <p style={{ color: 'var(--text-mid)', marginBottom: 16 }}>{error}</p>
+          <button className="se-cta" onClick={fetchTransactions} style={{ fontSize: 12 }}>↻ Réessayer</button>
         </div>
       ) : filteredTxs.length === 0 ? (
         <motion.div 
@@ -183,8 +204,12 @@ export default function HistoryPage() {
           animate={{ opacity: 1, scale: 1 }}
         >
           <div style={{ fontSize: 48, marginBottom: 16 }}>📭</div>
-          <h3 style={{ color: 'var(--text-bright)', marginBottom: 8 }}>Aucune transaction</h3>
-          <p style={{ color: 'var(--text-mid)' }}>Aucune transaction ne correspond à vos filtres.</p>
+          <h3 style={{ color: 'var(--text-bright)', marginBottom: 8 }}>No transactions yet</h3>
+          <p style={{ color: 'var(--text-mid)' }}>
+            {transactions.length === 0
+              ? 'Aucune transaction pour le moment. Lancez un premier envoi pour la voir apparaître ici.'
+              : 'Aucune transaction ne correspond à vos filtres.'}
+          </p>
         </motion.div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -204,7 +229,10 @@ export default function HistoryPage() {
 
               {/* Infos */}
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-bright)', marginBottom: 2 }}>{tx.label}</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-bright)', marginBottom: 2 }}>
+                  {tx.label}
+                  {tx.route_id && <span className="mono" style={{ fontSize: 10, color: 'var(--text-dim)', marginLeft: 8 }}>route {tx.route_id}</span>}
+                </div>
                 <div style={{ fontSize: 11, color: 'var(--text-mid)' }}>
                   {typeLabel(tx.type)} • {formatDate(tx.created_at)}
                   {tx.provider && ` • ${tx.provider}`}
@@ -218,7 +246,7 @@ export default function HistoryPage() {
                   {formatAmount(tx)}
                 </div>
                 <span className={`pill ${statusClass(tx.status)}`} style={{ fontSize: 10 }}>
-                  {tx.status === 'completed' ? '✓ Terminé' : tx.status === 'pending' ? '⏳ En attente' : tx.status === 'processing' ? '⚙ En cours' : '✕ ' + tx.status}
+                  {statusLabel(tx.status)}
                 </span>
               </div>
             </motion.div>

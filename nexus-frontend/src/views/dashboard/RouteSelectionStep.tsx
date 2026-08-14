@@ -1,9 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Link } from 'react-router-dom';
 import {
   apiCreateQuote,
+  apiExecuteTransfer,
   type QuoteRoute,
   type QuoteData,
+  type TransferTx,
 } from '../../api/client';
 
 /**
@@ -176,6 +179,9 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
   const [error, setError] = useState<string | null>(null);
   const [remaining, setRemaining] = useState(0);
   const [expired, setExpired] = useState(false);
+  const [executing, setExecuting] = useState(false);
+  const [executionError, setExecutionError] = useState<string | null>(null);
+  const [executedTx, setExecutedTx] = useState<TransferTx | null>(null);
 
   // Pipeline animation
   const [pipeStep, setPipeStep] = useState(0);
@@ -240,10 +246,28 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
   const selectedRoute = routes.find(r => r.id === selected) ?? routes[0];
   const amountSent = intent.amount ?? 0;
 
-  const handleConfirm = () => {
-    if (expired || !quote || !selectedRoute) return;
-    sessionStorage.setItem('nexus_selected_route', JSON.stringify({ quoteId: quote.id, routeId: selectedRoute.id, route: selectedRoute, intent: quote.intent }));
-    alert('Route sélectionnée ! L\'étape Confirmation & Exécution sera implémentée dans la prochaine itération.');
+  const handleConfirm = async () => {
+    if (expired || !quote || !selectedRoute || executing) return;
+    setExecuting(true);
+    setExecutionError(null);
+
+    const idemKey = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+    const res = await apiExecuteTransfer({
+      quote_id: quote.id,
+      route_id: selectedRoute.id,
+      idempotency_key: idemKey,
+    });
+
+    setExecuting(false);
+
+    if (res.success && res.data) {
+      setExecutedTx(res.data);
+    } else {
+      setExecutionError(res.error || 'Échec de l\'exécution du transfert.');
+    }
   };
 
   // ── Countdown color ────────────────────────────────────
@@ -325,6 +349,60 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
           <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
             <button className="se-cta" onClick={fetchQuote}>↻ Nouvelles routes</button>
             <button className="se-cta se-cta-ghost" onClick={onBack}>← Retour au résumé</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Succès : transaction exécutée ─────────────────────────
+  if (executedTx) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
+        <div className="card card-hi-gr" style={{ padding: 40, textAlign: 'center', maxWidth: 560 }}>
+          <div style={{ fontSize: 34, marginBottom: 12 }}>✅</div>
+          <h2 style={{ color: 'var(--green)', marginBottom: 10, fontSize: 20 }}>Transfert exécuté</h2>
+          <p style={{ color: 'var(--text-mid)', marginBottom: 20, fontSize: 13, lineHeight: 1.6 }}>
+            Votre opération a été réglée, enregistrée dans le ledger et ajoutée à votre historique.
+          </p>
+          <div className="card" style={{ padding: 16, textAlign: 'left', marginBottom: 20 }}>
+            {([
+              ['Référence', `#${executedTx.id}`],
+              ['Statut', executedTx.status === 'completed' ? 'Terminé' : executedTx.status],
+              ['Envoyé', `${executedTx.amount.toLocaleString('fr-FR')} ${executedTx.currency}`],
+              ['Frais', executedTx.fee != null ? `${executedTx.fee.toLocaleString('fr-FR')} ${executedTx.fee_currency ?? executedTx.currency}` : '—'],
+              ['Montant reçu', executedTx.dest_amount != null ? `${executedTx.dest_amount.toLocaleString('fr-FR')} ${executedTx.dest_currency ?? ''}` : '—'],
+              ['Taux FX', executedTx.fx_rate != null ? executedTx.fx_rate.toLocaleString('fr-FR', { maximumFractionDigits: 4 }) : '—'],
+              ['Provider', executedTx.provider ?? '—'],
+              ['Route', executedTx.route_id ?? '—'],
+              ['Destination', executedTx.destination ?? '—'],
+            ] as [string, string][]).map(([k, v]) => (
+              <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+                <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>{k}</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-bright)', fontFamily: 'var(--font-mono)' }}>{v}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+            <Link to="/history" className="se-cta">Voir l'historique</Link>
+            <Link to="/send" className="se-cta se-cta-ghost">Nouvel envoi</Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Erreur d'exécution ────────────────────────────────────
+  if (executionError) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
+        <div className="card card-hi-g" style={{ padding: 40, textAlign: 'center', maxWidth: 520 }}>
+          <div style={{ fontSize: 30, marginBottom: 12 }}>⚠️</div>
+          <h2 style={{ color: 'var(--gold)', marginBottom: 10, fontSize: 18 }}>Exécution impossible</h2>
+          <p style={{ color: 'var(--text-mid)', marginBottom: 20, fontSize: 13, lineHeight: 1.6 }}>{executionError}</p>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+            <button className="se-cta" onClick={handleConfirm}>↻ Réessayer</button>
+            <button className="se-cta se-cta-ghost" onClick={onBack}>← Retour</button>
           </div>
         </div>
       </div>
@@ -460,7 +538,9 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
               <button className="se-cta se-cta-ghost" onClick={onBack}>← Modifier</button>
-              <button className="se-cta" onClick={handleConfirm} style={{ flex: 1 }}>✓ Confirmer et exécuter</button>
+              <button className="se-cta" onClick={handleConfirm} disabled={executing || expired} style={{ flex: 1, opacity: executing || expired ? 0.55 : 1 }}>
+                {executing ? 'Exécution en cours…' : '✓ Confirmer et exécuter'}
+              </button>
             </div>
           </motion.div>
         )}

@@ -18,6 +18,7 @@ import SendPage from './views/dashboard/SendPage';
 import ReceivePage from './views/dashboard/ReceivePage';
 import ConvertPage from './views/dashboard/ConvertPage';
 import HistoryPage from './views/dashboard/HistoryPage';
+import PlaceholderPage from './views/dashboard/PlaceholderPage';
 import './styles/design-system.css';
 import './styles/dashboard-system.css';
 
