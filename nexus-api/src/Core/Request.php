@@ -23,12 +23,17 @@ final class Request
     private array $params = [];
     private array $attributes = [];
 
-    public function __construct()
+    /**
+     * @param array|null $body Corps pré-décodé. Réservé aux tests : en HTTP réel
+     *                         le corps est toujours lu depuis `php://input`, qui
+     *                         n'est pas rejouable depuis PHPUnit.
+     */
+    public function __construct(?array $body = null)
     {
         $this->method  = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
         $this->headers = $this->parseHeaders();
         $this->query   = $_GET ?? [];
-        $this->body    = $this->parseBody();
+        $this->body    = $body ?? $this->parseBody();
         $this->path    = $this->parsePath();
     }
 
@@ -57,6 +62,45 @@ final class Request
     public function body(): array
     {
         return $this->body;
+    }
+
+    /**
+     * Adresse IP du client, pour la journalisation d'audit.
+     *
+     * Les en-têtes de proxy ne sont lus que si `TRUSTED_PROXY` est activé :
+     * `X-Forwarded-For` est falsifiable par le client et ne doit jamais être
+     * pris pour argent comptant en frontal direct. La première entrée de la
+     * liste est l'IP d'origine, les suivantes étant les proxys traversés.
+     */
+    public function ipAddress(): ?string
+    {
+        $trustProxy = defined('TRUSTED_PROXY')
+            ? (bool) constant('TRUSTED_PROXY')
+            : filter_var(getenv('TRUSTED_PROXY') ?: 'false', FILTER_VALIDATE_BOOL);
+
+        if ($trustProxy) {
+            $forwarded = (string) $this->header('X-Forwarded-For', '');
+            if ($forwarded !== '') {
+                $first = trim(explode(',', $forwarded)[0]);
+                if (filter_var($first, FILTER_VALIDATE_IP) !== false) {
+                    return $first;
+                }
+            }
+        }
+
+        $remote = $_SERVER['REMOTE_ADDR'] ?? null;
+
+        return is_string($remote) && filter_var($remote, FILTER_VALIDATE_IP) !== false
+            ? $remote
+            : null;
+    }
+
+    /** User-Agent du client, tronqué pour la journalisation d'audit. */
+    public function userAgent(): ?string
+    {
+        $agent = $this->header('User-Agent', '');
+
+        return $agent === '' ? null : mb_substr((string) $agent, 0, 255);
     }
 
     /** Valeur d'une clé du corps de la requête. */

@@ -7,6 +7,7 @@ namespace Nexus\Tests;
 use Nexus\Core\Database;
 use Nexus\Core\Request;
 use Nexus\Core\Response;
+use Nexus\Core\ResponseSent;
 use Nexus\Controllers\UserController;
 use PHPUnit\Framework\TestCase;
 
@@ -32,6 +33,10 @@ final class UserControllerTest extends TestCase
 
     public static function setUpBeforeClass(): void
     {
+        // Sans ce mode, Response::json() appelle exit et tue le process PHPUnit
+        // au premier contrôleur invoqué : toute la suite devenait insaisissable.
+        Response::enableTestMode(true);
+
         $pdo = Database::getConnection();
         
         // Créer un utilisateur de test
@@ -86,6 +91,8 @@ final class UserControllerTest extends TestCase
 
     public static function tearDownAfterClass(): void
     {
+        Response::enableTestMode(false);
+
         $pdo = Database::getConnection();
         
         // Nettoyer les tokens révoqués
@@ -114,22 +121,25 @@ final class UserControllerTest extends TestCase
         $_SERVER['REQUEST_METHOD'] = 'GET';
         $_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . self::$authToken;
         
-        $request = new Request();
+        $request = new Request($putBody ?? null);
         
         // Capturer la réponse
-        ob_start();
         try {
-            UserController::me($request);
-            $output = ob_get_clean();
+            $output = '';
+            try {
+                UserController::me($request);
+            } catch (ResponseSent $sent) {
+                $output = $sent->body();
+            }
+
             $data = json_decode($output, true);
             
             $this->assertEquals(200, http_response_code());
             $this->assertArrayHasKey('success', $data);
             $this->assertTrue($data['success']);
-            $this->assertArrayHasKey('user', $data);
-            $this->assertEquals(self::$testUserId, $data['user']['id']);
+            $this->assertArrayHasKey('user', $data['data']);
+            $this->assertEquals(self::$testUserId, $data['data']['user']['id']);
         } catch (\Exception $e) {
-            ob_end_clean();
             $this->fail('Exception levée : ' . $e->getMessage());
         }
     }
@@ -142,12 +152,16 @@ final class UserControllerTest extends TestCase
         $_SERVER['REQUEST_METHOD'] = 'GET';
         unset($_SERVER['HTTP_AUTHORIZATION']);
         
-        $request = new Request();
+        $request = new Request($putBody ?? null);
         
         $this->expectException(\Nexus\Core\HttpException::class);
-        $this->expectExceptionCode(401);
-        
-        UserController::me($request);
+
+        try {
+            UserController::me($request);
+        } catch (\Nexus\Core\HttpException $e) {
+            $this->assertSame(401, $e->statusCode());
+            throw $e;
+        }
     }
 
     /**
@@ -160,32 +174,35 @@ final class UserControllerTest extends TestCase
         $_SERVER['CONTENT_TYPE'] = 'application/json';
         
         // Simuler les données POST
-        $GLOBALS['_PUT'] = [
+        $putBody = [
             'full_name' => 'Test User Updated',
             'phone' => '+242069876543',
             'country_of_residence' => 'CG',
         ];
         
-        $request = new Request();
+        $request = new Request($putBody ?? null);
         
-        ob_start();
         try {
-            UserController::updateProfile($request);
-            $output = ob_get_clean();
+            $output = '';
+            try {
+                UserController::updateProfile($request);
+            } catch (ResponseSent $sent) {
+                $output = $sent->body();
+            }
+
             $data = json_decode($output, true);
             
             $this->assertEquals(200, http_response_code());
             $this->assertArrayHasKey('success', $data);
             $this->assertTrue($data['success']);
-            $this->assertArrayHasKey('updated', $data);
-            $this->assertTrue($data['updated']);
+            $this->assertArrayHasKey('updated', $data['data']);
+            $this->assertTrue($data['data']['updated']);
         } catch (\Exception $e) {
-            ob_end_clean();
             $this->fail('Exception levée : ' . $e->getMessage());
         }
         
         // Nettoyer
-        unset($GLOBALS['_PUT']);
+        $putBody = null;
     }
 
     /**
@@ -198,19 +215,19 @@ final class UserControllerTest extends TestCase
         $_SERVER['CONTENT_TYPE'] = 'application/json';
         
         $longName = str_repeat('A', 121);
-        $GLOBALS['_PUT'] = [
+        $putBody = [
             'full_name' => $longName,
         ];
         
-        $request = new Request();
+        $request = new Request($putBody ?? null);
         
-        $this->expectException(\Nexus\Core\HttpException::class);
+        $this->expectException(ResponseSent::class);
         $this->expectExceptionCode(400);
         
         try {
             UserController::updateProfile($request);
         } finally {
-            unset($GLOBALS['_PUT']);
+        $putBody = null;
         }
     }
 
@@ -223,27 +240,30 @@ final class UserControllerTest extends TestCase
         $_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . self::$authToken;
         $_SERVER['CONTENT_TYPE'] = 'application/json';
         
-        $GLOBALS['_PUT'] = [
+        $putBody = [
             'current_password' => 'TestPassword123!',
             'new_password' => 'NewSecurePass789!',
             'confirm_password' => 'NewSecurePass789!',
         ];
         
-        $request = new Request();
+        $request = new Request($putBody ?? null);
         
-        ob_start();
         try {
-            UserController::updatePassword($request);
-            $output = ob_get_clean();
+            $output = '';
+            try {
+                UserController::updatePassword($request);
+            } catch (ResponseSent $sent) {
+                $output = $sent->body();
+            }
+
             $data = json_decode($output, true);
             
             $this->assertEquals(200, http_response_code());
             $this->assertArrayHasKey('success', $data);
             $this->assertTrue($data['success']);
-            $this->assertArrayHasKey('updated', $data);
-            $this->assertTrue($data['updated']);
+            $this->assertArrayHasKey('updated', $data['data']);
+            $this->assertTrue($data['data']['updated']);
         } catch (\Exception $e) {
-            ob_end_clean();
             $this->fail('Exception levée : ' . $e->getMessage());
         }
         
@@ -254,8 +274,7 @@ final class UserControllerTest extends TestCase
             ':hash' => password_hash('TestPassword123!', PASSWORD_DEFAULT),
             ':id' => self::$testUserId,
         ]);
-        
-        unset($GLOBALS['_PUT']);
+        $putBody = null;
     }
 
     /**
@@ -267,21 +286,21 @@ final class UserControllerTest extends TestCase
         $_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . self::$authToken;
         $_SERVER['CONTENT_TYPE'] = 'application/json';
         
-        $GLOBALS['_PUT'] = [
+        $putBody = [
             'current_password' => 'WrongPassword!',
             'new_password' => 'NewSecurePass789!',
             'confirm_password' => 'NewSecurePass789!',
         ];
         
-        $request = new Request();
+        $request = new Request($putBody ?? null);
         
-        $this->expectException(\Nexus\Core\HttpException::class);
+        $this->expectException(ResponseSent::class);
         $this->expectExceptionCode(400);
         
         try {
             UserController::updatePassword($request);
         } finally {
-            unset($GLOBALS['_PUT']);
+        $putBody = null;
         }
     }
 
@@ -294,21 +313,21 @@ final class UserControllerTest extends TestCase
         $_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . self::$authToken;
         $_SERVER['CONTENT_TYPE'] = 'application/json';
         
-        $GLOBALS['_PUT'] = [
+        $putBody = [
             'current_password' => 'TestPassword123!',
             'new_password' => 'NewSecurePass789!',
             'confirm_password' => 'DifferentPass!',
         ];
         
-        $request = new Request();
+        $request = new Request($putBody ?? null);
         
-        $this->expectException(\Nexus\Core\HttpException::class);
+        $this->expectException(ResponseSent::class);
         $this->expectExceptionCode(400);
         
         try {
             UserController::updatePassword($request);
         } finally {
-            unset($GLOBALS['_PUT']);
+        $putBody = null;
         }
     }
 
@@ -321,21 +340,21 @@ final class UserControllerTest extends TestCase
         $_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . self::$authToken;
         $_SERVER['CONTENT_TYPE'] = 'application/json';
         
-        $GLOBALS['_PUT'] = [
+        $putBody = [
             'current_password' => 'TestPassword123!',
             'new_password' => 'short',
             'confirm_password' => 'short',
         ];
         
-        $request = new Request();
+        $request = new Request($putBody ?? null);
         
-        $this->expectException(\Nexus\Core\HttpException::class);
+        $this->expectException(ResponseSent::class);
         $this->expectExceptionCode(400);
         
         try {
             UserController::updatePassword($request);
         } finally {
-            unset($GLOBALS['_PUT']);
+        $putBody = null;
         }
     }
 
@@ -347,21 +366,24 @@ final class UserControllerTest extends TestCase
         $_SERVER['REQUEST_METHOD'] = 'GET';
         $_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . self::$authToken;
         
-        $request = new Request();
+        $request = new Request($putBody ?? null);
         
-        ob_start();
         try {
-            UserController::sessions($request);
-            $output = ob_get_clean();
+            $output = '';
+            try {
+                UserController::sessions($request);
+            } catch (ResponseSent $sent) {
+                $output = $sent->body();
+            }
+
             $data = json_decode($output, true);
             
             $this->assertEquals(200, http_response_code());
             $this->assertArrayHasKey('success', $data);
             $this->assertTrue($data['success']);
-            $this->assertArrayHasKey('sessions', $data);
-            $this->assertIsArray($data['sessions']);
+            $this->assertArrayHasKey('sessions', $data['data']);
+            $this->assertIsArray($data['data']['sessions']);
         } catch (\Exception $e) {
-            ob_end_clean();
             $this->fail('Exception levée : ' . $e->getMessage());
         }
     }
@@ -377,20 +399,24 @@ final class UserControllerTest extends TestCase
         $testJti = bin2hex(random_bytes(16));
         
         // Créer une requête avec le JTI dans la route
-        $request = new Request();
-        $request->setRouteParams(['id' => $testJti]);
+        $request = new Request($putBody ?? null);
+        $request->setParams(['id' => $testJti]);
         
-        ob_start();
         try {
-            UserController::revokeSession($request);
-            $output = ob_get_clean();
+            $output = '';
+            try {
+                UserController::revokeSession($request);
+            } catch (ResponseSent $sent) {
+                $output = $sent->body();
+            }
+
             $data = json_decode($output, true);
             
             $this->assertEquals(200, http_response_code());
             $this->assertArrayHasKey('success', $data);
             $this->assertTrue($data['success']);
-            $this->assertArrayHasKey('revoked', $data);
-            $this->assertTrue($data['revoked']);
+            $this->assertArrayHasKey('revoked', $data['data']);
+            $this->assertTrue($data['data']['revoked']);
             
             // Vérifier que le token est bien dans revoked_tokens
             $pdo = Database::getConnection();
@@ -402,7 +428,6 @@ final class UserControllerTest extends TestCase
             $count = (int) $stmt->fetchColumn();
             $this->assertEquals(1, $count);
         } catch (\Exception $e) {
-            ob_end_clean();
             $this->fail('Exception levée : ' . $e->getMessage());
         }
     }
@@ -415,10 +440,10 @@ final class UserControllerTest extends TestCase
         $_SERVER['REQUEST_METHOD'] = 'DELETE';
         $_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . self::$authToken;
         
-        $request = new Request();
-        $request->setRouteParams(['id' => '']);
+        $request = new Request($putBody ?? null);
+        $request->setParams(['id' => '']);
         
-        $this->expectException(\Nexus\Core\HttpException::class);
+        $this->expectException(ResponseSent::class);
         $this->expectExceptionCode(400);
         
         UserController::revokeSession($request);
@@ -439,18 +464,21 @@ final class UserControllerTest extends TestCase
         $_SERVER['REQUEST_METHOD'] = 'GET';
         $_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . self::$authToken;
         
-        $request = new Request();
+        $request = new Request($putBody ?? null);
         
-        ob_start();
         try {
-            UserController::me($request);
-            $output = ob_get_clean();
+            $output = '';
+            try {
+                UserController::me($request);
+            } catch (ResponseSent $sent) {
+                $output = $sent->body();
+            }
+
             $data = json_decode($output, true);
             
-            $this->assertEquals(self::$testUserId, $data['user']['id']);
-            $this->assertNotEquals(self::$secondUserId, $data['user']['id']);
+            $this->assertEquals(self::$testUserId, $data['data']['user']['id']);
+            $this->assertNotEquals(self::$secondUserId, $data['data']['user']['id']);
         } catch (\Exception $e) {
-            ob_end_clean();
             $this->fail('Exception levée : ' . $e->getMessage());
         }
     }
@@ -464,17 +492,17 @@ final class UserControllerTest extends TestCase
         $_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . self::$authToken;
         $_SERVER['CONTENT_TYPE'] = 'application/json';
         
-        $GLOBALS['_PUT'] = [];
+        $putBody = [];
         
-        $request = new Request();
+        $request = new Request($putBody ?? null);
         
-        $this->expectException(\Nexus\Core\HttpException::class);
+        $this->expectException(ResponseSent::class);
         $this->expectExceptionCode(400);
         
         try {
             UserController::updateProfile($request);
         } finally {
-            unset($GLOBALS['_PUT']);
+        $putBody = null;
         }
     }
 }

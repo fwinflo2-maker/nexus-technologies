@@ -14,6 +14,27 @@ namespace Nexus\Core;
  */
 final class Response
 {
+    /**
+     * Mode test : lorsque `true`, `json()` lève une ResponseSent au lieu
+     * d'appeler `exit`, ce qui permet à PHPUnit de piloter les contrôleurs
+     * en direct sans que le process de test soit tué au premier envoi.
+     *
+     * Reste `false` en production : le comportement HTTP est inchangé.
+     */
+    private static bool $testMode = false;
+
+    /** Active/désactive le mode test (appelé uniquement par la suite de tests). */
+    public static function enableTestMode(bool $enabled = true): void
+    {
+        self::$testMode = $enabled;
+    }
+
+    /** Indique si le mode test est actif. */
+    public static function isTestMode(): bool
+    {
+        return self::$testMode;
+    }
+
     /** Envoie un payload JSON quelconque et termine le script. */
     public static function json(mixed $payload, int $status = 200): never
     {
@@ -32,6 +53,12 @@ final class Response
                 'error'   => 'Erreur interne du serveur',
                 'code'    => '500',
             ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }
+
+        // En test, on remonte la réponse au lieu d'écrire sur la sortie standard
+        // et de tuer le process PHPUnit.
+        if (self::$testMode) {
+            throw new ResponseSent($status, $json);
         }
 
         echo $json;

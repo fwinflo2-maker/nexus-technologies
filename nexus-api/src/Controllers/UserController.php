@@ -44,7 +44,6 @@ final class UserController
         }
 
         $pdo = Database::getConnection();
-        $pdo->beginTransaction();
 
         try {
             $updates = [];
@@ -65,11 +64,16 @@ final class UserController
                 $params[':country_of_residence'] = $countryOfResidence;
             }
 
+            // Validation AVANT l'ouverture de la transaction : Response::badRequest()
+            // interrompt le flux (exit en prod, exception en test) et laissait
+            // sinon une transaction ouverte sur la connexion PDO partagée.
             if (empty($updates)) {
                 Response::badRequest('Aucune donnée à mettre à jour.');
             }
 
             $params[':id'] = $userId;
+
+            $pdo->beginTransaction();
 
             $sql = 'UPDATE users SET ' . implode(', ', $updates) . ', updated_at = NOW() WHERE id = :id';
             $stmt = $pdo->prepare($sql);
@@ -82,7 +86,9 @@ final class UserController
 
             Response::success(['updated' => true]);
         } catch (\PDOException $e) {
-            $pdo->rollBack();
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
             Response::serverError('Erreur lors de la mise à jour du profil.');
         }
     }
@@ -147,11 +153,15 @@ final class UserController
         $pdo = Database::getConnection();
 
         // Récupérer les tokens révoqués pour identifier les sessions invalides
+        // NB : `revoked_tokens` ne possède pas de colonne `created_at`
+        // (schéma : id, jti, user_id, revoked_at, expires_at). Le tri se fait
+        // donc sur `revoked_at`, sans quoi MySQL renvoie une erreur 1054 et
+        // l'endpoint répond 500.
         $stmt = $pdo->prepare(
-            'SELECT jti, expires_at, revoked_at 
-             FROM revoked_tokens 
-             WHERE user_id = :id 
-             ORDER BY created_at DESC'
+            'SELECT jti, expires_at, revoked_at
+             FROM revoked_tokens
+             WHERE user_id = :id
+             ORDER BY revoked_at DESC'
         );
         $stmt->execute([':id' => $userId]);
         $revokedTokens = $stmt->fetchAll(\PDO::FETCH_ASSOC);
@@ -169,7 +179,9 @@ final class UserController
         $request = AuthMiddleware::handle($request);
         $user = $request->attribute('user');
         $userId = (int) $user['id'];
-        $jti = $request->route('id');
+        // Les paramètres d'URL sont exposés par param() ; route() n'existe pas
+        // sur Request et provoquait une Error fatale (HTTP 500) à chaque appel.
+        $jti = $request->param('id');
 
         if ($jti === null || $jti === '') {
             Response::badRequest('Identifiant de session invalide.');
@@ -177,15 +189,19 @@ final class UserController
 
         $pdo = Database::getConnection();
 
-        // Insérer dans revoked_tokens
+        // `expires_at` est NOT NULL sans valeur par défaut : l'omettre faisait
+        // échouer l'INSERT (SQLSTATE 1364) et rendait la révocation impossible.
+        // On aligne l'expiration de l'entrée sur la durée de vie du JWT : au-delà,
+        // le token est de toute façon invalide et la ligne peut être purgée.
         $stmt = $pdo->prepare(
-            'INSERT INTO revoked_tokens (user_id, jti, revoked_at) 
-             VALUES (:user_id, :jti, NOW())
+            'INSERT INTO revoked_tokens (user_id, jti, revoked_at, expires_at)
+             VALUES (:user_id, :jti, NOW(), :expires_at)
              ON DUPLICATE KEY UPDATE revoked_at = NOW()'
         );
         $stmt->execute([
-            ':user_id' => $userId,
-            ':jti' => $jti,
+            ':user_id'    => $userId,
+            ':jti'        => $jti,
+            ':expires_at' => date('Y-m-d H:i:s', time() + (int) JWT_TTL),
         ]);
 
         // Audit log
