@@ -387,3 +387,69 @@ requête-filet qui échoue à la moindre divergence.
 | Tests HTTP réels | 0 sur ce chemin | **6** |
 | Mutations détectées | — | **6/6** |
 | Opérations provider | 0/6 | **0/6** (vérifié en HTTP réel) |
+
+---
+
+## Boucle de résolution continue — boucles 1 à 6
+
+Reprise après réinitialisation complète de l'environnement d'exécution (PHP,
+MariaDB et le répertoire de données avaient disparu ; seul le dépôt a
+survécu). Toolchain reconstruite, migrations rejouées depuis le manifeste,
+baseline **re-vérifiée depuis zéro** : 325 tests / 1422 assertions, conforme
+au rapport précédent. Seule divergence constatée : le bit exécutable de deux
+scripts (755 → 644), sans changement de contenu — restauré.
+
+### Découvertes et corrections
+
+| # | Sévérité | Constat | État |
+|---|---|---|---|
+| 1 | **CRITICAL** | `createHold()` ne vérifiait pas la propriété du wallet. `wallet_id` venant du client, un utilisateur authentifié pouvait geler les fonds d'autrui. **Exploitation reproduite** : solde disponible de la victime 1000 → 500. | Corrigé |
+| 2 | **HIGH** | `WalletController::hold` ne construisait aucun `ExecutionContext` : l'environnement du hold venait de la configuration serveur. | Corrigé |
+| 3 | **HIGH** | `PaymentController::execute` lisait le paiement sans verrou puis écrivait `executing` sans condition : deux requêtes concurrentes exécutaient **deux fois** le même ordre approuvé. | Corrigé |
+| 4 | **MEDIUM→HIGH** | `SecretRedactor::redactArray()` ne descendait pas dans les tableaux : tout secret imbriqué (réponse provider, corps de webhook) traversait la redaction intact. | Corrigé |
+| 5 | MEDIUM | `approve`, `reject` et la transition générique présentaient le même motif lecture-puis-écriture. | Corrigé |
+| 6 | MEDIUM | Aucun test ne verrouillait l'absence de secret dans les réponses HTTP, ni l'isolation des quotes, ni l'honnêteté des 6 opérations provider. | Comblé |
+
+### Faux positifs écartés (vérifiés, non corrigés)
+
+`TransferController`, `NotificationController` et `ReconciliationController`
+construisent leur clause `WHERE` dynamiquement : l'inspection montre que le
+filtre `user_id` y est toujours présent. Les webhooks KYC étaient déjà
+couverts (signature, rejeu, isolation d'environnement, audit sans secret) —
+23 tests existants que mon premier `grep` avait manqués.
+
+### Matrice de mutations (phase 20)
+
+Six classes de protection neutralisées une à une, chacune restaurée et
+vérifiée par `md5sum` :
+
+| Mutation | Tests en échec |
+|---|---|
+| Environnement ignoré (guard neutralisé) | 12 |
+| Autorisation production supprimée | 4 |
+| Idempotence sans environnement | 3 |
+| Contrôle tenant supprimé | 1 |
+| Redaction récursive supprimée | 1 |
+| Faux succès d'un adaptateur provider | 2 |
+
+### Phase 15 — premier provider réel : BLOCKED
+
+`PROVIDER_STRIPE_{SANDBOX,PRODUCTION}_API_KEY` existent mais sont **vides**,
+et aucune credential n'est en base. Implémenter une opération réelle
+supposerait d'inventer une clé ou de simuler la réponse du provider : les deux
+sont exclus. Le contrat d'adaptateur, le resolver, la garde d'environnement et
+les tests d'erreur sont en place et attendent une credential réelle.
+
+**22 providers / 0 opération implémentée** — vérifié en HTTP réel, et
+désormais verrouillé par 24 tests qui échoueraient si un adaptateur se mettait
+à répondre sans implémentation.
+
+### Chiffres
+
+| Élément | Début de boucle | Fin |
+|---|---|---|
+| Tests / assertions | 325 / 1422 | **367 / 1613** |
+| CRITICAL ouverts | 1 (non détecté) | **0** |
+| HIGH ouverts | 3 (non détectés) | **0** |
+| Chemins financiers sans contexte | 1 | **0** |
+| Courses critiques sur les statuts | 4 | **0** |
