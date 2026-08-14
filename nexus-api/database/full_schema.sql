@@ -460,7 +460,7 @@ CREATE TABLE `wallet_operations` (
   `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   `completed_at` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_op_idempotency` (`idempotency_key`),
+  UNIQUE KEY `uq_op_idempotency_env` (`idempotency_key`,`environment`),
   KEY `idx_op_user_status` (`user_id`,`status`),
   KEY `idx_op_user_created` (`user_id`,`created_at`),
   KEY `fk_op_source_wallet` (`source_wallet_id`),

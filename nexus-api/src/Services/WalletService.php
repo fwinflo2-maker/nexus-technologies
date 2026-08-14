@@ -683,6 +683,11 @@ final class WalletService
      */
     public static function transferMultiCurrency(TransferRequest $req): TransferResult
     {
+        // Phase 1 — l'environnement voyage avec la requête ; il n'est jamais
+        // redéduit de la configuration serveur au moment de l'exécution.
+        $context = $req->getContext();
+        $reqEnv  = $context?->environmentValue();
+
         $userId         = $req->getUserId();
         $sourceWalletId = $req->getSourceWalletId();
         $destWalletId   = $req->getDestWalletId();
@@ -734,7 +739,7 @@ final class WalletService
         // ──────────────────────────────────────────────────────────────────
         $useIdempotency = $idempotencyKey !== null && $idempotencyKey !== '';
         if ($useIdempotency) {
-            $cached = IdempotencyService::check($idempotencyKey, $userId);
+            $cached = IdempotencyService::check($idempotencyKey, $userId, $reqEnv);
             if ($cached !== null) {
                 if ($cached['status'] === 'completed') {
                     // Replay : réponse précédente, aucune nouvelle écriture.
@@ -781,7 +786,7 @@ final class WalletService
         // 5. Idempotence — start (réservation de la clé)
         // ──────────────────────────────────────────────────────────────────
         if ($useIdempotency) {
-            $state = IdempotencyService::start($idempotencyKey, $userId, $operationId);
+            $state = IdempotencyService::start($idempotencyKey, $userId, $operationId, $reqEnv);
             if (!$state['created']) {
                 // Collision (requête concurrente ou état préexistant).
                 if ($state['status'] === 'completed') {
@@ -819,7 +824,8 @@ final class WalletService
                 $metadata,
                 $fxRate,
                 $fxSource,
-                $operationId
+                $operationId,
+                $context
             );
 
             $result = new TransferResult(
@@ -837,7 +843,7 @@ final class WalletService
             // futurs replays (même transaction : tout est annulé ensemble si
             // complete() échoue).
             if ($useIdempotency) {
-                IdempotencyService::complete($idempotencyKey, $userId, $result->toArray(), $operationId);
+                IdempotencyService::complete($idempotencyKey, $userId, $result->toArray(), $operationId, $reqEnv);
             }
 
             if ($ownsTransaction) {
@@ -853,7 +859,7 @@ final class WalletService
             // L'échec est mémorisé sur la clé (status=error) pour les replays.
             if ($useIdempotency) {
                 try {
-                    IdempotencyService::fail($idempotencyKey, $userId, $e->getMessage(), $operationId);
+                    IdempotencyService::fail($idempotencyKey, $userId, $e->getMessage(), $operationId, $reqEnv);
                 } catch (Throwable $ignore) {
                     // Ne masque jamais l'erreur d'origine.
                 }
