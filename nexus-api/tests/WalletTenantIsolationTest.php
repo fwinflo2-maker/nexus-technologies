@@ -141,6 +141,60 @@ final class WalletTenantIsolationTest extends TestCase
         $this->assertSame(0, (int) $stmt->fetchColumn(), 'Aucune opération ne doit viser le wallet de la victime.');
     }
 
+    /**
+     * ANTI-ORACLE — « wallet inexistant » et « wallet d'autrui » doivent être
+     * STRICTEMENT indiscernables.
+     *
+     * Le contrôle de propriété répond 404 WALLET_NOT_FOUND plutôt que 403,
+     * précisément pour ne pas confirmer l'existence du wallet visé. Cette
+     * précaution s'effondre si l'identifiant inexistant produit une réponse
+     * DIFFÉRENTE : en comparant les deux, un attaquant énumère les wallets
+     * réellement existants, ce que le 404 cherchait à empêcher.
+     *
+     * Le défaut a existé : le wallet inexistant levait une RuntimeException
+     * (rendue en 500) tandis que le wallet d'autrui levait un 404. Les deux
+     * cas étaient donc parfaitement distinguables.
+     *
+     * Ce test compare statut ET code d'erreur — pas seulement « ça échoue ».
+     */
+    public function test_a_missing_wallet_is_indistinguishable_from_someone_elses(): void
+    {
+        $observe = function (int $walletId): array {
+            try {
+                WalletService::createHold(
+                    $this->attackerId,
+                    $walletId,
+                    '10.00000000',
+                    'EUR',
+                    null,
+                    'sonde anti-oracle',
+                    null,
+                    $this->context($this->attackerId)
+                );
+            } catch (HttpException $e) {
+                return ['status' => $e->statusCode(), 'code' => $e->errorCode()];
+            } catch (RuntimeException $e) {
+                // Une exception non typée serait rendue en 500 par le
+                // contrôleur : réponse différente, donc oracle.
+                return ['status' => 500, 'code' => 'INTERNAL_ERROR'];
+            }
+
+            $this->fail('Le hold aurait dû être refusé (wallet id=' . $walletId . ').');
+        };
+
+        $missing    = $observe(999_999_999);
+        $foreign    = $observe($this->victimWalletId);
+
+        $this->assertSame(
+            $foreign,
+            $missing,
+            'Un wallet inexistant et un wallet d\'autrui doivent produire exactement la même réponse, '
+            . 'sinon l\'endpoint devient un oracle d\'énumération des wallets existants.'
+        );
+        $this->assertSame(404, $missing['status']);
+        $this->assertSame('WALLET_NOT_FOUND', $missing['code']);
+    }
+
     // ══ 2. Le cas légitime reste possible ══════════════════════════════════
 
     /**

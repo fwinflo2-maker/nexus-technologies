@@ -69,7 +69,12 @@ final class WalletController
         } catch (HttpException $e) {
             Response::error($e->getMessage(), $e->statusCode(), $e->errorCode());
         } catch (\Throwable $e) {
-            Response::error($e->getMessage(), 400);
+            // Exception NON MAÎTRISÉE : ni le message ni le statut ne doivent
+            // renseigner le client. Un message PDO brut divulgue le SGBD et le
+            // nom des colonnes ; un 400 ferait porter au client la faute d'une
+            // panne serveur. Le détail part dans les journaux, pas en réponse.
+            error_log('[wallet] ' . $e::class . ': ' . $e->getMessage());
+            Response::serverError('Opération impossible pour le moment.');
         }
     }
 
@@ -98,7 +103,12 @@ final class WalletController
             // requête malformée : ne jamais le rétrograder en 400.
             Response::error($e->getMessage(), $e->statusCode(), $e->errorCode());
         } catch (\Throwable $e) {
-            Response::error($e->getMessage(), 400);
+            // Exception NON MAÎTRISÉE : ni le message ni le statut ne doivent
+            // renseigner le client. Un message PDO brut divulgue le SGBD et le
+            // nom des colonnes ; un 400 ferait porter au client la faute d'une
+            // panne serveur. Le détail part dans les journaux, pas en réponse.
+            error_log('[wallet] ' . $e::class . ': ' . $e->getMessage());
+            Response::serverError('Opération impossible pour le moment.');
         }
     }
 
@@ -127,7 +137,12 @@ final class WalletController
             // requête malformée : ne jamais le rétrograder en 400.
             Response::error($e->getMessage(), $e->statusCode(), $e->errorCode());
         } catch (\Throwable $e) {
-            Response::error($e->getMessage(), 400);
+            // Exception NON MAÎTRISÉE : ni le message ni le statut ne doivent
+            // renseigner le client. Un message PDO brut divulgue le SGBD et le
+            // nom des colonnes ; un 400 ferait porter au client la faute d'une
+            // panne serveur. Le détail part dans les journaux, pas en réponse.
+            error_log('[wallet] ' . $e::class . ': ' . $e->getMessage());
+            Response::serverError('Opération impossible pour le moment.');
         }
     }
 
@@ -200,7 +215,8 @@ final class WalletController
 
             Response::success(['holds' => $holds]);
         } catch (Throwable $e) {
-            Response::serverError('Erreur lors de la récupération des holds : ' . $e->getMessage());
+            error_log('[wallet] holds: ' . $e::class . ': ' . $e->getMessage());
+            Response::serverError('Erreur lors de la récupération des holds.');
         }
     }
 
@@ -221,7 +237,8 @@ final class WalletController
             // Récupère les soldes via WalletService (au lieu de requête SQL directe)
             $balances = WalletService::getAllBalances($userId);
         } catch (Throwable $e) {
-            Response::serverError('Erreur lors de la récupération des soldes: ' . $e->getMessage());
+            error_log('[wallet] balances: ' . $e::class . ': ' . $e->getMessage());
+            Response::serverError('Erreur lors de la récupération des soldes.');
         }
 
         // Indexe par devise pour accès rapide

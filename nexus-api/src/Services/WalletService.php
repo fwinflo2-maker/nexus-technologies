@@ -214,7 +214,14 @@ final class WalletService
             $wallet = $stmt->fetch();
 
             if (!$wallet) {
-                throw new RuntimeException("Wallet introuvable (id=$walletId).");
+                // Même réponse que « wallet d'autrui » ci-dessous : distinguer
+                // les deux cas ferait de l'endpoint un oracle d'énumération
+                // (500 = inexistant, 404 = existant mais à quelqu'un d'autre).
+                throw new HttpException(
+                    404,
+                    "Wallet introuvable (id=$walletId).",
+                    'WALLET_NOT_FOUND'
+                );
             }
 
             // ISOLATION MULTI-TENANT (correctif CRITICAL).
@@ -238,14 +245,14 @@ final class WalletService
             }
 
             if (strtoupper($wallet['currency']) !== strtoupper($currency)) {
-                throw new RuntimeException("Devise incohérente.");
+                throw new HttpException(422, "Devise incohérente.", 'CURRENCY_MISMATCH');
             }
 
             // 2. Vérification solde disponible
             $available = (string)$wallet['available_balance'];
             $amountDec = bcadd($amount, '0', 8);
             if (bccomp($available, $amountDec, 8) < 0) {
-                throw new RuntimeException("Solde disponible insuffisant pour le hold.");
+                throw new HttpException(422, "Solde disponible insuffisant pour le hold.", 'INSUFFICIENT_AVAILABLE_BALANCE');
             }
 
             // 3. Mise à jour projections
@@ -953,7 +960,7 @@ final class WalletService
     private static function assertWalletId(int $walletId): void
     {
         if ($walletId <= 0) {
-            throw new RuntimeException(sprintf('wallet_id invalide : %d (doit être > 0).', $walletId));
+            throw new HttpException(422, sprintf('wallet_id invalide : %d (doit être > 0).', $walletId), 'INVALID_WALLET_ID');
         }
     }
 
@@ -963,8 +970,10 @@ final class WalletService
     private static function assertCurrency(string $currency): void
     {
         if (!in_array($currency, self::SUPPORTED_CURRENCIES, true)) {
-            throw new RuntimeException(
-                sprintf('Devise non supportée : %s. Supportées : %s.', $currency, implode(', ', self::SUPPORTED_CURRENCIES))
+            throw new HttpException(
+                422,
+                sprintf('Devise non supportée : %s. Supportées : %s.', $currency, implode(', ', self::SUPPORTED_CURRENCIES)),
+                'CURRENCY_NOT_SUPPORTED'
             );
         }
     }
