@@ -240,3 +240,91 @@ Sources restaurées après chaque mutation (`md5sum -c` : OK).
    tests — pas par le moteur de base de données.
 5. **Les opérations réelles des providers restent non implémentées** (0/6),
    conformément au périmètre.
+
+---
+
+## Roadmap backend — phases 1 à 3
+
+Suite donnée à la propagation d'environnement. Chaque phase est validée par
+PHPUnit complet, audit du contrat SQL, comparaison de schéma, test de mutation
+et recherche de secrets avant d'être commitée.
+
+### Phase 1 — Complétude du contexte
+
+`transferMultiCurrency()` était le dernier chemin financier à résoudre son
+environnement implicitement : il lisait la configuration du serveur au moment
+de l'exécution, et non le contexte de la requête.
+
+`TransferRequest` transporte désormais un `ExecutionContext` optionnel
+(12ᵉ paramètre, rétrocompatible). L'environnement voyage avec la requête
+jusqu'au ledger et jusqu'aux quatre appels d'idempotence. **Aucun second
+resolver n'a été créé** : `ExecutionContext` reste la source unique.
+
+État constaté et assumé : cette méthode n'a aujourd'hui **aucun appelant de
+production** — ses seuls appels sont dans les tests. Le correctif la rend sûre
+avant qu'un appelant n'existe, plutôt qu'après.
+
+### Correctif HIGH découvert pendant l'audit
+
+La migration 0.14 avait scopé `idempotency_keys`. Un **second** espace de noms
+d'idempotence subsistait, non corrigé :
+
+    wallet_operations : UNIQUE (idempotency_key)
+
+Index global. Conséquence, reproduite par test avant correction :
+
+1. opération **sandbox** avec la clé K → opération créée ;
+2. opération **production** avec la clé K → `Duplicate entry`.
+
+Une opération de test rendait donc définitivement impossible l'exécution de la
+même clé en argent réel. La frontière d'environnement était franchie par la
+contrainte elle-même : un objet sandbox produisait un effet observable, et
+bloquant, sur la production.
+
+Migration **0.15** (idempotente) : `UNIQUE (idempotency_key, environment)`.
+
+### Phase 2 — Idempotence
+
+Tous les index UNIQUE de la base ont été passés en revue : après 0.15, plus
+aucun espace de noms d'idempotence n'ignore l'environnement.
+
+Les **caches** ont été vérifiés séparément, comme l'exige la phase.
+`ProviderRegistry` met les adaptateurs en cache par slug ; un adaptateur ne
+capture ni environnement ni credential à la construction et relit
+l'environnement à chaque appel. Le premier appelant ne fige donc pas
+l'environnement des suivants — comportement couvert par un test.
+
+Un **test-filet structurel** interroge `information_schema` et échoue si une
+migration future réintroduit un index d'idempotence global. Sa capacité à
+échouer a été prouvée en créant réellement un tel index.
+
+### Phase 3 — Journalisation
+
+Les événements du credential manager portaient leur environnement dans le JSON
+de métadonnées uniquement : lisible, mais ni filtrable ni ventilable. Ils
+alimentent désormais la **colonne** `environment`. Une valeur hors ENUM laisse
+la colonne à `NULL` plutôt que d'être remplacée par une valeur inventée.
+
+`SecretRedactor` est appliqué en défense en profondeur : aucun secret ne
+transite par ces métadonnées aujourd'hui, mais un ajout futur de champ ne
+pourra pas en faire fuiter un.
+
+Les événements `auth.*` restent **délibérément sans environnement**. Une
+authentification n'appartient à aucun environnement d'exécution ; lui en
+attribuer un artificiellement donnerait une information fausse à quiconque
+filtre le journal.
+
+### Chiffres
+
+| Élément | Avant | Après |
+|---|---|---|
+| Tests / assertions | 294 / 1323 | **310 / 1363** |
+| Espaces de noms d'idempotence globaux | 1 (`wallet_operations`) | **0** |
+| Chemins financiers à environnement implicite | 1 (`transferMultiCurrency`) | **0** |
+| Migrations idempotentes | 16 | **17** |
+| Opérations provider implémentées | 0/6 | **0/6** (inchangé, conforme §24) |
+
+Mutations vérifiées puis restaurées (`md5sum -c`) : fallback `PROVIDERS_ENV`
+dans `transferMultiCurrency`, contexte ignoré vers le ledger, redaction retirée
+du journal de credentials, index d'idempotence global réintroduit. Chacune fait
+échouer au moins un test.
