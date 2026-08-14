@@ -1,4 +1,8 @@
 # NEXUS CORP TECHNOLOGIES
+> ⚠️ **DOCUMENT SUPERSÉDÉ — « Nexus Pro » est supprimé.**
+> La vision actuelle (v6) est définie dans [./NEXUS-VISION.md](./NEXUS-VISION.md) — structure **Personal + Business + Connect** autour du **Nexus Core**. Ce document historique peut encore mentionner « Nexus Pro » ; ne pas réintroduire ce terme.
+>
+
 
 # NEXUS — ARCHITECTURE TECHNIQUE DÉTAILLÉE
 

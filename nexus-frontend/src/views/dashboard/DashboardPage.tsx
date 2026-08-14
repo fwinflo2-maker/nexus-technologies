@@ -252,15 +252,13 @@ export default function DashboardPage({ mode }: DashboardProps) {
           <Link to="/agents" className="btn btn-ghost" style={{ marginTop: 12, fontSize: 10 }}>Voir les recommandations</Link>
         </div>
 
-        {/* Nexus Pro */}
+        {/* Nexus Intelligence — le routing est une capacité du Core */}
         <div className="card glass-card" style={{ padding: 24, marginBottom: 30 }}>
-          <div className="page-label">Nexus Pro</div>
-          {summary.user.account_type === 'business' ? (
-            <div style={{ marginTop: 8, fontSize: 14, color: 'var(--text-bright)' }}>✓ Vous êtes membre Pro</div>
-          ) : (
-            <div style={{ marginTop: 8, fontSize: 14, color: 'var(--text-mid)' }}>Débloquez davantage de fonctionnalités avancées.</div>
-          )}
-          <Link to="/nexus-pro" className="btn btn-ghost" style={{ marginTop: 12, fontSize: 10 }}>{summary.user.account_type === 'business' ? 'Gérer Pro' : 'Découvrir Nexus Pro'}</Link>
+          <div className="page-label">Intelligence de routing</div>
+          <p style={{ marginTop: 8, fontSize: 14, color: 'var(--text-mid)' }}>
+            Nexus sélectionne automatiquement la meilleure route disponible pour chaque opération : coût, vitesse, montant reçu et fiabilité.
+          </p>
+          <Link to="/send" className="btn btn-ghost" style={{ marginTop: 12, fontSize: 10 }}>Nouveau transfert</Link>
         </div>
 
         {/* Activité et activité récente */}

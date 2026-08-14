@@ -1,4 +1,8 @@
 # NEXUS CORP TECHNOLOGIES
+> ⚠️ **DOCUMENT SUPERSÉDÉ — « Nexus Pro » est supprimé.**
+> La vision actuelle (v6) est définie dans [./NEXUS-VISION.md](./NEXUS-VISION.md) — structure **Personal + Business + Connect** autour du **Nexus Core**. Ce document historique peut encore mentionner « Nexus Pro » ; ne pas réintroduire ce terme.
+>
+
 
 # NEXUS — VISION & SPÉCIFICATION DU PRODUIT
 
@@ -9,7 +13,7 @@
 **Entreprise :** NEXUS CORP TECHNOLOGIES
 **Produit :** NEXUS
 **Types de comptes :** Personal / Business
-**Couche premium :** Nexus Pro
+**Surfaces produit :** Personal / Business / Connect
 **Couche intelligente :** Nexus Intelligence / Nexus AI
 **Infrastructure :** Nexus Core
 **API B2B :** Nexus Connect

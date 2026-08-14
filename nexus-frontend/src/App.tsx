@@ -104,7 +104,6 @@ function DashboardLayout() {
             <Route path="/receive" element={<><DashTopbar mode={effectiveMode} title="Recevoir" subtitle="Recevoir un transfert" /><ReceivePage /></>} />
             <Route path="/convert" element={<><DashTopbar mode={effectiveMode} title="Convertir" subtitle="Conversion de devises" /><ConvertPage /></>} />
             <Route path="/history" element={<><DashTopbar mode={effectiveMode} title="Historique" subtitle="Transactions" /><HistoryPage /></>} />
-            <Route path="/nexus-pro" element={<><DashTopbar mode={effectiveMode} title="Nexus Pro" subtitle="Intelligence financière" /><PlaceholderPage /></>} />
             <Route path="/notifications" element={<><DashTopbar mode={effectiveMode} title="Notifications" subtitle="Centre de notification" /><NotificationsPage /></>} />
 
             {/* Routes réservées exclusivement aux comptes Business */}

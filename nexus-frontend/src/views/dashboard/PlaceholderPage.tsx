@@ -3,7 +3,6 @@ import { useParams } from 'react-router-dom';
 const titles: Record<string, string> = {
   '/send': 'Envoyer de l\'argent',
   '/history': 'Historique des transactions',
-  '/nexus-pro': 'Nexus Pro — Intelligence financière',
   '/treasury': 'Trésorerie',
   '/payments': 'Paiements',
   '/approvals': 'Approbations',

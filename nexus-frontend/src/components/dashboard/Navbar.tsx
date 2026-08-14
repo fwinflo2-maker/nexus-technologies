@@ -37,7 +37,6 @@ const navAction: NavItem[] = [{ to: '/send', icon: '↗', label: 'Envoyer' }];
 
 /* ── Système ── */
 const navSystem: NavItem[] = [
-  { to: '/nexus-pro', icon: '★', label: 'Nexus Pro' },
   { to: '/kyc', icon: '⊗', label: 'KYC / KYB' },
   { to: '/agents', icon: '⚙', label: 'Agents IA' },
 ];

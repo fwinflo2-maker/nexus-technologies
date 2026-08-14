@@ -16,7 +16,6 @@ const navPersonal = [
   { to: '/receive', icon: '↙', label: 'Recevoir' },
   { to: '/convert', icon: '⇄', label: 'Convertir' },
   { to: '/history', icon: '≡', label: 'Historique' },
-  { to: '/nexus-pro', icon: '★', label: 'Nexus Pro' },
 ];
 
 const navBusiness = [
@@ -26,7 +25,6 @@ const navBusiness = [
   { to: '/approvals', icon: '✓', label: 'Approbations' },
   { to: '/team', icon: '⊕', label: 'Équipe & Rôles' },
   { to: '/reporting', icon: '≡', label: 'Reporting' },
-  { to: '/nexus-pro', icon: '★', label: 'Nexus Pro' },
 ];
 
 // NB: /providers est une fonctionnalité du Back Office, absente des dashboards personal/business.

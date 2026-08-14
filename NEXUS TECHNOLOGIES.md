@@ -1,10 +1,14 @@
 # NEXUS — Prompts étape par étape (Vite + React + PHP/XAMPP)
+> ⚠️ **DOCUMENT SUPERSÉDÉ — « Nexus Pro » est supprimé.**
+> La vision actuelle (v6) est définie dans [./docs/NEXUS-VISION.md](./docs/NEXUS-VISION.md) — structure **Personal + Business + Connect** autour du **Nexus Core**. Ce document historique peut encore mentionner « Nexus Pro » ; ne pas réintroduire ce terme.
+>
+
 
 **Projet** : NEXUS — Financial Orchestration Platform (Spec v5.3 + Document Technique DT01)
 **Frontend** : `nexus-frontend/` — React 19 + TypeScript + Vite 8 + React Router 7 (SPA sur port 5173)
 **Backend** : PHP 8 + MySQL via **XAMPP** (Apache + MySQL) — API REST JSON dans `nexus-api/`
 **Déjà réalisé** : Landing, Login/Register, Dashboard, Wallet, Routing (ébauches) + design system double (public violet/glass, dashboard cyan/gold/green)
-**À réaliser** : connecter le backend PHP, finir le dashboard, /send (avec Routing Engine intégré — cf. MODIFICATION-ENVOYER-ROUTING.md), /history, KYC/KYB, Business, Pro, back-office, sécurité, nettoyage, déploiement.
+**À réaliser** : connecter le backend PHP, finir le dashboard, /send (avec Routing Engine intégré — cf. MODIFICATION-ENVOYER-ROUTING.md), /history, KYC/KYB, Business, Connect (API), back-office, sécurité, nettoyage, déploiement.
 
 ---
 
