@@ -50,6 +50,18 @@ final class PlatformRoleTest extends TestCase
         Response::enableTestMode(false);
         unset($_SERVER['HTTP_AUTHORIZATION']);
 
+        // Les écritures autorisées créent désormais une credential de
+        // PLATEFORME (`user_id IS NULL`) : la purger par `user_id` ne
+        // l'atteint plus. Une ligne oubliée ici contaminait les autres tests,
+        // qui résolvaient soudain une credential qu'ils n'avaient pas écrite.
+        // Le contenu est CHIFFRÉ : un LIKE sur la valeur injectée ne peut pas
+        // matcher le cryptogramme. Le nettoyage cible donc le couple
+        // (provider, environnement) écrit par callUpsert().
+        $this->pdo->exec(
+            "DELETE FROM provider_credentials
+              WHERE user_id IS NULL AND provider_slug = 'stripe' AND environment = 'production'"
+        );
+
         foreach ($this->created as $uid) {
             $this->pdo->prepare('DELETE FROM provider_credentials WHERE user_id = ?')->execute([$uid]);
             $this->pdo->prepare('DELETE FROM audit_logs WHERE user_id = ?')->execute([$uid]);

@@ -121,7 +121,12 @@ final class ProviderResolver
         // 2) Credentials chiffrées en base, pour le sujet et cet environnement.
         //    findRow() n'effectue AUCUN déchiffrement : tester la présence ne
         //    justifie pas de manipuler des secrets en clair.
-        $row = ProviderCredentialService::findRow(
+        // La credential de PLATEFORME est consultée en premier : c'est Nexus
+        // qui contracte avec le provider, pas le client. Sans cela, la
+        // credential déposée par le superadmin (boucle 7) resterait invisible
+        // à tous les clients et AUCUN transfert ne pourrait résoudre son
+        // provider.
+        $row = ProviderCredentialService::findEffectiveRow(
             Database::getConnection(),
             $context->subjectUserId,
             $slug,

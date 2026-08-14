@@ -50,3 +50,6 @@
 
 # 0.16 — Rôle plateforme (Superadmin / personnel Nexus), correctif CRITICAL
 2026_08_14_platform_role.sql
+
+# 0.17 — Credentials providers = actifs de plateforme (correctif CRITICAL)
+2026_08_14_platform_credentials.sql

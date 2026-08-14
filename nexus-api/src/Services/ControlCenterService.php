@@ -137,7 +137,9 @@ final class ControlCenterService
         // État des credentials PAR ENVIRONNEMENT (§10) : jamais un état global.
         $environments = [];
         foreach (['sandbox', 'production'] as $env) {
-            $row = ProviderCredentialService::findRow($pdo, $userId, $slug, $env);
+            // Credential de PLATEFORME d'abord : le Control Center doit refléter
+            // l'état réel de l'infrastructure, pas celui du compte qui consulte.
+            $row = ProviderCredentialService::findEffectiveRow($pdo, $userId, $slug, $env);
             $environments[$env] = [
                 'configured'     => $row !== null && ($row['credentials_enc'] ?? null) !== null,
                 'status'         => $row['status'] ?? 'not_configured',
@@ -314,7 +316,7 @@ final class ControlCenterService
             $present = [];
             foreach (['sandbox', 'production'] as $env) {
                 $present[$env] = [];
-                if (ProviderCredentialService::findRow($pdo, $userId, $slug, $env) !== null) {
+                if (ProviderCredentialService::findEffectiveRow($pdo, $userId, $slug, $env) !== null) {
                     $creds = ProviderCredentialService::resolve($pdo, $userId, $slug, $env);
                     foreach ($creds as $name => $value) {
                         if (is_string($value) && $value !== '') {

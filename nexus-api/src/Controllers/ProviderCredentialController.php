@@ -81,14 +81,18 @@ final class ProviderCredentialController
     public static function list(Request $request): void
     {
         $request = AuthMiddleware::handle($request);
-        $userId  = (int) $request->attribute('user')['id'];
+
+        // L'inventaire des credentials est une information d'exploitation :
+        // savoir QUELS providers sont configurés, et dans quel environnement,
+        // renseigne sur l'infrastructure de Nexus. Il était accessible à tout
+        // compte authentifié.
+        PlatformRole::require($request->attribute('user'), 'operations');
 
         $pdo = Database::getConnection();
-        $stmt = $pdo->prepare(
+        $stmt = $pdo->query(
             'SELECT id, provider_slug, environment, status, last_tested_at, last_error, created_at, updated_at
-             FROM provider_credentials WHERE user_id = :uid'
+             FROM provider_credentials WHERE user_id IS NULL ORDER BY provider_slug, environment'
         );
-        $stmt->execute(['uid' => $userId]);
 
         $items = array_map(static function (array $row): array {
             return [
@@ -163,13 +167,18 @@ final class ProviderCredentialController
 
         // Upsert qualifié par (user_id, provider_slug, environment) — §3.
         // Enregistrer la production ne doit JAMAIS écraser la sandbox.
-        ProviderCredentialService::upsert(
+        // La credential appartient à la PLATEFORME, pas à l'opérateur qui la
+        // saisit. La rattacher à son `user_id` la rendrait invisible aux
+        // clients (aucun transfert ne résoudrait son provider) et la ferait
+        // disparaître le jour où ce compte est supprimé — ON DELETE CASCADE.
+        // `configured_by` conserve la trace de l'auteur.
+        ProviderCredentialService::upsertPlatform(
             $pdo,
-            $userId,
             $slug,
             $env,
             array_map(static fn ($v) => $v ?? '', $fields),
-            $env === 'sandbox' ? 'sandbox_only' : 'active'
+            $env === 'sandbox' ? 'sandbox_only' : 'active',
+            $userId
         );
 
         self::audit($pdo, $userId, 'provider.credentials.upsert', $slug, ['environment' => $env], $request);
@@ -208,7 +217,7 @@ final class ProviderCredentialController
         }
 
         $pdo     = Database::getConnection();
-        $deleted = ProviderCredentialService::delete($pdo, $userId, $slug, $env);
+        $deleted = ProviderCredentialService::deletePlatform($pdo, $slug, $env);
 
         self::audit($pdo, $userId, 'provider.credentials.delete', $slug, ['environment' => $env], $request);
 
@@ -232,6 +241,12 @@ final class ProviderCredentialController
         $userId  = (int) $request->attribute('user')['id'];
         $slug    = (string) $request->param('slug', '');
 
+        // Tester une credential MODIFIE son état (`last_tested_at`, `status`,
+        // `last_error`) et déclenche une connexion sortante depuis
+        // l'infrastructure Nexus. Ce n'est pas une lecture : même privilège
+        // que l'écriture.
+        PlatformRole::require($request->attribute('user'), 'credentials');
+
         if (!ProviderCatalog::exists($slug)) {
             Response::notFound('Provider inconnu.');
         }
@@ -247,7 +262,7 @@ final class ProviderCredentialController
         }
 
         $pdo      = Database::getConnection();
-        $existing = ProviderCredentialService::findRow($pdo, $userId, $slug, $env);
+        $existing = ProviderCredentialService::findPlatformRow($pdo, $slug, $env);
 
         if ($existing === null) {
             Response::badRequest('Aucun identifiant enregistré pour ce provider dans l\'environnement « ' . $env . ' ».');
@@ -278,7 +293,7 @@ final class ProviderCredentialController
 
         $status = $ok ? ($env === 'production' ? 'active' : 'sandbox_only') : 'error';
 
-        ProviderCredentialService::markTested($pdo, $userId, $slug, $env, $status, $err);
+        ProviderCredentialService::markPlatformTested($pdo, $slug, $env, $status, $err);
 
         self::audit($pdo, $userId, 'provider.credentials.test', $slug, [
             'reachable' => $ok,

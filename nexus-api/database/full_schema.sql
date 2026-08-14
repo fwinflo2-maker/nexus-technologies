@@ -282,17 +282,20 @@ CREATE TABLE `payments` (
 /*!40101 SET character_set_client = utf8mb4 */;
 CREATE TABLE `provider_credentials` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `user_id` bigint(20) unsigned NOT NULL,
+  `user_id` bigint(20) unsigned DEFAULT NULL,
   `provider_slug` varchar(50) NOT NULL,
   `environment` enum('sandbox','production') NOT NULL DEFAULT 'sandbox',
   `credentials_enc` text DEFAULT NULL,
   `status` enum('not_configured','sandbox_only','active','error') NOT NULL DEFAULT 'not_configured',
+  `configured_by` bigint(20) unsigned DEFAULT NULL,
   `last_tested_at` datetime DEFAULT NULL,
   `last_error` text DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `owner_scope` bigint(20) unsigned GENERATED ALWAYS AS (ifnull(`user_id`,0)) STORED,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_provider_creds_env` (`user_id`,`provider_slug`,`environment`),
+  UNIQUE KEY `uq_provider_creds_scope` (`owner_scope`,`provider_slug`,`environment`),
+  KEY `idx_provider_creds_user` (`user_id`),
   CONSTRAINT `fk_provider_creds_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
