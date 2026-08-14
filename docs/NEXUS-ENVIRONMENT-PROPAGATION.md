@@ -328,3 +328,62 @@ Mutations vérifiées puis restaurées (`md5sum -c`) : fallback `PROVIDERS_ENV`
 dans `transferMultiCurrency`, contexte ignoré vers le ledger, redaction retirée
 du journal de credentials, index d'idempotence global réintroduit. Chacune fait
 échouer au moins un test.
+
+---
+
+## Phase 4 — EnvironmentGuard : intégrité du cycle financier
+
+Invariant vérifié : `Quote → WalletOperation → Transaction/Payment →
+LedgerEntry` portent exactement le même environnement sur un même cycle. Une
+valeur déjà persistée fait autorité ; la configuration courante du serveur ne
+peut jamais la remplacer. Toute divergence est terminale : **409
+`ENVIRONMENT_MISMATCH`**, sans repli ni correction automatique.
+
+### Un seul guard
+
+Il existait **deux** mécanismes de comparaison : `EnvironmentGuard` (central,
+audité) et une vérification réimplémentée à la main dans
+`PaymentController::execute`. Même verdict, mais sans trace d'audit et avec un
+message divergent — deux implémentations d'une même règle de sécurité finissent
+par diverger. `PaymentController` utilise désormais le guard central. **Aucun
+troisième guard n'a été créé.** Nombre de politiques après refactor : **1**.
+
+### Découvertes
+
+| Sévérité | Constat | Correctif |
+|---|---|---|
+| **HIGH** | `captureHold()` / `releaseHold()` lisaient l'environnement de l'opération pour scoper l'idempotence mais ne le **comparaient** jamais au contexte : un hold sandbox pouvait être capturé sous un contexte production. | L'environnement persisté fait autorité, dans les deux sens. |
+| **MEDIUM** | Les endpoints hold enveloppaient tout dans `catch (\Throwable)` → `Response::error(…, 400)`. Un `ENVIRONMENT_MISMATCH` était donc rendu au client comme une requête malformée, masquant un conflit d'environnement. | `HttpException` propagée avec son statut et son code. |
+
+### Atomicité du refus
+
+Le guard s'exécute **avant** toute mutation financière. Après un refus :
+aucune transaction, aucun payment, aucune écriture ledger, aucun hold capturé,
+aucun changement de solde, aucune modification de quote — vérifié par
+comparaison d'un instantané de la base avant/après chaque 409.
+
+Nuance relevée pendant le test de mutation : dans `ExecutionEngine`, déplacer
+le guard juste avant `commit()` ne casse pas l'atomicité, la transaction SQL
+annulant les écritures. Le risque réel est sur le chemin **paiement**, où le
+passage en `executing` a lieu hors transaction : la mutation correspondante
+laisse un paiement bloqué dans cet état, et le test l'attrape.
+
+### Données historiques
+
+Aucune divergence existante (`ledger↔operation`, `transaction↔quote`,
+`payment↔transaction` = 0). **Aucune migration, aucune donnée réécrite.**
+Conformément à §12, aucune contrainte SQL n'a été ajoutée : l'invariant relie
+des tables via des chaînes de jointure optionnelles qu'une FK ne peut pas
+exprimer sans dénormaliser. Il reste garanti par le code, les tests et une
+requête-filet qui échoue à la moindre divergence.
+
+### Chiffres
+
+| Élément | Avant | Après |
+|---|---|---|
+| Tests / assertions | 310 / 1363 | **325 / 1422** |
+| Politiques de comparaison d'environnement | 2 | **1** |
+| Chemins financiers gardés | 1 (quote) | **4** (quote, payment, capture, release) |
+| Tests HTTP réels | 0 sur ce chemin | **6** |
+| Mutations détectées | — | **6/6** |
+| Opérations provider | 0/6 | **0/6** (vérifié en HTTP réel) |
