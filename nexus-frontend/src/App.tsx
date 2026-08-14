@@ -29,6 +29,7 @@ import ApprovalsPage from './views/business/ApprovalsPage';
 import TeamPage from './views/business/TeamPage';
 import ReconciliationPage from './views/business/ReconciliationPage';
 import AnalyticsPage from './views/business/AnalyticsPage';
+import ControlCenterLayout from './views/control/ControlCenterLayout';
 import { useDashT } from './data/dashboard-i18n';
 import './styles/design-system.css';
 import './styles/dashboard-system.css';
@@ -165,7 +166,16 @@ function AppRoutes() {
     );
   }
 
-  return user ? <DashboardLayout /> : <PublicRouter />;
+  if (!user) return <PublicRouter />;
+
+  // Le Control Center est une surface distincte du dashboard : sa propre coque,
+  // sa propre navigation. L'autorisation réelle est appliquée par le backend.
+  return (
+    <Routes>
+      <Route path="/control/*" element={<ControlCenterLayout />} />
+      <Route path="*" element={<DashboardLayout />} />
+    </Routes>
+  );
 }
 
 function App() {

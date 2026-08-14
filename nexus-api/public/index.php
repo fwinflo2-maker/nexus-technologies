@@ -15,6 +15,7 @@ use Nexus\Controllers\BeneficiaryController;
 use Nexus\Controllers\BusinessController;
 use Nexus\Controllers\DashboardController;
 use Nexus\Controllers\IntentController;
+use Nexus\Controllers\ControlCenterController;
 use Nexus\Controllers\KycController;
 use Nexus\Controllers\NotificationController;
 use Nexus\Controllers\PaymentController;
@@ -147,6 +148,17 @@ $router->get('/providers/credentials', [ProviderCredentialController::class, 'li
 $router->put('/providers/{slug}/credentials', [ProviderCredentialController::class, 'upsert']);
 $router->delete('/providers/{slug}/credentials', [ProviderCredentialController::class, 'delete']);
 $router->post('/providers/{slug}/test', [ProviderCredentialController::class, 'test']);
+
+// --- NEXUS CONTROL CENTER : plan de contrôle de l'infrastructure -----------
+// Accès restreint côté SERVEUR (l'UI n'est jamais une couche de sécurité).
+$router->get('/control/overview', [ControlCenterController::class, 'overview']);
+$router->get('/control/providers', [ControlCenterController::class, 'providers']);
+$router->get('/control/providers/{slug}', [ControlCenterController::class, 'providerDetail']);
+$router->get('/control/credentials', [ControlCenterController::class, 'credentials']);
+$router->get('/control/public-keys', [ControlCenterController::class, 'publicKeys']);
+$router->get('/control/kyc', [ControlCenterController::class, 'kyc']);
+$router->get('/control/webhooks', [ControlCenterController::class, 'webhooks']);
+$router->get('/control/audit', [ControlCenterController::class, 'audit']);
 
 // --- KYC / KYB : vérification d'identité (Sumsub) --------------------------
 // status/session : protégés (JWT).

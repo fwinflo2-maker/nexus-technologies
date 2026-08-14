@@ -1181,3 +1181,127 @@ export async function apiGetSessions(): Promise<ApiResponse<SessionsListData>> {
 export async function apiRevokeSession(jti: string): Promise<ApiResponse<{ revoked: boolean }>> {
   return request<{ revoked: boolean }>('DELETE', `/users/me/sessions/${jti}`);
 }
+
+// --- NEXUS CONTROL CENTER ----------------------------------------------------
+// Plan de contrôle de l'infrastructure. Toutes ces routes sont protégées côté
+// serveur : l'interface ne fait qu'afficher ce que le backend accepte de dire.
+
+export interface ControlOverview {
+  environment: string;
+  is_production: boolean;
+  strict_mode: boolean;
+  providers: { total: number; enabled: number; configured: number; schema_verified: number; with_operations: number };
+  credentials: { sandbox: number; production: number };
+  kyc: { individual: Array<{ status: string; total: number }>; company: Array<{ status: string; total: number }>; total: number; provider: { slug: string; configured: boolean; environment: string } };
+  webhooks: { processed_total: number; by_provider: Array<{ provider: string; environment: string; total: number }> };
+  security: Record<string, unknown>;
+}
+
+export interface ProviderEnvState {
+  configured: boolean;
+  status: string;
+  last_tested_at: string | null;
+  last_error: string | null;
+  updated_at: string | null;
+  base_url: string | null;
+}
+
+export interface CredentialFieldSchema {
+  key: string;
+  label: string;
+  required: boolean;
+  sensitivity: string;
+  frontend_exposable: boolean;
+  usage: string;
+  placeholder?: string;
+  type: string;
+}
+
+export interface ProviderCard {
+  slug: string;
+  name: string;
+  category: string;
+  icon: string | null;
+  doc_url: string | null;
+  countries: string[];
+  active_environment: string;
+  enabled: boolean;
+  status: string;
+  missing_required: string[];
+  reason: string | null;
+  environments: Record<string, ProviderEnvState>;
+  /** Rails de paiement DÉCLARÉS par le catalogue (≠ opérations). */
+  payment_rails: string[];
+  /** Opérations réellement implémentées, détectées dans le code. */
+  operations: Record<string, boolean>;
+  operations_enabled: boolean;
+  credential_schema: { verified: boolean; source: string; credentials: CredentialFieldSchema[] } | null;
+  documentation: Record<string, string>;
+  health?: {
+    status: string;
+    reachable: boolean | null;
+    authenticated: boolean | null;
+    latency_ms: number | null;
+    message: string | null;
+    checked_at: string;
+  };
+}
+
+export interface PublicKeyRow {
+  provider: string;
+  provider_name: string;
+  key: string;
+  label: string;
+  environment: string;
+  sensitivity: string;
+  frontend_exposable: boolean;
+  exposure: 'frontend' | 'backend';
+  usage: string;
+  configured: boolean;
+  justification: string;
+}
+
+export async function apiControlOverview(): Promise<ApiResponse<ControlOverview>> {
+  return request<ControlOverview>('GET', '/control/overview');
+}
+
+export async function apiControlProviders(): Promise<ApiResponse<{
+  items: ProviderCard[]; total: number; strict_mode: boolean; operations: string[];
+}>> {
+  return request('GET', '/control/providers');
+}
+
+export async function apiControlProvider(slug: string): Promise<ApiResponse<ProviderCard>> {
+  return request<ProviderCard>('GET', `/control/providers/${encodeURIComponent(slug)}`);
+}
+
+export async function apiControlPublicKeys(): Promise<ApiResponse<{
+  items: PublicKeyRow[]; total: number; legend: Record<string, string>;
+}>> {
+  return request('GET', '/control/public-keys');
+}
+
+export async function apiControlCredentials(): Promise<ApiResponse<{
+  items: Array<{ slug: string; name: string; environments: Record<string, { configured: boolean; status: string; last_tested_at: string | null; updated_at: string | null }>; schema: unknown }>;
+  total: number;
+}>> {
+  return request('GET', '/control/credentials');
+}
+
+export async function apiControlKyc(): Promise<ApiResponse<{
+  counters: ControlOverview['kyc']; applicants: Array<Record<string, unknown>>;
+}>> {
+  return request('GET', '/control/kyc');
+}
+
+export async function apiControlWebhooks(): Promise<ApiResponse<{
+  items: Array<Record<string, unknown>>; counters: Record<string, unknown>;
+}>> {
+  return request('GET', '/control/webhooks');
+}
+
+export async function apiControlAudit(): Promise<ApiResponse<{
+  items: Array<Record<string, unknown>>; total: number;
+}>> {
+  return request('GET', '/control/audit');
+}
