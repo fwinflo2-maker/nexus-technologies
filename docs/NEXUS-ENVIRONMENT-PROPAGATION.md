@@ -587,3 +587,101 @@ Un test vert ne prouve rien tant qu'on n'a pas vérifié qu'il sait échouer.
 | Privilège fondé sur une valeur client | 2 surfaces | **0** |
 | États financiers terminaux sans reprise | 1 | **0** |
 | Fuites de structure interne | 5 sites | **0** |
+
+---
+
+## Boucles 10 et 11 — propriété, faux succès, IDOR
+
+Ces deux boucles partagent une leçon : **une correction peut en casser une
+autre**, et **un test vert ne dit rien de ce qui n'est jamais appelé**.
+
+### Boucle 10 — la boucle 7 avait refermé le chemin nominal (CRITICAL)
+
+En réservant l'écriture des credentials au personnel plateforme, la boucle 7
+est entrée en contradiction avec la lecture, restée scopée au client :
+
+```
+ProviderResolver::hasCredentialFor()
+    -> findRow($pdo, $context->subjectUserId, …)
+UNIQUE (user_id, provider_slug, environment)
+```
+
+La credential déposée par le superadmin portait SON `user_id` : invisible à
+tous les clients. Chaque client aurait dû posséder la sienne — or il n'avait
+plus le droit d'en écrire une. **Plus aucun transfert ne pouvait résoudre un
+provider.** Une faille de privilège correctement fermée avait supprimé la
+fonctionnalité.
+
+Le modèle correct était une question de propriété, pas de permission : c'est
+Nexus qui contracte avec Stripe, donc la credential est un **actif de
+plateforme** (`user_id IS NULL`), valable pour tous, lisible par personne.
+
+Détail qui compte : MySQL traite les `NULL` comme **distincts** dans un index
+UNIQUE. `UNIQUE (user_id, …)` n'aurait donc pas empêché deux credentials de
+plateforme concurrentes pour le même provider — soit un choix non déterministe
+à l'exécution. D'où la colonne générée `owner_scope = IFNULL(user_id, 0)`.
+
+Et trois points d'entrée étaient restés ouverts à tout compte authentifié :
+`GET /providers/credentials` (inventaire de l'infrastructure) et
+`POST /providers/{slug}/test` — qui n'est pas une lecture : il écrit
+`status`/`last_tested_at` et déclenche une connexion sortante.
+
+### Boucle 11 — « Convertir » ne convertissait rien (CRITICAL)
+
+```js
+setTimeout(() => { setConverting(false); setAmount(''); }, 2000)
+```
+
+L'utilisateur voyait une conversion réussie. Aucun appel réseau, aucun
+mouvement, aucune écriture comptable. `transferMultiCurrency()` était pourtant
+complet et lourdement testé — mais **aucune route ne l'exposait**. Le moteur
+existait, le chemin n'existait pas. Les tests étaient verts, et le produit
+mentait.
+
+**En branchant la route, un IDOR est apparu** : le moteur chargeait les deux
+wallets par identifiant, sans contrôle de propriété. Premier test écrit :
+HTTP 200 en débitant le wallet de la victime.
+
+Défense en profondeur, dans cet ordre :
+
+1. le **moteur** refuse un wallet étranger (404 `WALLET_NOT_FOUND`, identique
+   à « inexistant » pour ne pas offrir d'oracle) — source **et** destination,
+   car créditer autrui est une écriture non autorisée ;
+2. l'**API** ne permet plus de formuler la demande : elle accepte des
+   **devises**, jamais un `wallet_id`, et résout les wallets depuis le jeton.
+
+La classe de vulnérabilité disparaît au lieu d'être filtrée. La garde reste
+néanmoins dans le moteur : il est appelable par d'autres chemins, et la
+prochaine route réintroduirait la faille.
+
+Enfin, le même motif « faux succès » a été cherché **partout ailleurs** :
+`ForgotPasswordPage` affichait « e-mail envoyé » alors qu'il n'existe ni
+route, ni table de jetons, ni capacité d'envoi. Une impasse silencieuse sur le
+seul chemin de récupération de compte.
+
+> **BLOCKED — dépendance externe.** Un vrai reset exige un fournisseur
+> d'e-mail transactionnel et une décision produit (durée de vie du jeton,
+> usage unique, limitation de débit). Fabriquer un jeton sans canal de
+> transmission serait pire qu'un faux succès : un secret émis sans
+> destinataire. L'interface dit désormais la limitation, en 7 langues.
+
+### Quatre mutations ont survécu sur ces deux boucles
+
+Chacune a révélé un test absent, pas un code correct :
+
+| Mutation survivante | Ce qu'elle a révélé |
+|---|---|
+| Garde de `list()` retirée | l'inventaire des providers n'était pas testé |
+| Garde de `test()` retirée | déclencher un test n'était pas testé |
+| Contrôle du wallet **destination** retiré | seul le wallet source était testé |
+| Filtre d'ancienneté retiré (boucle 8) | masqué par la protection « saga en cours » |
+
+### Chiffres
+
+| Élément | Début boucle 10 | Fin boucle 11 |
+|---|---|---|
+| Tests / assertions | 389 / 1664 | **410 / 1719** |
+| CRITICAL ouverts | 3 (non détectés) | **0** |
+| Faux succès exposés à l'utilisateur | 2 | **0** |
+| Chemins financiers sans contrôle de propriété | 1 | **0** |
+| Surfaces credentials non gardées | 3 | **0** |
