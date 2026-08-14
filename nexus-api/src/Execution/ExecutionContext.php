@@ -57,7 +57,39 @@ final class ExecutionContext
         public readonly string $accountType,
         public readonly ExecutionEnvironment $environment,
         public readonly string $environmentSource,
+        public readonly AccountContext $account,
+        public readonly string $requestId,
+        public readonly ?string $provider = null,
+        public readonly ?string $operation = null,
     ) {
+    }
+
+    /**
+     * Décline le contexte pour un provider et une opération donnés.
+     *
+     * Retourne une NOUVELLE instance : l'environnement déjà arbitré est
+     * recopié tel quel, jamais recalculé ni ré-arbitré. Le contexte se
+     * précise au fil de la traversée, il ne se renégocie pas.
+     */
+    public function forOperation(string $provider, string $operation): self
+    {
+        return new self(
+            actorUserId:       $this->actorUserId,
+            subjectUserId:     $this->subjectUserId,
+            accountType:       $this->accountType,
+            environment:       $this->environment,
+            environmentSource: $this->environmentSource,
+            account:           $this->account,
+            requestId:         $this->requestId,
+            provider:          $provider,
+            operation:         $operation,
+        );
+    }
+
+    /** Identifiant de corrélation, stable pour toute la requête. */
+    private static function newRequestId(): string
+    {
+        return bin2hex(random_bytes(8));
     }
 
     /**
@@ -76,14 +108,30 @@ final class ExecutionContext
             throw new HttpException(401, 'Authentification requise.', 'UNAUTHENTICATED');
         }
 
-        $requested = $request->header(self::HEADER);
-        if ($requested === null || trim($requested) === '') {
-            $body = $request->body();
-            $raw  = $body['environment'] ?? null;
-            $requested = is_string($raw) && trim($raw) !== '' ? $raw : null;
+        // Tous les canaux d'expression d'une demande d'environnement sont lus
+        // et arbitrés par la MÊME policy. Ignorer un canal ne le neutralise
+        // pas : cela crée un chemin où l'intention du client diverge
+        // silencieusement de l'exécution réelle — et, si ce canal venait à
+        // être honoré ailleurs, une porte dérobée.
+        $requested = null;
+        foreach (self::requestedEnvironmentCandidates($request) as $candidate) {
+            if (is_string($candidate) && trim($candidate) !== '') {
+                $requested = $candidate;
+                break;
+            }
         }
 
         [$environment, $source] = self::resolveEnvironment($requested);
+
+        $account = AccountContext::fromUser($user, $subjectUserId);
+
+        // ── Autorisation ────────────────────────────────────────────────
+        // L'environnement est RÉSOLU ci-dessus ; il est AUTORISÉ ici. Le
+        // refus est terminal : un refus en production ne se replie jamais
+        // sur la sandbox (et réciproquement). Un repli silencieux ferait
+        // d'un « non » un « oui ailleurs », ce qui n'est pas une décision
+        // de sécurité mais son contournement.
+        self::authorize($account, $environment);
 
         return new self(
             actorUserId:       $actorId,
@@ -91,6 +139,46 @@ final class ExecutionContext
             accountType:       (string) ($user['account_type'] ?? 'personal'),
             environment:       $environment,
             environmentSource: $source,
+            account:           $account,
+            requestId:         self::newRequestId(),
+        );
+    }
+
+    /**
+     * Canaux par lesquels un client peut exprimer un environnement.
+     *
+     * Ordre de priorité : en-tête, corps, query. L'ordre départage une
+     * requête cohérente ; il ne crée aucun privilège, chaque canal étant
+     * ensuite soumis au même arbitrage puis à la même policy.
+     *
+     * @return list<mixed>
+     */
+    private static function requestedEnvironmentCandidates(Request $request): array
+    {
+        $body = $request->body();
+
+        return [
+            $request->header(self::HEADER),
+            $body['environment'] ?? null,
+            $request->query('environment'),
+        ];
+    }
+
+    /**
+     * Applique la policy d'autorisation. Point de passage UNIQUE.
+     *
+     * @throws HttpException 403 ENVIRONMENT_NOT_ALLOWED
+     */
+    private static function authorize(AccountContext $account, ExecutionEnvironment $environment): void
+    {
+        if (ProductionAuthorizationPolicy::isAllowed($account, $environment)) {
+            return;
+        }
+
+        throw new HttpException(
+            403,
+            ProductionAuthorizationPolicy::denialReason($account, $environment),
+            'ENVIRONMENT_NOT_ALLOWED'
         );
     }
 
@@ -111,6 +199,12 @@ final class ExecutionContext
             accountType:       $accountType,
             environment:       $environment,
             environmentSource: self::SOURCE_SERVER_DEFAULT,
+            account:           AccountContext::of(
+                accountId:   $subjectUserId ?? $actorUserId,
+                accountType: $accountType,
+                actorId:     $actorUserId,
+            ),
+            requestId:         self::newRequestId(),
         );
     }
 
@@ -191,9 +285,13 @@ final class ExecutionContext
             'actor_user_id'      => $this->actorUserId,
             'subject_user_id'    => $this->subjectUserId,
             'account_type'       => $this->accountType,
+            'account_id'         => $this->account->accountId,
+            'provider'           => $this->provider,
+            'operation'          => $this->operation,
             'environment'        => $this->environment->value,
             'environment_source' => $this->environmentSource,
             'real_money'         => $this->isRealMoney(),
+            'request_id'         => $this->requestId,
         ];
     }
 }

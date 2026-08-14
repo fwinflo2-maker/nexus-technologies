@@ -7,6 +7,8 @@ namespace Nexus\Services;
 use Nexus\Core\Currency;
 use Nexus\Core\Database;
 use Nexus\Core\HttpException;
+use Nexus\Execution\ExecutionContext;
+use Nexus\Providers\ProviderConfig;
 use PDO;
 use RuntimeException;
 use Throwable;
@@ -42,7 +44,8 @@ final class ExecutionEngine
         int $userId,
         string $quoteId,
         string $routeId,
-        ?string $idempotencyKey = null
+        ?string $idempotencyKey = null,
+        ?ExecutionContext $context = null
     ): array {
         $pdo          = Database::getConnection();
         $useIdem      = $idempotencyKey !== null && $idempotencyKey !== '';
@@ -86,7 +89,7 @@ final class ExecutionEngine
             }
 
             $spec  = self::buildSpecFromQuote($quote, $route, $routeId);
-            $txId  = self::executeTransferInternal($userId, $spec, $pdo, $operationId, $startedAt);
+            $txId  = self::executeTransferInternal($userId, $spec, $pdo, $operationId, $startedAt, $context);
 
             // ── 4. Transition de la quote ─────────────────────────────────
             self::markQuoteExecuted($pdo, $quoteId, $routeId);
@@ -128,8 +131,12 @@ final class ExecutionEngine
      *
      * @return array<string,mixed> La transaction enregistrée.
      */
-    public static function executeTransfer(int $userId, array $spec, ?string $idempotencyKey = null): array
-    {
+    public static function executeTransfer(
+        int $userId,
+        array $spec,
+        ?string $idempotencyKey = null,
+        ?ExecutionContext $context = null
+    ): array {
         $pdo         = Database::getConnection();
         $useIdem     = $idempotencyKey !== null && $idempotencyKey !== '';
         $operationId = self::uuid();
@@ -158,7 +165,7 @@ final class ExecutionEngine
                 self::assertQuoteExecutable($quote);
             }
 
-            $txId = self::executeTransferInternal($userId, $spec, $pdo, $operationId, $startedAt);
+            $txId = self::executeTransferInternal($userId, $spec, $pdo, $operationId, $startedAt, $context);
 
             if ($quoteId !== null) {
                 self::markQuoteExecuted($pdo, $quoteId, (string) ($spec['route_id'] ?? ''));
@@ -195,7 +202,7 @@ final class ExecutionEngine
     /**
      * @param array<string,mixed> $spec
      */
-    private static function executeTransferInternal(int $userId, array $spec, PDO $pdo, string $operationId, float $startedAt): int
+    private static function executeTransferInternal(int $userId, array $spec, PDO $pdo, string $operationId, float $startedAt, ?ExecutionContext $context = null): int
     {
         $sourceCurrency = strtoupper((string) ($spec['source_currency'] ?? ''));
         $destCurrency   = strtoupper((string) ($spec['dest_currency'] ?? ''));
@@ -264,7 +271,8 @@ final class ExecutionEngine
             $fxRate,
             $type,
             $operationId,
-            $startedAt
+            $startedAt,
+            $context
         );
 
         // ── 4. Notification ───────────────────────────────────────────
@@ -398,7 +406,8 @@ final class ExecutionEngine
         float $fxRate,
         string $type,
         string $operationId,
-        float $startedAt
+        float $startedAt,
+        ?ExecutionContext $context = null
     ): int {
         $rateRef   = Currency::rateToRef($sourceCurrency);
         $rateXaf   = Currency::rateToXaf($sourceCurrency);
@@ -414,12 +423,12 @@ final class ExecutionEngine
                 (quote_id, route_id, user_id, type, direction, label, description,
                  amount, currency, amount_ref, ref_currency, amount_xaf,
                  dest_amount, dest_currency, fx_rate, fee, fee_currency,
-                 status, provider, destination, execution_time_seconds)
+                 status, provider, destination, execution_time_seconds, environment)
              VALUES
                 (:qid, :rid, :uid, :type, :dir, :label, :desc,
                  :amount, :cur, :aref, :refcur, :axaf,
                  :damount, :dcur, :fxr, :fee, :feecur,
-                 :status, :prov, :dest, :execsec)'
+                 :status, :prov, :dest, :execsec, :env)'
         );
 
         $stmt->execute([
@@ -444,6 +453,12 @@ final class ExecutionEngine
             'prov'    => $provider !== '' ? substr($provider, 0, 50) : null,
             'dest'    => $destination !== '' ? substr($destination, 0, 190) : null,
             'execsec' => $execSec,
+            // L'environnement vient du contexte d'exécution, jamais du DEFAULT
+            // SQL (`production`), qui n'existe que pour les lignes historiques.
+            // Sans contexte (appel interne hérité), on retombe sur le défaut
+            // serveur — `sandbox` sauf déploiement de production : une ligne
+            // non attribuable ne doit pas être présumée « argent réel ».
+            'env'     => $context?->environmentValue() ?? ProviderConfig::defaultEnvironment(),
         ]);
 
         return (int) $pdo->lastInsertId();

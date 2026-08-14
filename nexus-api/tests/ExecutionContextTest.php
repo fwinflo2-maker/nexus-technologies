@@ -43,6 +43,8 @@ final class ExecutionContextTest extends TestCase
             }
         }
         putenv('APP_ENV');
+        putenv('NEXUS_PRODUCTION_ALLOWED');
+        putenv('NEXUS_PRODUCTION_ALLOWED_ACCOUNTS');
         putenv('PROVIDERS_ENV');
     }
 
@@ -120,6 +122,9 @@ final class ExecutionContextTest extends TestCase
     {
         $this->clearHeaders();
         putenv('PROVIDERS_ENV=production');
+        // Ce test porte sur la RÉSOLUTION. L'autorisation est une condition
+        // distincte, accordée ici explicitement pour l'isoler.
+        putenv('NEXUS_PRODUCTION_ALLOWED=true');
 
         $ctx = ExecutionContext::fromRequest($this->request(), $this->user());
 
@@ -132,6 +137,7 @@ final class ExecutionContextTest extends TestCase
     public function test_client_may_request_environment_via_header(): void
     {
         $this->clearHeaders();
+        putenv('NEXUS_PRODUCTION_ALLOWED=true');
         $ctx = ExecutionContext::fromRequest(
             $this->request([], ['X-Nexus-Environment' => 'production']),
             $this->user()

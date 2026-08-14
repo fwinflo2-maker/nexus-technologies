@@ -8,6 +8,7 @@ use Nexus\Core\Currency;
 use Nexus\Core\Crypto;
 use Nexus\Core\Database;
 use Nexus\Core\HttpException;
+use Nexus\Execution\ExecutionContext;
 use PDO;
 use Throwable;
 
@@ -137,7 +138,7 @@ final class BusinessService
      *
      * @return array<string,mixed> La transaction enregistrée.
      */
-    public static function executePayment(int $businessUserId, array $payment, array $beneficiary): array
+    public static function executePayment(int $businessUserId, array $payment, array $beneficiary, ?ExecutionContext $context = null): array
     {
         $spec = [
             'source_currency' => (string) $payment['source_currency'],
@@ -155,7 +156,7 @@ final class BusinessService
         ];
 
         $idemKey = 'payment:' . (int) $payment['id'] . ':execute';
-        return ExecutionEngine::executeTransfer($businessUserId, $spec, $idemKey);
+        return ExecutionEngine::executeTransfer($businessUserId, $spec, $idemKey, $context);
     }
 
     /** Libellé de destination d'un paiement (bénéficiaire + méthode). */

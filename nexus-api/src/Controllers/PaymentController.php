@@ -10,6 +10,7 @@ use Nexus\Core\Database;
 use Nexus\Core\HttpException;
 use Nexus\Core\Request;
 use Nexus\Core\Response;
+use Nexus\Execution\ExecutionContext;
 use Nexus\Services\BusinessService;
 use PDO;
 use Throwable;
@@ -82,6 +83,10 @@ final class PaymentController
         $bid     = BusinessService::resolveBusinessUserId($actor, $request->input('business_id'));
         BusinessService::requireRole($bid, (int) $actor['id'], ['owner', 'admin', 'finance_manager', 'operator'], 'créer un paiement');
 
+        // L'environnement est fixé à la CRÉATION et porté par la ligne : un
+        // paiement créé en sandbox ne peut pas être exécuté en production.
+        $context = ExecutionContext::fromRequest($request, $actor, $bid);
+
         $beneficiaryId = (int) $request->input('beneficiary_id', 0);
         $sourceCurrency = strtoupper(trim((string) $request->input('source_currency', 'EUR')));
         $destCurrency  = strtoupper(trim((string) $request->input('dest_currency', '')));
@@ -117,11 +122,11 @@ final class PaymentController
             'INSERT INTO payments
                 (user_id, beneficiary_id, purpose, source_currency, dest_currency,
                  amount, amount_ref, fee, fee_currency, dest_amount, fx_rate,
-                 provider, route_id, destination, status, created_by)
+                 provider, route_id, destination, status, created_by, environment)
              VALUES
                 (:uid, :bid, :purpose, :scur, :dcur,
                  :amount, :aref, :fee, :feecur, :damount, :fxr,
-                 :prov, :rid, :dest, :status, :created_by)'
+                 :prov, :rid, :dest, :status, :created_by, :env)'
         );
         $ins->execute([
             'uid'        => $bid,
@@ -140,6 +145,7 @@ final class PaymentController
             'dest'       => BusinessService::paymentDestination($beneficiary),
             'status'     => 'draft',
             'created_by' => (int) $actor['id'],
+            'env'        => $context->environmentValue(),
         ]);
 
         $payment = self::find($pdo, $bid, (int) $pdo->lastInsertId());
@@ -208,11 +214,30 @@ final class PaymentController
         $bid     = BusinessService::resolveBusinessUserId($actor, $request->input('business_id'));
         BusinessService::requireRole($bid, (int) $actor['id'], ['owner', 'admin', 'finance_manager'], 'exécuter un paiement');
 
+        $context = ExecutionContext::fromRequest($request, $actor, $bid);
+
         $pdo     = Database::getConnection();
         $payment = self::find($pdo, $bid, (int) $request->param('id', '0'));
 
         if ($payment['status'] !== 'approved') {
             Response::conflict('Seul un paiement approuvé peut être exécuté.');
+        }
+
+        // Un paiement porte l'environnement de sa création. L'exécuter dans un
+        // autre environnement changerait la nature de l'opération (une revue
+        // faite en sandbox validerait un mouvement d'argent réel). Refus strict,
+        // dans les deux sens, sans repli.
+        $paymentEnv = (string) ($payment['environment'] ?? '');
+        if ($paymentEnv !== '' && $paymentEnv !== $context->environmentValue()) {
+            Response::error(
+                sprintf(
+                    'Ce paiement a été créé en environnement « %s » et ne peut pas être exécuté en « %s ».',
+                    $paymentEnv,
+                    $context->environmentValue()
+                ),
+                409,
+                'ENVIRONMENT_MISMATCH'
+            );
         }
 
         // Bénéficiaire (peut être null si supprimé — on bloque dans ce cas).
@@ -228,7 +253,7 @@ final class PaymentController
         $upd->execute(['id' => (int) $payment['id'], 'uid' => $bid]);
 
         try {
-            $tx = BusinessService::executePayment($bid, $payment, $beneficiary);
+            $tx = BusinessService::executePayment($bid, $payment, $beneficiary, $context);
         } catch (Throwable $e) {
             $fail = $pdo->prepare("UPDATE payments SET status = 'failed' WHERE id = :id AND user_id = :uid");
             $fail->execute(['id' => (int) $payment['id'], 'uid' => $bid]);

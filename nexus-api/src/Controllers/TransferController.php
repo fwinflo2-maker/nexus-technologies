@@ -9,6 +9,7 @@ use Nexus\Core\Database;
 use Nexus\Core\HttpException;
 use Nexus\Core\Request;
 use Nexus\Core\Response;
+use Nexus\Execution\ExecutionContext;
 use Nexus\Services\ExecutionEngine;
 use PDO;
 
@@ -36,7 +37,12 @@ final class TransferController
     public static function execute(Request $request): void
     {
         $request = AuthMiddleware::handle($request);
-        $userId  = (int) $request->attribute('user')['id'];
+        $user    = $request->attribute('user');
+        $userId  = (int) $user['id'];
+
+        // Contexte d'exécution : résolu UNE fois, en amont, puis transporté.
+        // Toute demande d'environnement non autorisée s'arrête ici (403).
+        $context = ExecutionContext::fromRequest($request, $user);
 
         $quoteId = trim((string) $request->input('quote_id', ''));
         $routeId = trim((string) $request->input('route_id', ''));
@@ -50,7 +56,7 @@ final class TransferController
             $idemKey = trim((string) $request->header('Idempotency-Key', ''));
         }
 
-        $transaction = ExecutionEngine::execute($userId, $quoteId, $routeId, $idemKey !== '' ? $idemKey : null);
+        $transaction = ExecutionEngine::execute($userId, $quoteId, $routeId, $idemKey !== '' ? $idemKey : null, $context);
 
         Response::success(['transaction' => $transaction], 201);
     }
