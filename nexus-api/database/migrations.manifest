@@ -47,3 +47,6 @@
 2026_08_14_environment_propagation.sql
 # 0.15 — Idempotence des wallet_operations scopée par environnement (correctif HIGH)
 2026_08_14_wallet_operations_idempotency_scope.sql
+
+# 0.16 — Rôle plateforme (Superadmin / personnel Nexus), correctif CRITICAL
+2026_08_14_platform_role.sql

@@ -8,6 +8,7 @@ use Nexus\Auth\AuthMiddleware;
 use Nexus\Core\Database;
 use Nexus\Core\Request;
 use Nexus\Core\Response;
+use Nexus\Execution\PlatformRole;
 use Nexus\Providers\ProviderRegistry;
 use Nexus\Services\ControlCenterService;
 use Nexus\Services\ProviderCatalog;
@@ -34,24 +35,23 @@ final class ControlCenterController
     /**
      * Contrôle d'accès au Control Center.
      *
-     * Le plan de contrôle administre l'infrastructure : il est réservé aux
-     * comptes habilités. Tant qu'un rôle « opérateur Nexus » n'existe pas en
-     * base, l'accès est restreint aux comptes business (cohérent avec les
-     * droits d'écriture des credentials providers) — et refusé en 403, jamais
-     * en 400 (§27, RBAC).
+     * Le plan de contrôle administre l'infrastructure : il est réservé au
+     * personnel d'exploitation.
+     *
+     * Auparavant, faute de rôle « opérateur Nexus », l'accès était accordé aux
+     * comptes `account_type === 'business'`. Ce repli était dangereux : le
+     * type de compte est choisi librement à l'inscription, donc n'importe qui
+     * pouvait lire l'état de l'infrastructure (providers, credentials
+     * configurées, webhooks, audit). Ce rôle existe désormais.
+     *
+     * Refus en 403, jamais 400 : c'est une question d'autorisation.
      */
     private static function authorize(Request $request): array
     {
         $request = AuthMiddleware::handle($request);
         $user    = $request->attribute('user');
 
-        if (($user['account_type'] ?? 'personal') !== 'business') {
-            Response::error(
-                'Accès refusé : le Control Center est réservé aux comptes habilités.',
-                403,
-                'FORBIDDEN_CONTROL_CENTER'
-            );
-        }
+        PlatformRole::require($user, 'operations');
 
         return $user;
     }

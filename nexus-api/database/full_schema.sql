@@ -419,6 +419,7 @@ CREATE TABLE `users` (
   `phone` varchar(20) DEFAULT NULL,
   `password_hash` varchar(255) NOT NULL DEFAULT '',
   `account_type` enum('personal','business') NOT NULL DEFAULT 'personal',
+  `platform_role` enum('user','support_operator','compliance_operator','finance_operator','security_engineer','provider_engineer','backend_engineer','qa_engineer','sre_operator','ai_agent','superadmin') NOT NULL DEFAULT 'user' COMMENT 'RÃ´le d''exploitation de la plateforme. Distinct de account_type (type de client).',
   `auth_provider` enum('local','google') NOT NULL DEFAULT 'local',
   `provider_id` varchar(191) DEFAULT NULL,
   `status` enum('PENDING','ACTIVE','SUSPENDED','CLOSED') NOT NULL DEFAULT 'PENDING',
@@ -431,7 +432,8 @@ CREATE TABLE `users` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_users_email` (`email`),
   UNIQUE KEY `uq_users_provider` (`auth_provider`,`provider_id`),
-  KEY `idx_users_phone` (`phone`)
+  KEY `idx_users_phone` (`phone`),
+  KEY `idx_users_platform_role` (`platform_role`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;

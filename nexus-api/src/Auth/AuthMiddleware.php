@@ -44,7 +44,7 @@ final class AuthMiddleware
 
             // Utilisateur toujours présent ?
             $stmt = $pdo->prepare(
-                'SELECT id, full_name, email, phone, account_type, auth_provider, status, kyc_level, created_at
+                'SELECT id, full_name, email, phone, account_type, platform_role, auth_provider, status, kyc_level, created_at
                  FROM users
                  WHERE id = :id
                  LIMIT 1'

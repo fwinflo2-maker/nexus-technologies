@@ -8,6 +8,7 @@ use Nexus\Auth\AuthMiddleware;
 use Nexus\Core\Database;
 use Nexus\Core\Request;
 use Nexus\Core\Response;
+use Nexus\Execution\PlatformRole;
 use Nexus\Providers\ProviderCredentialSchema;
 use Nexus\Providers\ProviderRegistry;
 use Nexus\Services\ProviderCatalog;
@@ -34,7 +35,6 @@ use Nexus\Services\ProviderCredentialService;
 final class ProviderCredentialController
 {
     /** Rôles autorisés à configurer des credentials. */
-    private const WRITE_ROLES = ['business'];
 
     /**
      * GET /api/providers
@@ -125,9 +125,11 @@ final class ProviderCredentialController
         }
 
         $user = $request->attribute('user');
-        if (!in_array($user['account_type'] ?? 'personal', self::WRITE_ROLES, true)) {
-            Response::forbidden('Seuls les comptes business peuvent configurer des providers.');
-        }
+        // Privilège d'EXPLOITATION, pas type de client.
+        // Auparavant : account_type === 'business' — or ce champ est choisi
+        // librement à l'inscription, ce qui permettait à n'importe qui
+        // d'écrire une credential de production (CRITICAL, reproduit en HTTP).
+        PlatformRole::require($user, 'credentials');
 
         $provider = ProviderCatalog::get($slug);
         $body     = $request->body();
@@ -194,9 +196,7 @@ final class ProviderCredentialController
         }
 
         $user = $request->attribute('user');
-        if (!in_array($user['account_type'] ?? 'personal', self::WRITE_ROLES, true)) {
-            Response::forbidden('Seuls les comptes business peuvent supprimer les credentials.');
-        }
+        PlatformRole::require($user, 'credentials');
 
         // §3 : la suppression DOIT cibler un environnement précis, sinon elle
         // détruirait aussi les credentials de l'autre environnement.
