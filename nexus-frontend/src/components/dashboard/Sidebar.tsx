@@ -23,6 +23,8 @@ const navBusiness = [
   { to: '/treasury', icon: '◉', label: 'Trésorerie' },
   { to: '/payments', icon: '↗', label: 'Paiements' },
   { to: '/approvals', icon: '✓', label: 'Approbations' },
+  { to: '/beneficiaries', icon: '👥', label: 'Bénéficiaires' },
+  { to: '/reconciliation', icon: '⇌', label: 'Rapprochement' },
   { to: '/team', icon: '⊕', label: 'Équipe & Rôles' },
   { to: '/reporting', icon: '≡', label: 'Reporting' },
 ];

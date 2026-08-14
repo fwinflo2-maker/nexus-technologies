@@ -16,36 +16,27 @@ use Throwable;
  *
  * Saga déterministe, idempotente et auditée :
  *
- *   validation quote → re-validation origine → réservation (hold)
- *   → règlement (capture) → écriture comptable `transactions`
- *   → transition quote (EXECUTED) → notification.
+ *   validation → réservation (hold) → règlement (capture) → écriture
+ *   comptable `transactions` → transition (quote / paiement) → notification.
  *
  * Le tout est ATOMIQUE : une transaction PDO englobe l'ensemble, si bien
  * qu'un échec à n'importe quelle étape restaure l'état initial (rollback).
  *
- * Invariants respectés :
- *   - Le Ledger est la source de vérité : WalletService::createHold/captureHold
- *     écrivent `wallet_operations` + `ledger_entries` ; aucun solde n'est
- *     modifié sans écriture comptable.
- *   - available_balance = balance - hold_balance est préservé par WalletService.
- *   - L'origine des fonds est re-vérifiée côté serveur (jamais de confiance
- *     au frontend).
- *   - La double exécution d'une quote est impossible (verrou FOR UPDATE +
- *     transition de statut + clé d'idempotence).
+ * Deux points d'entrée :
+ *   - execute()           : exécution d'une route de quote (Send Personal).
+ *   - executeTransfer()   : saga générique (réutilisée par les paiements Business).
+ *
+ * Invariants :
+ *   - available_balance = balance - hold_balance (préservé par WalletService).
+ *   - Aucun solde modifié sans écriture comptable (hold→capture → ledger).
+ *   - Double exécution impossible (verrou FOR UPDATE + idempotence).
  */
 final class ExecutionEngine
 {
     /**
      * Exécute une route d'une quote persistée pour l'utilisateur.
      *
-     * @param int         $userId         Identifiant de l'utilisateur authentifié.
-     * @param string      $quoteId        Identifiant de la quote persistée.
-     * @param string      $routeId        Identifiant de la route (A, B, C…).
-     * @param string|null $idempotencyKey Clé d'idempotence (rejeu sûr).
-     *
      * @return array<string,mixed> La transaction enregistrée.
-     *
-     * @throws HttpException Pour les erreurs métier attendues (4xx).
      */
     public static function execute(
         int $userId,
@@ -53,24 +44,18 @@ final class ExecutionEngine
         string $routeId,
         ?string $idempotencyKey = null
     ): array {
-        $pdo = Database::getConnection();
+        $pdo          = Database::getConnection();
+        $useIdem      = $idempotencyKey !== null && $idempotencyKey !== '';
+        $operationId  = self::uuid();
 
-        // ── 0. Idempotence : réservation de la clé avant tout travail ──────
-        $useIdempotency = $idempotencyKey !== null && $idempotencyKey !== '';
-        $operationId    = self::uuid();
-
-        if ($useIdempotency) {
+        if ($useIdem) {
             $state = IdempotencyService::start($idempotencyKey, $userId, $operationId);
             if (!$state['created']) {
                 if ($state['status'] === 'completed') {
                     return (array) ($state['response_json'] ?? []);
                 }
                 if ($state['status'] === 'error') {
-                    throw new HttpException(
-                        409,
-                        (string) ($state['response_json']['error'] ?? 'Opération précédente en échec.'),
-                        'IDEMPOTENCY_ERROR'
-                    );
+                    throw new HttpException(409, (string) ($state['response_json']['error'] ?? 'Opération précédente en échec.'), 'IDEMPOTENCY_ERROR');
                 }
                 throw new HttpException(409, 'Une exécution est déjà en cours pour cette clé.', 'IDEMPOTENCY_IN_PROGRESS');
             }
@@ -81,7 +66,7 @@ final class ExecutionEngine
 
         $pdo->beginTransaction();
         try {
-            // ── 1. Quote (verrou FOR UPDATE : verrouille la double exécution) ──
+            // ── 1. Quote (verrou FOR UPDATE : bloque la double exécution) ──
             $quote = self::loadQuoteForUpdate($pdo, $userId, $quoteId);
             self::assertQuoteExecutable($quote);
 
@@ -90,11 +75,7 @@ final class ExecutionEngine
                 $user        = self::loadUser($pdo, $userId);
                 $originCheck = FundingSourceEngine::validateOrigin($userId, $user, (string) $quote['origin_country']);
                 if (!$originCheck['authorized']) {
-                    throw new HttpException(
-                        403,
-                        $originCheck['reason'] ?? 'Cette origine n\'est plus disponible pour votre compte.',
-                        'ORIGIN_FORBIDDEN'
-                    );
+                    throw new HttpException(403, $originCheck['reason'] ?? 'Cette origine n\'est plus disponible pour votre compte.', 'ORIGIN_FORBIDDEN');
                 }
             }
 
@@ -104,85 +85,18 @@ final class ExecutionEngine
                 throw new HttpException(422, 'Route introuvable dans la quote.', 'ROUTE_NOT_FOUND');
             }
 
-            // ── 4. Montants & frais ──────────────────────────────────────
-            $sourceCurrency = strtoupper((string) $quote['source_currency']);
-            $destCurrency   = strtoupper((string) $quote['dest_currency']);
-            $amountSent     = (string) $quote['amount_sent'];
-            $feeEur         = (float) ($route['feesNum'] ?? 0);
-            $received       = (float) ($route['receivedNum'] ?? 0);
-            $fxRate         = (float) ($route['rate'] ?? 0);
+            $spec  = self::buildSpecFromQuote($quote, $route, $routeId);
+            $txId  = self::executeTransferInternal($userId, $spec, $pdo, $operationId, $startedAt);
 
-            // Frais convertis dans la devise source (débit du wallet source).
-            $rateRef    = Currency::rateToRef($sourceCurrency);
-            $feeSource  = $rateRef > 0.0 ? bcdiv((string) $feeEur, (string) $rateRef, 8) : '0.00000000';
-            $totalDebit = bcadd($amountSent, $feeSource, 8);
-
-            // ── 5. Wallet source + solde disponible ──────────────────────
-            $wallet = WalletService::getWallet($userId, $sourceCurrency);
-            if ($wallet === null) {
-                throw new HttpException(
-                    422,
-                    sprintf('Aucun wallet %s. Fondez d\'abord votre compte.', $sourceCurrency),
-                    'WALLET_NOT_FOUND'
-                );
-            }
-            $available = (string) $wallet['available_balance'];
-            if (bccomp($available, $totalDebit, 8) < 0) {
-                throw new HttpException(
-                    422,
-                    sprintf(
-                        'Solde disponible insuffisant : %s %s disponible, %s %s requis.',
-                        self::fmt($available), $sourceCurrency,
-                        self::fmt($totalDebit), $sourceCurrency
-                    ),
-                    'INSUFFICIENT_FUNDS'
-                );
-            }
-
-            // ── 6. Saga : hold → capture (règlement réel) ─────────────────
-            $holdIdemKey    = $useIdempotency ? substr($idempotencyKey . ':hold', 0, 64) : null;
-            $captureIdemKey = $useIdempotency ? substr($idempotencyKey . ':capture', 0, 64) : null;
-
-            $hold = WalletService::createHold(
-                $userId,
-                (int) $wallet['id'],
-                $totalDebit,
-                $sourceCurrency,
-                $holdIdemKey,
-                sprintf('Envoi %s → %s', $sourceCurrency, $destCurrency),
-                ['quote_id' => $quoteId, 'route_id' => $routeId, 'kind' => 'send']
-            );
-
-            WalletService::captureHold((string) $hold['operation_id'], $userId, $captureIdemKey);
-
-            // ── 7. Écriture comptable dashboard (table transactions) ─────
-            $txId = self::insertTransaction(
-                $pdo,
-                $userId,
-                $quote,
-                $route,
-                $amountSent,
-                $sourceCurrency,
-                $destCurrency,
-                $feeSource,
-                $received,
-                $fxRate,
-                $operationId,
-                $startedAt
-            );
-
-            // ── 8. Transition de la quote ─────────────────────────────────
+            // ── 4. Transition de la quote ─────────────────────────────────
             self::markQuoteExecuted($pdo, $quoteId, $routeId);
-
-            // ── 9. Notification ───────────────────────────────────────────
-            self::notify($pdo, $userId, $sourceCurrency, $destCurrency, $received, $route);
 
             $pdo->commit();
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
-            if ($useIdempotency) {
+            if ($useIdem) {
                 try {
                     IdempotencyService::fail($idempotencyKey, $userId, $e->getMessage(), $operationId);
                 } catch (Throwable) {
@@ -192,17 +106,171 @@ final class ExecutionEngine
             throw $e;
         }
 
-        // ── 10. Relecture + clôture idempotente ───────────────────────────
         $tx = self::loadTransaction($pdo, $txId, $userId);
         if ($tx === null) {
             throw new RuntimeException('Transaction introuvable après exécution.');
         }
-
-        if ($useIdempotency) {
+        if ($useIdem) {
             IdempotencyService::complete($idempotencyKey, $userId, $tx, $operationId);
         }
-
         return $tx;
+    }
+
+    /**
+     * Saga générique d'exécution d'un transfert (utilisée par les paiements Business).
+     *
+     * @param array<string,mixed> $spec Champs :
+     *   source_currency, dest_currency, amount (chaîne décimale),
+     *   fee (chaîne décimale, devise source), dest_amount (float),
+     *   fx_rate (?float), provider (?string), route_id (?string),
+     *   destination (?string), label (string), type (string, défaut 'send'),
+     *   quote_id (?string) — si présent, la quote est validée + marquée EXECUTED.
+     *
+     * @return array<string,mixed> La transaction enregistrée.
+     */
+    public static function executeTransfer(int $userId, array $spec, ?string $idempotencyKey = null): array
+    {
+        $pdo         = Database::getConnection();
+        $useIdem     = $idempotencyKey !== null && $idempotencyKey !== '';
+        $operationId = self::uuid();
+
+        if ($useIdem) {
+            $state = IdempotencyService::start($idempotencyKey, $userId, $operationId);
+            if (!$state['created']) {
+                if ($state['status'] === 'completed') {
+                    return (array) ($state['response_json'] ?? []);
+                }
+                if ($state['status'] === 'error') {
+                    throw new HttpException(409, (string) ($state['response_json']['error'] ?? 'Opération précédente en échec.'), 'IDEMPOTENCY_ERROR');
+                }
+                throw new HttpException(409, 'Une exécution est déjà en cours pour cette clé.', 'IDEMPOTENCY_IN_PROGRESS');
+            }
+        }
+
+        $startedAt = microtime(true);
+        $txId      = 0;
+
+        $pdo->beginTransaction();
+        try {
+            $quoteId = isset($spec['quote_id']) && $spec['quote_id'] !== '' ? (string) $spec['quote_id'] : null;
+            if ($quoteId !== null) {
+                $quote = self::loadQuoteForUpdate($pdo, $userId, $quoteId);
+                self::assertQuoteExecutable($quote);
+            }
+
+            $txId = self::executeTransferInternal($userId, $spec, $pdo, $operationId, $startedAt);
+
+            if ($quoteId !== null) {
+                self::markQuoteExecuted($pdo, $quoteId, (string) ($spec['route_id'] ?? ''));
+            }
+
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            if ($useIdem) {
+                try {
+                    IdempotencyService::fail($idempotencyKey, $userId, $e->getMessage(), $operationId);
+                } catch (Throwable) {
+                }
+            }
+            throw $e;
+        }
+
+        $tx = self::loadTransaction($pdo, $txId, $userId);
+        if ($tx === null) {
+            throw new RuntimeException('Transaction introuvable après exécution.');
+        }
+        if ($useIdem) {
+            IdempotencyService::complete($idempotencyKey, $userId, $tx, $operationId);
+        }
+        return $tx;
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Saga interne (exécutée DANS une transaction ouverte)
+    // ──────────────────────────────────────────────────────────────────────
+
+    /**
+     * @param array<string,mixed> $spec
+     */
+    private static function executeTransferInternal(int $userId, array $spec, PDO $pdo, string $operationId, float $startedAt): int
+    {
+        $sourceCurrency = strtoupper((string) ($spec['source_currency'] ?? ''));
+        $destCurrency   = strtoupper((string) ($spec['dest_currency'] ?? ''));
+        $amountSent     = (string) ($spec['amount'] ?? '0');
+        $feeSource      = (string) ($spec['fee'] ?? '0.00000000');
+        $destAmount     = (float) ($spec['dest_amount'] ?? 0);
+        $fxRate         = isset($spec['fx_rate']) ? (float) $spec['fx_rate'] : 0.0;
+        $provider       = (string) ($spec['provider'] ?? '');
+        $routeId        = (string) ($spec['route_id'] ?? '');
+        $destination    = (string) ($spec['destination'] ?? '');
+        $label          = (string) ($spec['label'] ?? '');
+        $type           = (string) ($spec['type'] ?? 'send');
+        $quoteId        = (string) ($spec['quote_id'] ?? '');
+        $metadata       = $spec['metadata'] ?? null;
+
+        if ($sourceCurrency === '' || $destCurrency === '' || bccomp($amountSent, '0', 8) <= 0) {
+            throw new HttpException(422, 'Montant ou devises invalides.', 'INVALID_TRANSFER_SPEC');
+        }
+
+        // ── 1. Wallet source + solde disponible ──────────────────────
+        $wallet = WalletService::getWallet($userId, $sourceCurrency);
+        if ($wallet === null) {
+            throw new HttpException(422, sprintf('Aucun wallet %s. Fondez d\'abord votre compte.', $sourceCurrency), 'WALLET_NOT_FOUND');
+        }
+
+        $totalDebit = bcadd($amountSent, $feeSource, 8);
+        $available  = (string) $wallet['available_balance'];
+        if (bccomp($available, $totalDebit, 8) < 0) {
+            throw new HttpException(
+                422,
+                sprintf('Solde disponible insuffisant : %s %s disponible, %s %s requis.', self::fmt($available), $sourceCurrency, self::fmt($totalDebit), $sourceCurrency),
+                'INSUFFICIENT_FUNDS'
+            );
+        }
+
+        // ── 2. Saga : hold → capture (règlement réel) ─────────────────
+        $holdIdemKey    = 'op:' . $operationId . ':hold';
+        $captureIdemKey = 'op:' . $operationId . ':capture';
+
+        $hold = WalletService::createHold(
+            $userId,
+            (int) $wallet['id'],
+            $totalDebit,
+            $sourceCurrency,
+            $holdIdemKey,
+            $label !== '' ? $label : sprintf('Envoi %s → %s', $sourceCurrency, $destCurrency),
+            ['operation_id' => $operationId, 'kind' => $type, 'metadata' => $metadata]
+        );
+
+        WalletService::captureHold((string) $hold['operation_id'], $userId, $captureIdemKey);
+
+        // ── 3. Écriture comptable dashboard (table transactions) ─────
+        $txId = self::insertTransaction(
+            $pdo,
+            $userId,
+            $label !== '' ? $label : sprintf('Envoi %s → %s', $sourceCurrency, $destCurrency),
+            $provider,
+            $routeId,
+            $quoteId,
+            $destination,
+            $amountSent,
+            $sourceCurrency,
+            $destAmount,
+            $destCurrency,
+            $feeSource,
+            $fxRate,
+            $type,
+            $operationId,
+            $startedAt
+        );
+
+        // ── 4. Notification ───────────────────────────────────────────
+        self::notify($pdo, $userId, $sourceCurrency, $destCurrency, $destAmount, $provider !== '' ? $provider : null);
+
+        return $txId;
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -264,24 +332,71 @@ final class ExecutionEngine
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // Helpers — écritures
+    // Helpers — construction du spec / écritures
     // ──────────────────────────────────────────────────────────────────────
 
     /**
      * @param array<string,mixed> $quote
      * @param array<string,mixed> $route
+     * @return array<string,mixed>
      */
+    private static function buildSpecFromQuote(array $quote, array $route, string $routeId): array
+    {
+        $sourceCurrency = strtoupper((string) $quote['source_currency']);
+        $destCurrency   = strtoupper((string) $quote['dest_currency']);
+        $amountSent     = (string) $quote['amount_sent'];
+
+        $feeEur  = (float) ($route['feesNum'] ?? 0);
+        $rateRef = Currency::rateToRef($sourceCurrency);
+        $feeSource = $rateRef > 0.0 ? bcdiv((string) $feeEur, (string) $rateRef, 8) : '0.00000000';
+
+        return [
+            'source_currency' => $sourceCurrency,
+            'dest_currency'   => $destCurrency,
+            'amount'          => $amountSent,
+            'fee'             => $feeSource,
+            'dest_amount'     => (float) ($route['receivedNum'] ?? 0),
+            'fx_rate'         => (float) ($route['rate'] ?? 0),
+            'provider'        => (string) ($route['provider'] ?? ''),
+            'route_id'        => $routeId,
+            'destination'     => self::destinationLabel($quote),
+            'label'           => sprintf('Envoi %s → %s', $sourceCurrency, $destCurrency),
+            'type'            => 'send',
+            'quote_id'        => (string) $quote['id'],
+        ];
+    }
+
+    /**
+     * @param array<string,mixed> $quote
+     */
+    private static function destinationLabel(array $quote): string
+    {
+        $methodLabels = [
+            'mobile_money' => 'Mobile Money',
+            'bank'         => 'Virement bancaire',
+            'crypto'       => 'Crypto',
+            'cash_pickup'  => 'Retrait en espèces',
+        ];
+        $method  = strtolower((string) $quote['receiving_method']);
+        $country = strtoupper((string) $quote['dest_country']);
+        return substr($country . ' · ' . ($methodLabels[$method] ?? $method), 0, 190);
+    }
+
     private static function insertTransaction(
         PDO $pdo,
         int $userId,
-        array $quote,
-        array $route,
+        string $label,
+        string $provider,
+        string $routeId,
+        string $quoteId,
+        string $destination,
         string $amountSent,
         string $sourceCurrency,
+        float $received,
         string $destCurrency,
         string $feeSource,
-        float $received,
         float $fxRate,
+        string $type,
         string $operationId,
         float $startedAt
     ): int {
@@ -292,8 +407,7 @@ final class ExecutionEngine
         $fee2      = round((float) $feeSource, 2);
         $execSec   = max(1, (int) round(microtime(true) - $startedAt));
 
-        $provider    = substr((string) ($route['provider'] ?? ''), 0, 50);
-        $description = substr(sprintf('Route %s · %s', (string) ($route['id'] ?? ''), $provider), 0, 255);
+        $description = substr(sprintf('Route %s · %s', $routeId !== '' ? $routeId : '-', $provider !== '' ? $provider : 'Nexus'), 0, 255);
 
         $stmt = $pdo->prepare(
             'INSERT INTO transactions
@@ -309,26 +423,26 @@ final class ExecutionEngine
         );
 
         $stmt->execute([
-            'qid'     => (string) $quote['id'],
-            'rid'     => (string) ($route['id'] ?? ''),
+            'qid'     => $quoteId !== '' ? $quoteId : null,
+            'rid'     => $routeId !== '' ? $routeId : null,
             'uid'     => $userId,
-            'type'    => 'send',
+            'type'    => $type,
             'dir'     => 'out',
-            'label'   => sprintf('Envoi %s → %s', $sourceCurrency, $destCurrency),
-            'desc'    => $description !== '' ? $description : null,
+            'label'   => substr($label, 0, 190),
+            'desc'    => $description,
             'amount'  => round((float) $amountSent, 2),
             'cur'     => $sourceCurrency,
             'aref'    => $amountRef,
             'refcur'  => Currency::REF,
             'axaf'    => $amountXaf,
-            'damount' => round($received, 2),
-            'dcur'    => $destCurrency,
+            'damount' => $received > 0 ? round($received, 2) : null,
+            'dcur'    => $destCurrency !== '' ? $destCurrency : null,
             'fxr'     => $fxRate > 0 ? number_format($fxRate, 8, '.', '') : null,
             'fee'     => $fee2,
             'feecur'  => $sourceCurrency,
             'status'  => 'completed',
-            'prov'    => $provider !== '' ? $provider : null,
-            'dest'    => self::destinationLabel($quote),
+            'prov'    => $provider !== '' ? substr($provider, 0, 50) : null,
+            'dest'    => $destination !== '' ? substr($destination, 0, 190) : null,
             'execsec' => $execSec,
         ]);
 
@@ -341,17 +455,8 @@ final class ExecutionEngine
         $stmt->execute(['rid' => $routeId, 'id' => $quoteId]);
     }
 
-    /**
-     * @param array<string,mixed> $route
-     */
-    private static function notify(
-        PDO $pdo,
-        int $userId,
-        string $sourceCurrency,
-        string $destCurrency,
-        float $received,
-        array $route
-    ): void {
+    private static function notify(PDO $pdo, int $userId, string $sourceCurrency, string $destCurrency, float $received, ?string $provider): void
+    {
         $stmt = $pdo->prepare(
             'INSERT INTO notifications (user_id, type, title, message)
              VALUES (:uid, :type, :title, :msg)'
@@ -360,14 +465,7 @@ final class ExecutionEngine
             'uid'   => $userId,
             'type'  => 'transfert',
             'title' => 'Transfert exécuté',
-            'msg'   => sprintf(
-                'Envoi %s → %s réglé via %s. Montant reçu : %s %s.',
-                $sourceCurrency,
-                $destCurrency,
-                (string) ($route['provider'] ?? 'Nexus'),
-                self::fmt((string) $received),
-                $destCurrency
-            ),
+            'msg'   => sprintf('Envoi %s → %s réglé via %s. Montant reçu : %s %s.', $sourceCurrency, $destCurrency, $provider ?? 'Nexus', self::fmt((string) $received), $destCurrency),
         ]);
     }
 
@@ -381,8 +479,6 @@ final class ExecutionEngine
     }
 
     /**
-     * Normalise les types numériques pour la sérialisation JSON.
-     *
      * @param array<string,mixed> $row
      * @return array<string,mixed>
      */
@@ -401,20 +497,6 @@ final class ExecutionEngine
             }
         }
         return $row;
-    }
-
-    /** @param array<string,mixed> $quote */
-    private static function destinationLabel(array $quote): string
-    {
-        $methodLabels = [
-            'mobile_money' => 'Mobile Money',
-            'bank'         => 'Virement bancaire',
-            'crypto'       => 'Crypto',
-            'cash_pickup'  => 'Retrait en espèces',
-        ];
-        $method  = strtolower((string) $quote['receiving_method']);
-        $country = strtoupper((string) $quote['dest_country']);
-        return substr($country . ' · ' . ($methodLabels[$method] ?? $method), 0, 190);
     }
 
     private static function fmt(string $decimal): string

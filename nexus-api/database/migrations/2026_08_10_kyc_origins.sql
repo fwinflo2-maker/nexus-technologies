@@ -20,22 +20,22 @@ USE nexus;
 -- ==========================================================================
 
 ALTER TABLE users
-    ADD COLUMN country_of_residence              CHAR(2)      NULL     AFTER kyc_level,
-    ADD COLUMN kyc_verified_at                   DATETIME     NULL     AFTER country_of_residence,
-    ADD COLUMN country_of_residence_verified_at  DATETIME     NULL     AFTER kyc_verified_at;
+    ADD COLUMN IF NOT EXISTS country_of_residence              CHAR(2)  NULL     AFTER kyc_level,
+    ADD COLUMN IF NOT EXISTS kyc_verified_at                   DATETIME NULL     AFTER country_of_residence,
+    ADD COLUMN IF NOT EXISTS country_of_residence_verified_at  DATETIME NULL     AFTER kyc_verified_at;
 
 -- ==========================================================================
 -- 2. Vérification et statut des sources de financement (payment_accounts)
 -- ==========================================================================
 
 ALTER TABLE payment_accounts
-    ADD COLUMN verification_status   ENUM('unverified','pending','verified','rejected')
+    ADD COLUMN IF NOT EXISTS verification_status   ENUM('unverified','pending','verified','rejected')
                                           NOT NULL DEFAULT 'unverified'  AFTER is_default,
-    ADD COLUMN supported_for_transfer TINYINT(1) NOT NULL DEFAULT 0      AFTER verification_status,
-    ADD COLUMN status                ENUM('active','inactive','suspended')
+    ADD COLUMN IF NOT EXISTS supported_for_transfer TINYINT(1) NOT NULL DEFAULT 0      AFTER verification_status,
+    ADD COLUMN IF NOT EXISTS status                ENUM('active','inactive','suspended')
                                           NOT NULL DEFAULT 'active'      AFTER supported_for_transfer,
-    ADD COLUMN provider_slug         VARCHAR(50) NULL                    AFTER status,
-    ADD INDEX idx_accounts_origin (user_id, role, verification_status, status);
+    ADD COLUMN IF NOT EXISTS provider_slug         VARCHAR(50) NULL                    AFTER status,
+    ADD INDEX IF NOT EXISTS idx_accounts_origin (user_id, role, verification_status, status);
 
 -- ==========================================================================
 -- 3. Mise à jour des comptes de démonstration existants
@@ -56,7 +56,7 @@ WHERE role = 'source'
 -- ==========================================================================
 
 ALTER TABLE quotes
-    ADD COLUMN origin_country CHAR(2) NULL AFTER source_currency;
+    ADD COLUMN IF NOT EXISTS origin_country CHAR(2) NULL AFTER source_currency;
 
 -- ==========================================================================
 -- 5. Données de démonstration : pays de résidence KYC

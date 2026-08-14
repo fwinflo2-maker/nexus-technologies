@@ -564,6 +564,222 @@ export async function apiTransferDetail(id: number): Promise<ApiResponse<Transfe
   return { success: false, error: res.error, code: res.code };
 }
 
+// --- Business : bénéficiaires -----------------------------------------------
+
+export interface Beneficiary {
+  id: number;
+  name: string;
+  country: string;
+  currency: string;
+  method: 'mobile_money' | 'bank' | 'crypto' | 'cash_pickup';
+  account_reference: string | null;
+  reference_masked: string | null;
+  operator: string | null;
+  bank_name: string | null;
+  status: 'active' | 'inactive' | 'pending_verification';
+  verification_status: 'unverified' | 'verified' | 'rejected';
+  created_at: string;
+  updated_at: string;
+}
+
+export async function apiBeneficiariesList(businessId?: number): Promise<ApiResponse<{ items: Beneficiary[] }>> {
+  const q = businessId ? `?business_id=${businessId}` : '';
+  return request<{ items: Beneficiary[] }>('GET', `/beneficiaries${q}`);
+}
+
+export async function apiBeneficiaryCreate(payload: {
+  name: string;
+  country: string;
+  currency: string;
+  method: string;
+  account_reference: string;
+  operator?: string;
+  bank_name?: string;
+  business_id?: number;
+}): Promise<ApiResponse<Beneficiary>> {
+  const res = await request<{ beneficiary: Beneficiary }>('POST', '/beneficiaries', payload as unknown as Record<string, unknown>);
+  return res.success && res.data ? { success: true, data: res.data.beneficiary } : { success: false, error: res.error, code: res.code };
+}
+
+export async function apiBeneficiaryVerify(id: number, businessId?: number): Promise<ApiResponse<Beneficiary>> {
+  const res = await request<{ beneficiary: Beneficiary }>('POST', `/beneficiaries/${id}/verify`, { business_id: businessId } as unknown as Record<string, unknown>);
+  return res.success && res.data ? { success: true, data: res.data.beneficiary } : { success: false, error: res.error, code: res.code };
+}
+
+export async function apiBeneficiarySetStatus(id: number, status: 'active' | 'inactive', businessId?: number): Promise<ApiResponse<Beneficiary>> {
+  const action = status === 'active' ? 'activate' : 'deactivate';
+  const res = await request<{ beneficiary: Beneficiary }>('POST', `/beneficiaries/${id}/${action}`, { business_id: businessId } as unknown as Record<string, unknown>);
+  return res.success && res.data ? { success: true, data: res.data.beneficiary } : { success: false, error: res.error, code: res.code };
+}
+
+// --- Business : paiements ---------------------------------------------------
+
+export type PaymentStatus = 'draft' | 'pending_approval' | 'approved' | 'executing' | 'completed' | 'failed' | 'rejected' | 'cancelled';
+
+export interface Payment {
+  id: number;
+  beneficiary_id: number | null;
+  purpose: string | null;
+  source_currency: string;
+  dest_currency: string;
+  amount: number;
+  amount_ref: number;
+  fee: number;
+  fee_currency: string;
+  dest_amount: number | null;
+  fx_rate: number | null;
+  provider: string | null;
+  route_id: string | null;
+  destination: string | null;
+  status: PaymentStatus;
+  created_by: number | null;
+  approved_by: number | null;
+  approved_at: string | null;
+  executed_at: string | null;
+  transaction_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PaymentsListData { items: Payment[]; page: number; per_page: number; total: number; }
+
+export async function apiPaymentsList(params?: { status?: string; page?: number; per_page?: number; business_id?: number }): Promise<ApiResponse<PaymentsListData>> {
+  const q = new URLSearchParams();
+  if (params?.status) q.set('status', params.status);
+  if (params?.page) q.set('page', String(params.page));
+  if (params?.per_page) q.set('per_page', String(params.per_page));
+  if (params?.business_id) q.set('business_id', String(params.business_id));
+  const qs = q.toString();
+  return request<PaymentsListData>('GET', `/payments${qs ? `?${qs}` : ''}`);
+}
+
+export async function apiPaymentCreate(payload: {
+  beneficiary_id: number;
+  amount: number;
+  source_currency: string;
+  dest_currency?: string;
+  purpose?: string;
+  objective?: string;
+  business_id?: number;
+}): Promise<ApiResponse<{ payment: Payment; routes: unknown[] }>> {
+  return request<{ payment: Payment; routes: unknown[] }>('POST', '/payments', payload as unknown as Record<string, unknown>);
+}
+
+export async function apiPaymentAction(id: number, action: 'submit' | 'approve' | 'reject' | 'execute' | 'cancel', businessId?: number): Promise<ApiResponse<{ payment: Payment; transaction?: TransferTx }>> {
+  const body: Record<string, unknown> = {};
+  if (businessId) body.business_id = businessId;
+  return request<{ payment: Payment; transaction?: TransferTx }>('POST', `/payments/${id}/${action}`, body);
+}
+
+// --- Business : équipe & rôles ----------------------------------------------
+
+export interface TeamMember {
+  id: number;
+  user_id: number;
+  full_name: string;
+  email: string;
+  role: string;
+  status: string;
+  created_at: string;
+}
+
+export async function apiTeamList(businessId?: number): Promise<ApiResponse<{ items: TeamMember[]; roles: string[] }>> {
+  const q = businessId ? `?business_id=${businessId}` : '';
+  return request<{ items: TeamMember[]; roles: string[] }>('GET', `/team${q}`);
+}
+
+export async function apiTeamAdd(payload: { email: string; role: string; business_id?: number }): Promise<ApiResponse<{ id: number }>> {
+  return request<{ id: number }>('POST', '/team', payload as unknown as Record<string, unknown>);
+}
+
+export async function apiTeamUpdate(id: number, role: string, businessId?: number): Promise<ApiResponse<{ updated: boolean }>> {
+  return request<{ updated: boolean }>('PUT', `/team/${id}`, { role, business_id: businessId } as unknown as Record<string, unknown>);
+}
+
+export async function apiTeamRemove(id: number, businessId?: number): Promise<ApiResponse<{ deleted: boolean }>> {
+  return request<{ deleted: boolean }>('DELETE', `/team/${id}`, { business_id: businessId } as unknown as Record<string, unknown>);
+}
+
+// --- Business : rapprochement -----------------------------------------------
+
+export interface ReconciliationItem {
+  transaction_id: number;
+  item_id: number | null;
+  provider: string | null;
+  destination: string | null;
+  expected_amount: number;
+  actual_amount: number | null;
+  currency: string;
+  provider_reference: string;
+  status: 'pending' | 'matched' | 'unmatched' | 'discrepancy' | 'resolved';
+  notes: string;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+export async function apiReconciliationList(params?: { status?: string; business_id?: number }): Promise<ApiResponse<{ items: ReconciliationItem[] }>> {
+  const q = new URLSearchParams();
+  if (params?.status) q.set('status', params.status);
+  if (params?.business_id) q.set('business_id', String(params.business_id));
+  const qs = q.toString();
+  return request<{ items: ReconciliationItem[] }>('GET', `/reconciliation${qs ? `?${qs}` : ''}`);
+}
+
+export async function apiReconciliationUpsert(payload: { transaction_id: number; provider_reference: string; actual_amount: number; business_id?: number }): Promise<ApiResponse<{ transaction_id: number; status: string }>> {
+  return request<{ transaction_id: number; status: string }>('POST', '/reconciliation', payload as unknown as Record<string, unknown>);
+}
+
+export async function apiReconciliationResolve(id: number, notes?: string, businessId?: number): Promise<ApiResponse<{ resolved: boolean }>> {
+  return request<{ resolved: boolean }>('POST', `/reconciliation/${id}/resolve`, { notes, business_id: businessId } as unknown as Record<string, unknown>);
+}
+
+// --- Business : console financière ------------------------------------------
+
+export interface BusinessWallet {
+  currency: string;
+  balance: number;
+  available: number;
+  pending: number;
+  in_transit: number;
+  settlement: number;
+  ref_value: number;
+}
+
+export interface BusinessOverview {
+  totals: {
+    total_assets: number;
+    available: number;
+    pending: number;
+    in_transit: number;
+    settlement: number;
+    receivables: number;
+    payables: number;
+    volume_xaf: number;
+    fees_ref: number;
+    success_rate: number;
+    avg_exec_sec: number | null;
+    ref_currency: string;
+  };
+  wallets: BusinessWallet[];
+  cash_flow: { date: string; inflow: number; outflow: number }[];
+  providers: { provider: string; transactions: number; volume_xaf: number; success_rate: number }[];
+}
+
+export async function apiBusinessOverview(businessId?: number): Promise<ApiResponse<BusinessOverview>> {
+  const q = businessId ? `?business_id=${businessId}` : '';
+  return request<BusinessOverview>('GET', `/business/overview${q}`);
+}
+
+export async function apiBusinessTreasury(businessId?: number): Promise<ApiResponse<{ totals: BusinessOverview['totals']; wallets: BusinessWallet[] }>> {
+  const q = businessId ? `?business_id=${businessId}` : '';
+  return request<{ totals: BusinessOverview['totals']; wallets: BusinessWallet[] }>('GET', `/business/treasury${q}`);
+}
+
+export async function apiBusinessAnalytics(businessId?: number): Promise<ApiResponse<{ volume: BusinessOverview['totals']; cash_flow: BusinessOverview['cash_flow']; providers: BusinessOverview['providers'] }>> {
+  const q = businessId ? `?business_id=${businessId}` : '';
+  return request<{ volume: BusinessOverview['totals']; cash_flow: BusinessOverview['cash_flow']; providers: BusinessOverview['providers'] }>('GET', `/business/analytics${q}`);
+}
+
 // --- Helpers -----------------------------------------------------------------
 
 async function request<T = unknown>(

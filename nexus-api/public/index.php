@@ -11,11 +11,16 @@ declare(strict_types=1);
 
 use Nexus\Controllers\AccountController;
 use Nexus\Controllers\AuthController;
+use Nexus\Controllers\BeneficiaryController;
+use Nexus\Controllers\BusinessController;
 use Nexus\Controllers\DashboardController;
 use Nexus\Controllers\IntentController;
 use Nexus\Controllers\NotificationController;
+use Nexus\Controllers\PaymentController;
 use Nexus\Controllers\ProviderCredentialController;
 use Nexus\Controllers\QuoteController;
+use Nexus\Controllers\ReconciliationController;
+use Nexus\Controllers\TeamController;
 use Nexus\Controllers\TransferController;
 use Nexus\Controllers\UserController;
 use Nexus\Controllers\WalletController;
@@ -153,6 +158,40 @@ $router->get('/quotes/{id}', [QuoteController::class, 'get']);
 $router->post('/transfers', [TransferController::class, 'execute']);
 $router->get('/transfers', [TransferController::class, 'index']);
 $router->get('/transfers/{id}', [TransferController::class, 'show']);
+
+// --- Business : bénéficiaires (protégé) -------------------------------------
+$router->get('/beneficiaries', [BeneficiaryController::class, 'index']);
+$router->post('/beneficiaries', [BeneficiaryController::class, 'create']);
+$router->put('/beneficiaries/{id}', [BeneficiaryController::class, 'update']);
+$router->post('/beneficiaries/{id}/deactivate', [BeneficiaryController::class, 'deactivate']);
+$router->post('/beneficiaries/{id}/activate', [BeneficiaryController::class, 'activate']);
+$router->post('/beneficiaries/{id}/verify', [BeneficiaryController::class, 'verify']);
+
+// --- Business : paiements + approbations (protégé) --------------------------
+$router->get('/payments', [PaymentController::class, 'index']);
+$router->post('/payments', [PaymentController::class, 'create']);
+$router->get('/payments/{id}', [PaymentController::class, 'show']);
+$router->post('/payments/{id}/submit', [PaymentController::class, 'submit']);
+$router->post('/payments/{id}/approve', [PaymentController::class, 'approve']);
+$router->post('/payments/{id}/reject', [PaymentController::class, 'reject']);
+$router->post('/payments/{id}/execute', [PaymentController::class, 'execute']);
+$router->post('/payments/{id}/cancel', [PaymentController::class, 'cancel']);
+
+// --- Business : équipe & rôles (protégé) ------------------------------------
+$router->get('/team', [TeamController::class, 'index']);
+$router->post('/team', [TeamController::class, 'add']);
+$router->put('/team/{id}', [TeamController::class, 'update']);
+$router->delete('/team/{id}', [TeamController::class, 'remove']);
+
+// --- Business : rapprochement (protégé) -------------------------------------
+$router->get('/reconciliation', [ReconciliationController::class, 'index']);
+$router->post('/reconciliation', [ReconciliationController::class, 'upsert']);
+$router->post('/reconciliation/{id}/resolve', [ReconciliationController::class, 'resolve']);
+
+// --- Business : console financière (protégé) --------------------------------
+$router->get('/business/overview', [BusinessController::class, 'overview']);
+$router->get('/business/treasury', [BusinessController::class, 'treasury']);
+$router->get('/business/analytics', [BusinessController::class, 'analytics']);
 
 // --- User Profile (protégé) ----------------------------------------------------
 $router->get('/users/me', [UserController::class, 'me']);

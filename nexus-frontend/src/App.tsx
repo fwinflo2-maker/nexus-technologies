@@ -18,7 +18,17 @@ import SendPage from './views/dashboard/SendPage';
 import ReceivePage from './views/dashboard/ReceivePage';
 import ConvertPage from './views/dashboard/ConvertPage';
 import HistoryPage from './views/dashboard/HistoryPage';
-import PlaceholderPage from './views/dashboard/PlaceholderPage';
+import SettingsPage from './views/dashboard/SettingsPage';
+import KycPage from './views/dashboard/KycPage';
+import AgentsPage from './views/dashboard/AgentsPage';
+import BusinessDashboard from './views/business/BusinessDashboard';
+import TreasuryPage from './views/business/TreasuryPage';
+import PaymentsPage from './views/business/PaymentsPage';
+import BeneficiariesPage from './views/business/BeneficiariesPage';
+import ApprovalsPage from './views/business/ApprovalsPage';
+import TeamPage from './views/business/TeamPage';
+import ReconciliationPage from './views/business/ReconciliationPage';
+import AnalyticsPage from './views/business/AnalyticsPage';
 import './styles/design-system.css';
 import './styles/dashboard-system.css';
 
@@ -97,7 +107,7 @@ function DashboardLayout() {
 
         <div className="main-content">
           <Routes>
-            <Route path="/dashboard" element={<><DashTopbar mode={effectiveMode} title="Tableau de bord" subtitle="Vue d'ensemble" /><DashboardPage mode={effectiveMode} /></>} />
+            <Route path="/dashboard" element={<><DashTopbar mode={effectiveMode} title="Tableau de bord" subtitle="Vue d'ensemble" />{effectiveMode === 'business' ? <BusinessDashboard /> : <DashboardPage mode={effectiveMode} />}</>} />
             <Route path="/wallet" element={<><DashTopbar mode={effectiveMode} title="Portefeuille" subtitle="Multi-devises" /><WalletPage /></>} />
             {/* Redirection /routing → /send (routing intégré dans /send) */}
             <Route path="/routing" element={<Navigate to="/send" replace />} />
@@ -108,17 +118,19 @@ function DashboardLayout() {
             <Route path="/notifications" element={<><DashTopbar mode={effectiveMode} title="Notifications" subtitle="Centre de notification" /><NotificationsPage /></>} />
 
             {/* Routes réservées exclusivement aux comptes Business */}
-            <Route path="/treasury" element={<BusinessRoute><DashTopbar mode={effectiveMode} title="Trésorerie" subtitle="Business" /><PlaceholderPage /></BusinessRoute>} />
-            <Route path="/payments" element={<BusinessRoute><DashTopbar mode={effectiveMode} title="Paiements" subtitle="Business" /><PlaceholderPage /></BusinessRoute>} />
-            <Route path="/approvals" element={<BusinessRoute><DashTopbar mode={effectiveMode} title="Approbations" subtitle="Business" /><PlaceholderPage /></BusinessRoute>} />
-            <Route path="/team" element={<BusinessRoute><DashTopbar mode={effectiveMode} title="Équipe" subtitle="Rôles & permissions" /><PlaceholderPage /></BusinessRoute>} />
-            <Route path="/reporting" element={<BusinessRoute><DashTopbar mode={effectiveMode} title="Reporting" subtitle="Business" /><PlaceholderPage /></BusinessRoute>} />
+            <Route path="/treasury" element={<BusinessRoute><DashTopbar mode={effectiveMode} title="Trésorerie" subtitle="Multi-devises" /><TreasuryPage /></BusinessRoute>} />
+            <Route path="/payments" element={<BusinessRoute><DashTopbar mode={effectiveMode} title="Paiements" subtitle="Workflow d'approbation" /><PaymentsPage /></BusinessRoute>} />
+            <Route path="/approvals" element={<BusinessRoute><DashTopbar mode={effectiveMode} title="Approbations" subtitle="File d'approbation" /><ApprovalsPage /></BusinessRoute>} />
+            <Route path="/beneficiaries" element={<BusinessRoute><DashTopbar mode={effectiveMode} title="Bénéficiaires" subtitle="Destinataires de paiements" /><BeneficiariesPage /></BusinessRoute>} />
+            <Route path="/reconciliation" element={<BusinessRoute><DashTopbar mode={effectiveMode} title="Rapprochement" subtitle="Ledger ↔ providers" /><ReconciliationPage /></BusinessRoute>} />
+            <Route path="/team" element={<BusinessRoute><DashTopbar mode={effectiveMode} title="Équipe" subtitle="Rôles & permissions" /><TeamPage /></BusinessRoute>} />
+            <Route path="/reporting" element={<BusinessRoute><DashTopbar mode={effectiveMode} title="Reporting" subtitle="Analytics" /><AnalyticsPage /></BusinessRoute>} />
 
-            <Route path="/kyc" element={<><DashTopbar mode={effectiveMode} title="KYC / KYB" subtitle="Conformité" /><PlaceholderPage /></>} />
+            <Route path="/kyc" element={<><DashTopbar mode={effectiveMode} title="KYC / KYB" subtitle="Conformité" /><KycPage /></>} />
             {/* /providers est une fonctionnalité du Back Office : plus accessible depuis les dashboards */}
             <Route path="/providers" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/agents" element={<><DashTopbar mode={effectiveMode} title="Agents IA" subtitle="Système intelligent" /><PlaceholderPage /></>} />
-            <Route path="/settings" element={<><DashTopbar mode={effectiveMode} title="Paramètres" subtitle="Préférences du compte" /><PlaceholderPage /></>} />
+            <Route path="/agents" element={<><DashTopbar mode={effectiveMode} title="Nexus Core" subtitle="Moteurs d'orchestration" /><AgentsPage /></>} />
+            <Route path="/settings" element={<><DashTopbar mode={effectiveMode} title="Paramètres" subtitle="Préférences du compte" /><SettingsPage /></>} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </div>
