@@ -16,6 +16,7 @@ use Nexus\Controllers\BusinessController;
 use Nexus\Controllers\DashboardController;
 use Nexus\Controllers\IntentController;
 use Nexus\Controllers\ControlCenterController;
+use Nexus\Controllers\MaintenanceController;
 use Nexus\Controllers\KycController;
 use Nexus\Controllers\NotificationController;
 use Nexus\Controllers\PaymentController;
@@ -159,6 +160,12 @@ $router->get('/control/public-keys', [ControlCenterController::class, 'publicKey
 $router->get('/control/kyc', [ControlCenterController::class, 'kyc']);
 $router->get('/control/webhooks', [ControlCenterController::class, 'webhooks']);
 $router->get('/control/audit', [ControlCenterController::class, 'audit']);
+
+// Maintenance d'exploitation : le diagnostic est en lecture seule (capacité
+// « operations »), la reprise modifie des paiements réels (capacité
+// « maintenance » + confirmation explicite).
+$router->get('/control/maintenance/stuck-payments', [MaintenanceController::class, 'stuckPayments']);
+$router->post('/control/maintenance/recover-payments', [MaintenanceController::class, 'recoverPayments']);
 
 // --- KYC / KYB : vérification d'identité (Sumsub) --------------------------
 // status/session : protégés (JWT).
