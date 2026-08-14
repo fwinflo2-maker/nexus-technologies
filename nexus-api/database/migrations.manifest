@@ -41,3 +41,5 @@
 2026_08_14_integrity_constraints.sql
 # 0.12 — Persistance KYC/KYB provider (exception documentée au freeze)
 2026_08_14_kyc_verifications.sql
+# 0.13 — Environnement d'exécution tracé sur les mouvements d'argent
+2026_08_14_execution_environment.sql

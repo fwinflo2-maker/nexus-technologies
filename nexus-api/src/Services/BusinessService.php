@@ -83,8 +83,22 @@ final class BusinessService
         }
         $businessId = (int) ($businessIdInput ?? 0);
         if ($businessId <= 0) {
-            throw new HttpException(400, 'Paramètre business_id requis.', 'BUSINESS_ID_REQUIRED');
+            // Un acteur non-Business qui ne cible aucun espace n'a pas commis
+            // une erreur de saisie : il n'a simplement aucun espace Business.
+            // La réponse doit donc être une DÉCISION D'AUTORISATION (403), pas
+            // une erreur de validation (400) — un 400 laisserait croire qu'il
+            // suffit d'ajouter un paramètre pour obtenir l'accès, et distingue
+            // de l'extérieur « paramètre manquant » de « accès refusé ».
+            //
+            // L'accès effectif à l'espace ciblé reste vérifié en aval par
+            // requireRole() : appartenance à team_members exigée.
+            throw new HttpException(
+                403,
+                'Accès refusé : ce compte n\'est rattaché à aucun espace Business.',
+                'FORBIDDEN_NO_BUSINESS_CONTEXT'
+            );
         }
+
         return $businessId;
     }
 

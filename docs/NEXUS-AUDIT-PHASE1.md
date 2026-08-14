@@ -134,6 +134,17 @@ fonctionne (l'accès est refusé, `FORBIDDEN_CROSS_BUSINESS` existe bien), mais
 l'ordre des contrôles fait primer la validation de paramètre sur celle du type
 de compte. Le code de statut est donc trompeur pour un client d'API.
 
+> **RÉSOLU** (phase Execution Context). `resolveBusinessUserId()` renvoie
+> désormais **403 `FORBIDDEN_NO_BUSINESS_CONTEXT`** : un acteur sans espace
+> Business ne commet pas une erreur de saisie, il n'a pas l'autorisation.
+> Vérifié sur `beneficiaries`, `business/overview`, `payments`, `team`.
+> Couvert par `tests/BusinessAccessControlTest.php`.
+>
+> Précision issue de la vérification : le ciblage d'un espace tiers était
+> **déjà** bloqué en 403 par `requireRole()` (`FORBIDDEN_ROLE`) — il n'y a
+> jamais eu de fuite de données inter-tenant, uniquement un code de statut
+> trompeur dans le cas « aucun espace ciblé ».
+
 **Correctif suggéré :** vérifier `account_type !== 'business'` → 403 *avant* de
 valider `business_id`.
 

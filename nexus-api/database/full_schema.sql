@@ -254,6 +254,7 @@ CREATE TABLE `payments` (
   `dest_amount` decimal(20,2) DEFAULT NULL,
   `fx_rate` decimal(20,8) DEFAULT NULL,
   `provider` varchar(50) DEFAULT NULL,
+  `environment` enum('sandbox','production') NOT NULL DEFAULT 'production' COMMENT 'Environnement d''exÃ©cution rÃ©el du paiement (jamais dÃ©duit d''une credential disponible).',
   `route_id` varchar(10) DEFAULT NULL,
   `destination` varchar(190) DEFAULT NULL,
   `status` enum('draft','pending_approval','approved','executing','completed','failed','rejected','cancelled') NOT NULL DEFAULT 'draft',
@@ -267,6 +268,7 @@ CREATE TABLE `payments` (
   PRIMARY KEY (`id`),
   KEY `idx_payments_user_status` (`user_id`,`status`),
   KEY `idx_payments_beneficiary` (`beneficiary_id`),
+  KEY `idx_payments_environment` (`environment`,`created_at`),
   CONSTRAINT `fk_payments_beneficiary` FOREIGN KEY (`beneficiary_id`) REFERENCES `beneficiaries` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_payments_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -389,6 +391,7 @@ CREATE TABLE `transactions` (
   `fee_currency` varchar(5) NOT NULL DEFAULT 'EUR',
   `status` enum('completed','processing','pending','failed','cancelled') NOT NULL DEFAULT 'pending',
   `provider` varchar(50) DEFAULT NULL,
+  `environment` enum('sandbox','production') NOT NULL DEFAULT 'production' COMMENT 'Environnement d''exÃ©cution rÃ©el de l''opÃ©ration (jamais dÃ©duit d''une credential disponible).',
   `destination` varchar(190) DEFAULT NULL,
   `execution_time_seconds` int(10) unsigned DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
@@ -396,6 +399,7 @@ CREATE TABLE `transactions` (
   PRIMARY KEY (`id`),
   KEY `idx_tx_user_created` (`user_id`,`created_at`),
   KEY `idx_tx_user_status` (`user_id`,`status`),
+  KEY `idx_transactions_environment` (`environment`,`created_at`),
   CONSTRAINT `fk_tx_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
