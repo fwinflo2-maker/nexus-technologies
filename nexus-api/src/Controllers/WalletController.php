@@ -8,6 +8,8 @@ use Nexus\Auth\AuthMiddleware;
 use Nexus\Core\Currency;
 use Nexus\Core\Database;
 use Nexus\Core\Request;
+use Nexus\Execution\ExecutionContext;
+use Nexus\Core\HttpException;
 use Nexus\Core\Response;
 use Nexus\Services\WalletService;
 
@@ -76,9 +78,17 @@ final class WalletController
         $opId    = (string) $request->input('operation_id', '');
         $idemKey = (string) $request->input('idempotency_key', '');
 
+        // Le contexte est résolu ici puis transmis : le service compare
+        // l'environnement demandé à celui, authoritative, de l'opération.
+        $context = ExecutionContext::fromRequest($request, $user);
+
         try {
-            $res = WalletService::captureHold($opId, $userId, $idemKey !== '' ? $idemKey : null);
+            $res = WalletService::captureHold($opId, $userId, $idemKey !== '' ? $idemKey : null, $context);
             Response::success($res);
+        } catch (HttpException $e) {
+            // Un mismatch d'environnement est un conflit (409), pas une
+            // requête malformée : ne jamais le rétrograder en 400.
+            Response::error($e->getMessage(), $e->statusCode(), $e->errorCode());
         } catch (\Throwable $e) {
             Response::error($e->getMessage(), 400);
         }
@@ -97,9 +107,17 @@ final class WalletController
         $opId    = (string) $request->input('operation_id', '');
         $idemKey = (string) $request->input('idempotency_key', '');
 
+        // Le contexte est résolu ici puis transmis : le service compare
+        // l'environnement demandé à celui, authoritative, de l'opération.
+        $context = ExecutionContext::fromRequest($request, $user);
+
         try {
-            $res = WalletService::releaseHold($opId, $userId, $idemKey !== '' ? $idemKey : null);
+            $res = WalletService::releaseHold($opId, $userId, $idemKey !== '' ? $idemKey : null, $context);
             Response::success($res);
+        } catch (HttpException $e) {
+            // Un mismatch d'environnement est un conflit (409), pas une
+            // requête malformée : ne jamais le rétrograder en 400.
+            Response::error($e->getMessage(), $e->statusCode(), $e->errorCode());
         } catch (\Throwable $e) {
             Response::error($e->getMessage(), 400);
         }

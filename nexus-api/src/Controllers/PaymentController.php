@@ -10,6 +10,7 @@ use Nexus\Core\Database;
 use Nexus\Core\HttpException;
 use Nexus\Core\Request;
 use Nexus\Core\Response;
+use Nexus\Execution\EnvironmentGuard;
 use Nexus\Execution\ExecutionContext;
 use Nexus\Services\BusinessService;
 use PDO;
@@ -227,18 +228,16 @@ final class PaymentController
         // autre environnement changerait la nature de l'opération (une revue
         // faite en sandbox validerait un mouvement d'argent réel). Refus strict,
         // dans les deux sens, sans repli.
-        $paymentEnv = (string) ($payment['environment'] ?? '');
-        if ($paymentEnv !== '' && $paymentEnv !== $context->environmentValue()) {
-            Response::error(
-                sprintf(
-                    'Ce paiement a été créé en environnement « %s » et ne peut pas être exécuté en « %s ».',
-                    $paymentEnv,
-                    $context->environmentValue()
-                ),
-                409,
-                'ENVIRONMENT_MISMATCH'
-            );
-        }
+        // Politique UNIQUE : EnvironmentGuard. Cette vérification était
+        // auparavant réimplémentée ici à la main — même verdict, mais sans
+        // trace d'audit et avec un message divergent. Deux implémentations
+        // d'une même règle de sécurité, c'est une occasion de les voir
+        // diverger ; il n'en reste qu'une.
+        EnvironmentGuard::assertMatches(
+            (string) ($payment['environment'] ?? ''),
+            $context,
+            'Ce paiement'
+        );
 
         // Bénéficiaire (peut être null si supprimé — on bloque dans ce cas).
         $stmt = $pdo->prepare('SELECT * FROM beneficiaries WHERE id = :id LIMIT 1');

@@ -266,7 +266,7 @@ final class ExecutionEngine
             $context
         );
 
-        WalletService::captureHold((string) $hold['operation_id'], $userId, $captureIdemKey);
+        WalletService::captureHold((string) $hold['operation_id'], $userId, $captureIdemKey, $context);
 
         // ── 3. Écriture comptable dashboard (table transactions) ─────
         $txId = self::insertTransaction(

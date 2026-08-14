@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nexus\Services;
 
 use Nexus\Core\Database;
+use Nexus\Execution\EnvironmentGuard;
 use Nexus\Execution\ExecutionContext;
 use Nexus\Providers\ProviderConfig;
 use PDO;
@@ -312,10 +313,18 @@ final class WalletService
         return is_string($env) && $env !== '' ? $env : null;
     }
 
-    public static function captureHold(string $operationId, int $userId, ?string $idempotencyKey = null): array
+    public static function captureHold(string $operationId, int $userId, ?string $idempotencyKey = null, ?ExecutionContext $context = null): array
     {
         self::assertUserId($userId);
         $opEnv = self::operationEnvironment($operationId);
+
+        // Phase 4 — l'environnement PERSISTÉ de l'opération fait autorité.
+        // Un hold créé en sandbox ne se capture jamais en production, et
+        // réciproquement : basculer PROVIDERS_ENV après la création ne
+        // doit pas promouvoir l'opération. Refus terminal, sans repli.
+        if ($context !== null && $opEnv !== null) {
+            EnvironmentGuard::assertMatches($opEnv, $context, 'Cette opération de wallet');
+        }
 
         $useIdempotency = $idempotencyKey !== null && $idempotencyKey !== '';
         if ($useIdempotency) {
@@ -454,10 +463,18 @@ final class WalletService
      * @return array{operation_id: string, status: string}
      * @throws RuntimeException Si l'opération n'est pas un hold pending ou solde insuffisant.
      */
-    public static function releaseHold(string $operationId, int $userId, ?string $idempotencyKey = null): array
+    public static function releaseHold(string $operationId, int $userId, ?string $idempotencyKey = null, ?ExecutionContext $context = null): array
     {
         self::assertUserId($userId);
         $opEnv = self::operationEnvironment($operationId);
+
+        // Phase 4 — l'environnement PERSISTÉ de l'opération fait autorité.
+        // Un hold créé en sandbox ne se capture jamais en production, et
+        // réciproquement : basculer PROVIDERS_ENV après la création ne
+        // doit pas promouvoir l'opération. Refus terminal, sans repli.
+        if ($context !== null && $opEnv !== null) {
+            EnvironmentGuard::assertMatches($opEnv, $context, 'Cette opération de wallet');
+        }
 
         $useIdempotency = $idempotencyKey !== null && $idempotencyKey !== '';
         if ($useIdempotency) {
