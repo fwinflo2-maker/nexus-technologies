@@ -14,21 +14,25 @@ use Nexus\Services\ProviderCatalog;
  *
  * Convention de nommage (le slug et les champs viennent du ProviderCatalog) :
  *
- *   PROVIDER_{SLUG}_ENABLED            = true|false          (activation)
- *   PROVIDER_{SLUG}_ENV                = sandbox|production  (environnement actif)
- *   PROVIDER_{SLUG}_{FIELD}            = valeur générique     (API_KEY, SECRET_KEY…)
- *   PROVIDER_{SLUG}_{SANDBOX}_{FIELD}  = valeur scope sandbox (prioritaire)
- *   PROVIDER_{SLUG}_{PRODUCTION}_{FIELD}= valeur scope prod    (prioritaire)
+ *   PROVIDER_{SLUG}_ENABLED             = true|false          (activation)
+ *   PROVIDER_{SLUG}_ENV                 = sandbox|production  (environnement actif)
+ *   PROVIDER_{SLUG}_SANDBOX_{FIELD}     = valeur scope sandbox
+ *   PROVIDER_{SLUG}_PRODUCTION_{FIELD}  = valeur scope production
  *
  * Exemples :
  *   PROVIDER_STRIPE_ENABLED=true
  *   PROVIDER_STRIPE_ENV=sandbox
- *   PROVIDER_STRIPE_SANDBOX_API_KEY=sk_test_...
- *   PROVIDER_STRIPE_PRODUCTION_API_KEY=sk_live_...
+ *   PROVIDER_STRIPE_SANDBOX_SECRET_KEY=sk_test_...
+ *   PROVIDER_STRIPE_PRODUCTION_SECRET_KEY=sk_live_...
  *
- * La séparation sandbox/production est STRICTE : une clé sandbox ne peut
- * jamais être lue comme clé production (et inversement) — le scope par
- * environnement est résolu en priorité.
+ * ISOLATION STRICTE (§4, §10) :
+ * ─────────────────────────────
+ * Une credential est identifiée par le triplet `provider + environment +
+ * field`. Il n'existe AUCUN repli d'un environnement vers l'autre, ni vers une
+ * variable générique : si la variable scopée est absente, la résolution rend
+ * `null`. La forme générique `PROVIDER_{SLUG}_{FIELD}` — qui permettait
+ * autrefois à une clé de production d'être servie en sandbox — n'est plus
+ * lue ; sa présence est signalée comme erreur de configuration.
  */
 final class ProviderConfig
 {
@@ -113,23 +117,91 @@ final class ProviderConfig
     /**
      * Lit la valeur d'un champ de credential (jamais exposée aux clients).
      *
-     * Priorité : PROVIDER_{SLUG}_{ENV}_{FIELD} > PROVIDER_{SLUG}_{FIELD}.
+     * ISOLATION STRICTE DES ENVIRONNEMENTS (§4, §10)
+     * ──────────────────────────────────────────────
+     * SEULE la variable scopée est lue :
+     *
+     *     PROVIDER_{SLUG}_{ENVIRONMENT}_{FIELD}
+     *
+     * Le triplet `provider + environment + field` identifie une credential et
+     * une seule. Si elle n'existe pas dans l'environnement demandé, la méthode
+     * renvoie `null` — elle ne va JAMAIS chercher la valeur dans l'autre
+     * environnement, ni dans une variable générique.
+     *
+     * Historique : une variante générique `PROVIDER_{SLUG}_{FIELD}` servait
+     * auparavant de repli. Elle constituait une fuite inter-environnement
+     * (une clé `sk_live_…` renseignée génériquement était retournée pour
+     * l'environnement `sandbox`, et inversement) et a été supprimée. Une telle
+     * variable encore présente dans l'environnement est désormais signalée
+     * comme une erreur de configuration par `validate()` — jamais utilisée
+     * silencieusement.
+     *
+     * @param string $environment `sandbox` ou `production` exclusivement.
+     * @throws \InvalidArgumentException si l'environnement n'est pas reconnu
+     *         (protection contre les typos « test », « staging », « prod »…
+     *         qui produiraient une résolution silencieusement vide).
      */
     public static function credential(string $slug, string $field, string $environment): ?string
     {
-        $scoped = self::key($slug, strtoupper($environment) . '_' . $field);
-        $value  = getenv($scoped);
-        if ($value !== false && $value !== '') {
-            return (string) $value;
-        }
+        $env = self::normalizeEnvironment($environment);
 
-        $generic = self::key($slug, $field);
-        $value   = getenv($generic);
+        $value = getenv(self::key($slug, $env . '_' . $field));
         if ($value !== false && $value !== '') {
             return (string) $value;
         }
 
         return null;
+    }
+
+    /**
+     * Valide un nom d'environnement.
+     *
+     * Aucune tolérance : « test », « staging », « prod », « PRODUCTION » avec
+     * espaces… sont refusés. Accepter un alias reviendrait à créer un troisième
+     * environnement fantôme dont les credentials seraient toujours absentes.
+     *
+     * @throws \InvalidArgumentException
+     */
+    public static function normalizeEnvironment(string $environment): string
+    {
+        $normalized = strtolower(trim($environment));
+        if ($normalized !== 'sandbox' && $normalized !== 'production') {
+            // Le message ne contient que le nom fourni, jamais une valeur secrète.
+            throw new \InvalidArgumentException(
+                'Environnement provider invalide : « ' . $environment .' ». Attendu : sandbox ou production.'
+            );
+        }
+
+        return strtoupper($normalized);
+    }
+
+    /**
+     * Détecte les variables génériques héritées, non scopées par environnement.
+     *
+     * Ces variables ne sont plus lues (elles mélangeaient les environnements).
+     * Les signaler explicitement évite l'échec silencieux : un opérateur qui a
+     * renseigné `PROVIDER_STRIPE_SECRET_KEY` doit apprendre que la valeur est
+     * ignorée, plutôt que de croire son provider configuré.
+     *
+     * @return list<string> noms de variables (JAMAIS leurs valeurs)
+     */
+    public static function legacyGenericVariables(string $slug): array
+    {
+        $provider = ProviderCatalog::get($slug);
+        if ($provider === null) {
+            return [];
+        }
+
+        $found = [];
+        foreach (($provider['credentials'] ?? []) as $field) {
+            $name  = self::key($slug, (string) $field['key']);
+            $value = getenv($name);
+            if ($value !== false && $value !== '') {
+                $found[] = $name;
+            }
+        }
+
+        return $found;
     }
 
     /** URL de base du provider pour l'environnement (override possible via env). */
@@ -177,6 +249,20 @@ final class ProviderConfig
                 'status'  => ProviderStatus::DISABLED,
                 'missing' => [],
                 'reason'  => 'Provider désactivé (variable *_ENABLED absente ou false).',
+            ];
+        }
+
+        // Une variable générique héritée signale une configuration ambiguë :
+        // l'opérateur croit le provider configuré alors que la valeur est
+        // ignorée. On refuse explicitement plutôt que de laisser croire.
+        $legacy = self::legacyGenericVariables($slug);
+        if ($legacy !== []) {
+            return [
+                'status'  => ProviderStatus::INVALID_CONFIGURATION,
+                'missing' => [],
+                'reason'  => 'Variables non scopées par environnement, ignorées pour éviter toute fuite '
+                    . 'sandbox/production : ' . implode(', ', $legacy)
+                    . '. Utilisez PROVIDER_{SLUG}_SANDBOX_{FIELD} ou PROVIDER_{SLUG}_PRODUCTION_{FIELD}.',
             ];
         }
 
