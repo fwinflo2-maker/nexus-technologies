@@ -340,17 +340,33 @@ final class ProviderCredentialController
     private static function audit(\PDO $pdo, int $userId, string $action, string $slug, array $metadata, Request $request): void
     {
         try {
+            // Phase 3 — l'environnement est aussi porté par la COLONNE, et
+            // pas seulement enfoui dans le JSON : sans cela, aucun filtre ni
+            // aucune ventilation par environnement n'est possible.
+            // Ces événements ont bien une notion d'environnement (une
+            // credential appartient à un environnement) ; on ne l'invente pas.
+            $env = $metadata['environment'] ?? null;
+            $env = in_array($env, ['sandbox', 'production'], true) ? $env : null;
+
+            // Défense en profondeur : ces événements ne transportent
+            // aujourd'hui aucun secret, mais la redaction garantit qu'un ajout
+            // futur de champ ne pourra pas en faire fuiter un.
+            $safe = \Nexus\Providers\SecretRedactor::redactArray(
+                array_merge($metadata, ['provider_slug' => $slug])
+            );
+
             $stmt = $pdo->prepare(
-                'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, metadata, ip_address, created_at)
-                 VALUES (:uid, :act, :etype, :eid, :meta, :ip, NOW())'
+                'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, metadata, ip_address, environment, created_at)
+                 VALUES (:uid, :act, :etype, :eid, :meta, :ip, :env, NOW())'
             );
             $stmt->execute([
                 'uid'   => $userId,
                 'act'   => $action,
                 'etype' => 'provider_credentials',
                 'eid'   => null,
-                'meta'  => json_encode(array_merge($metadata, ['provider_slug' => $slug]), JSON_UNESCAPED_UNICODE),
+                'meta'  => json_encode($safe, JSON_UNESCAPED_UNICODE),
                 'ip'    => $_SERVER['REMOTE_ADDR'] ?? null,
+                'env'   => $env,
             ]);
         } catch (\Throwable $e) {
             error_log('[NEXUS audit] ' . $e->getMessage());
