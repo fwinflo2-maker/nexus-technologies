@@ -179,7 +179,10 @@ final class PaymentController
         }
 
         $stmt = $pdo->prepare(
-            "UPDATE payments SET status = 'approved', approved_by = :by, approved_at = NOW() WHERE id = :id AND user_id = :uid"
+            // Transition conditionnée au statut source : deux approbateurs
+            // simultanés ne peuvent pas approuver deux fois le même ordre.
+            "UPDATE payments SET status = 'approved', approved_by = :by, approved_at = NOW()
+              WHERE id = :id AND user_id = :uid AND status = 'pending_approval'"
         );
         $stmt->execute(['by' => (int) $actor['id'], 'id' => (int) $payment['id'], 'uid' => $bid]);
 
@@ -201,7 +204,10 @@ final class PaymentController
             Response::conflict('Seul un paiement en attente d\'approbation peut être rejeté.');
         }
 
-        $stmt = $pdo->prepare("UPDATE payments SET status = 'rejected', approved_by = :by, approved_at = NOW() WHERE id = :id AND user_id = :uid");
+        $stmt = $pdo->prepare(
+            "UPDATE payments SET status = 'rejected', approved_by = :by, approved_at = NOW()
+              WHERE id = :id AND user_id = :uid AND status = 'pending_approval'"
+        );
         $stmt->execute(['by' => (int) $actor['id'], 'id' => (int) $payment['id'], 'uid' => $bid]);
 
         Response::success(['payment' => self::format(self::find($pdo, $bid, (int) $payment['id']))]);
@@ -247,9 +253,32 @@ final class PaymentController
             Response::conflict('Le bénéficiaire de ce paiement n\'existe plus.');
         }
 
-        // Marque executing (visible) puis exécute la saga.
-        $upd = $pdo->prepare("UPDATE payments SET status = 'executing' WHERE id = :id AND user_id = :uid");
+        // RÉSERVATION ATOMIQUE (correctif HIGH — double exécution).
+        //
+        // Le paiement a été lu SANS verrou, puis son statut vérifié en PHP.
+        // Deux requêtes concurrentes franchissaient donc toutes deux le
+        // contrôle `status === 'approved'` avant que l'une n'ait écrit : le
+        // même ordre approuvé partait deux fois, soit un double mouvement
+        // d'argent pour une seule autorisation.
+        //
+        // La condition `status = 'approved'` est désormais DANS l'UPDATE :
+        // c'est la base qui arbitre, et une seule requête peut réclamer le
+        // paiement. Le nombre de lignes affectées départage les concurrents.
+        $upd = $pdo->prepare(
+            "UPDATE payments SET status = 'executing'
+              WHERE id = :id AND user_id = :uid AND status = 'approved'"
+        );
         $upd->execute(['id' => (int) $payment['id'], 'uid' => $bid]);
+
+        if ($upd->rowCount() === 0) {
+            // Un concurrent a réservé le paiement entre notre lecture et
+            // notre écriture. Conflit, pas erreur de requête.
+            Response::error(
+                'Ce paiement est déjà en cours d\'exécution.',
+                409,
+                'PAYMENT_ALREADY_EXECUTING'
+            );
+        }
 
         try {
             $tx = BusinessService::executePayment($bid, $payment, $beneficiary, $context);
@@ -289,8 +318,16 @@ final class PaymentController
             Response::conflict(sprintf('Transition impossible : statut actuel « %s », attendu « %s ».', $payment['status'], $from));
         }
 
-        $stmt = $pdo->prepare('UPDATE payments SET status = :to WHERE id = :id AND user_id = :uid');
-        $stmt->execute(['to' => $to, 'id' => (int) $payment['id'], 'uid' => $bid]);
+        // La transition est conditionnée à l'état source lu plus haut : si un
+        // concurrent l'a modifié entre-temps, aucune ligne n'est affectée.
+        $stmt = $pdo->prepare(
+            'UPDATE payments SET status = :to WHERE id = :id AND user_id = :uid AND status = :from'
+        );
+        $stmt->execute(['to' => $to, 'id' => (int) $payment['id'], 'uid' => $bid, 'from' => $from]);
+
+        if ($stmt->rowCount() === 0) {
+            Response::conflict('Ce paiement a changé d\'état entre-temps.');
+        }
 
         Response::success(['payment' => self::format(self::find($pdo, $bid, (int) $payment['id']))]);
     }
