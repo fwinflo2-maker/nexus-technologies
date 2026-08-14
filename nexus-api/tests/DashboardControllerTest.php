@@ -118,11 +118,11 @@ final class DashboardControllerTest extends TestCase
         $phpCode .= 'require_once getcwd() . \'/vendor/autoload.php\';' . "\n\n";
         $phpCode .= 'use Nexus\Core\Database;' . "\n";
         $phpCode .= 'use Nexus\Controllers\DashboardController;' . "\n\n";
-        $phpCode .= 'define("DB_HOST", "127.0.0.1");' . "\n";
-        $phpCode .= 'define("DB_PORT", 3306);' . "\n";
-        $phpCode .= 'define("DB_NAME", "nexus_test");' . "\n";
-        $phpCode .= 'define("DB_USER", "root");' . "\n";
-        $phpCode .= 'define("DB_PASS", "");' . "\n";
+        $phpCode .= 'define("DB_HOST", ' . var_export(DB_HOST, true) . ');' . "\n";
+        $phpCode .= 'define("DB_PORT", ' . var_export(DB_PORT, true) . ');' . "\n";
+        $phpCode .= 'define("DB_NAME", ' . var_export(DB_NAME, true) . ');' . "\n";
+        $phpCode .= 'define("DB_USER", ' . var_export(DB_USER, true) . ');' . "\n";
+        $phpCode .= 'define("DB_PASS", ' . var_export(DB_PASS, true) . ');' . "\n";
         $phpCode .= 'define("DB_CHARSET", "utf8mb4");' . "\n";
         $phpCode .= 'define("APP_ENV", "development");' . "\n";
         $phpCode .= 'define("JWT_SECRET", "nexus-dev-secret-change-me");' . "\n";

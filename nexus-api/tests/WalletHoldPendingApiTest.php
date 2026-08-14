@@ -112,6 +112,14 @@ final class WalletHoldPendingApiTest extends TestCase
 
         $customTokenLiteral = var_export($tokenOverride, true);
 
+        // Constantes DB héritées du bootstrap PHPUnit (surchargées par l'environnement)
+        // au lieu d'être codées en dur sur root/'' — portable hors XAMPP.
+        $dbHost = var_export(DB_HOST, true);
+        $dbPort = var_export(DB_PORT, true);
+        $dbName = var_export(DB_NAME, true);
+        $dbUser = var_export(DB_USER, true);
+        $dbPass = var_export(DB_PASS, true);
+
         $runnerCode = <<<PHP
 <?php
 require_once getcwd() . '/vendor/autoload.php';
@@ -120,11 +128,11 @@ use Nexus\Core\Database;
 use Nexus\Controllers\WalletController;
 use Nexus\Core\Request;
 
-define('DB_HOST', '127.0.0.1');
-define('DB_PORT', 3306);
-define('DB_NAME', 'nexus_test');
-define('DB_USER', 'root');
-define('DB_PASS', '');
+define('DB_HOST', $dbHost);
+define('DB_PORT', $dbPort);
+define('DB_NAME', $dbName);
+define('DB_USER', $dbUser);
+define('DB_PASS', $dbPass);
 define('DB_CHARSET', 'utf8mb4');
 define('APP_ENV', 'development');
 define('JWT_SECRET', 'nexus-dev-secret-change-me');
