@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nexus\Services;
 
 use Nexus\Core\Database;
+use Nexus\Core\HttpException;
 use Nexus\Execution\EnvironmentGuard;
 use Nexus\Execution\ExecutionContext;
 use Nexus\Providers\ProviderConfig;
@@ -214,6 +215,26 @@ final class WalletService
 
             if (!$wallet) {
                 throw new RuntimeException("Wallet introuvable (id=$walletId).");
+            }
+
+            // ISOLATION MULTI-TENANT (correctif CRITICAL).
+            //
+            // `wallet_id` vient du client, `user_id` du jeton : sans ce
+            // contrôle, un utilisateur authentifié pouvait geler — et donc
+            // rendre indisponibles — les fonds du wallet d'autrui en
+            // énumérant un identifiant numérique. L'exploitation a été
+            // reproduite : le solde disponible de la victime passait de
+            // 1000 à 500.
+            //
+            // Le message ne distingue pas « wallet inexistant » de « wallet
+            // d'autrui » : le distinguer transformerait l'endpoint en oracle
+            // d'énumération des wallets existants.
+            if ((int) $wallet['user_id'] !== $userId) {
+                throw new HttpException(
+                    404,
+                    "Wallet introuvable (id=$walletId).",
+                    'WALLET_NOT_FOUND'
+                );
             }
 
             if (strtoupper($wallet['currency']) !== strtoupper($currency)) {

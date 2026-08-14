@@ -49,6 +49,11 @@ final class WalletController
         $currency  = (string) $request->input('currency', '');
         $idemKey   = (string) $request->input('idempotency_key', '');
 
+        // Le hold est une opération financière : son environnement vient du
+        // contexte de la requête, jamais de la configuration du serveur au
+        // moment de l'exécution.
+        $context = ExecutionContext::fromRequest($request, $user);
+
         try {
             $res = WalletService::createHold(
                 $userId,
@@ -57,9 +62,12 @@ final class WalletController
                 $currency,
                 $idemKey !== '' ? $idemKey : null,
                 (string) $request->input('description', ''),
-                (array) $request->input('metadata', [])
+                (array) $request->input('metadata', []),
+                $context
             );
             Response::success($res);
+        } catch (HttpException $e) {
+            Response::error($e->getMessage(), $e->statusCode(), $e->errorCode());
         } catch (\Throwable $e) {
             Response::error($e->getMessage(), 400);
         }
