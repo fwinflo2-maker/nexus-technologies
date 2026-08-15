@@ -118,6 +118,30 @@ final class PlatformRole
     ];
 
     /**
+     * Rôles autorisés à consulter les DOSSIERS KYC/KYB NOMINATIFS.
+     *
+     * Correctif boucle 18 (CRITICAL). `/api/control/kyc` était gardé par la
+     * capacité `operations`, donc lisible par les 9 rôles d'exploitation —
+     * support, QA, backend, SRE inclus. Prouvé en HTTP : un `qa_engineer`
+     * a obtenu 200 avec le nom, l'e-mail, l'`applicant_id` et le MOTIF DE
+     * REJET d'un dossier (« suspicion de fraude documentaire »).
+     *
+     * Un motif de rejet KYC est une donnée d'identité doublée d'un jugement
+     * sur la personne. Y accéder n'est pas un droit d'exploitation général :
+     * c'est le métier de la conformité, et d'elle seule. Le principe est
+     * celui du besoin d'en connaître, pas du confort de diagnostic — un
+     * testeur n'a jamais besoin de savoir qui a été soupçonné de fraude.
+     *
+     * `security_engineer` en est volontairement exclu : il dispose déjà de
+     * `audit_read` pour instruire un incident, ce qui ne nécessite pas de
+     * lire les dossiers d'identité de l'ensemble des clients.
+     */
+    private const KYC_VIEWERS = [
+        self::SUPERADMIN,
+        self::COMPLIANCE_OPERATOR,
+    ];
+
+    /**
      * Rôles autorisés aux opérations de maintenance qui ÉCRIVENT
      * (déblocage d'un état, rejeu contrôlé).
      */
@@ -201,6 +225,12 @@ final class PlatformRole
         return in_array(self::of($user), self::AUDIT_VIEWERS, true);
     }
 
+    /** Peut consulter les dossiers KYC/KYB nominatifs. */
+    public static function canViewKyc(?array $user): bool
+    {
+        return in_array(self::of($user), self::KYC_VIEWERS, true);
+    }
+
     /**
      * Exige un privilège, sinon 403.
      *
@@ -219,6 +249,7 @@ final class PlatformRole
             'operations'   => self::canViewOperations($user),
             'credential_inventory' => self::canViewCredentialInventory($user),
             'audit_read'   => self::canViewAudit($user),
+            'kyc_read'     => self::canViewKyc($user),
             'maintenance'  => self::canRunMaintenance($user),
             'superadmin'   => self::isSuperadmin($user),
             default        => false,   // capacité inconnue : refus.

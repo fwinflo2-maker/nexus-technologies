@@ -57,17 +57,23 @@ final class ControlCenterRbacTest extends TestCase
     {
         return [
             //                        operations  credential_inventory  audit_read  credentials  maintenance
-            'superadmin'         => ['operations' => true,  'credential_inventory' => true,  'audit_read' => true,  'credentials' => true,  'maintenance' => true],
-            'provider_engineer'  => ['operations' => true,  'credential_inventory' => true,  'audit_read' => false, 'credentials' => true,  'maintenance' => false],
-            'security_engineer'  => ['operations' => true,  'credential_inventory' => true,  'audit_read' => true,  'credentials' => false, 'maintenance' => false],
-            'sre_operator'       => ['operations' => true,  'credential_inventory' => true,  'audit_read' => false, 'credentials' => false, 'maintenance' => true],
-            'compliance_operator' => ['operations' => true, 'credential_inventory' => false, 'audit_read' => true,  'credentials' => false, 'maintenance' => false],
-            'support_operator'   => ['operations' => true,  'credential_inventory' => false, 'audit_read' => false, 'credentials' => false, 'maintenance' => false],
-            'qa_engineer'        => ['operations' => true,  'credential_inventory' => false, 'audit_read' => false, 'credentials' => false, 'maintenance' => false],
-            'backend_engineer'   => ['operations' => true,  'credential_inventory' => false, 'audit_read' => false, 'credentials' => false, 'maintenance' => false],
-            'finance_operator'   => ['operations' => true,  'credential_inventory' => false, 'audit_read' => false, 'credentials' => false, 'maintenance' => false],
+            'superadmin'         => ['operations' => true,  'credential_inventory' => true,  'audit_read' => true,  'credentials' => true,  'maintenance' => true, 'kyc_read' => true],
+            'provider_engineer'  => ['operations' => true,  'credential_inventory' => true,  'audit_read' => false, 'credentials' => true,  'maintenance' => false, 'kyc_read' => false],
+            'security_engineer'  => ['operations' => true,  'credential_inventory' => true,  'audit_read' => true,  'credentials' => false, 'maintenance' => false, 'kyc_read' => false],
+            'sre_operator'       => ['operations' => true,  'credential_inventory' => true,  'audit_read' => false, 'credentials' => false, 'maintenance' => true, 'kyc_read' => false],
+            'compliance_operator' => ['operations' => true, 'credential_inventory' => false, 'audit_read' => true,  'credentials' => false, 'maintenance' => false, 'kyc_read' => true],
+            'support_operator'   => ['operations' => true,  'credential_inventory' => false, 'audit_read' => false, 'credentials' => false, 'maintenance' => false, 'kyc_read' => false],
+            'qa_engineer'        => ['operations' => true,  'credential_inventory' => false, 'audit_read' => false, 'credentials' => false, 'maintenance' => false, 'kyc_read' => false],
+            'backend_engineer'   => ['operations' => true,  'credential_inventory' => false, 'audit_read' => false, 'credentials' => false, 'maintenance' => false, 'kyc_read' => false],
+            'finance_operator'   => ['operations' => true,  'credential_inventory' => false, 'audit_read' => false, 'credentials' => false, 'maintenance' => false, 'kyc_read' => false],
+            // Un agent IA ne détient AUCUNE capacité par héritage (boucle 18).
+            // Le rôle existe dans l'ENUM ; tant qu'aucune capacité ne lui est
+            // explicitement accordée, il ne peut rien. C'est l'exigence §5 :
+            // « un agent IA ne reçoit jamais implicitement les droits du
+            // Superadmin ». Ce test fige ce point de départ.
+            'ai_agent'           => ['operations' => false, 'credential_inventory' => false, 'audit_read' => false, 'credentials' => false, 'maintenance' => false, 'kyc_read' => false],
             // Le client : aucune capacité plateforme, jamais.
-            'user'               => ['operations' => false, 'credential_inventory' => false, 'audit_read' => false, 'credentials' => false, 'maintenance' => false],
+            'user'               => ['operations' => false, 'credential_inventory' => false, 'audit_read' => false, 'credentials' => false, 'maintenance' => false, 'kyc_read' => false],
         ];
     }
 
@@ -142,7 +148,7 @@ final class ControlCenterRbacTest extends TestCase
      */
     public function test_an_unknown_role_gets_nothing(): void
     {
-        foreach (['operations', 'credential_inventory', 'audit_read', 'credentials', 'maintenance'] as $capability) {
+        foreach (['operations', 'credential_inventory', 'audit_read', 'kyc_read', 'credentials', 'maintenance'] as $capability) {
             $this->assertFalse(
                 $this->allows('root', $capability),
                 sprintf('Un rôle inconnu ne doit pas obtenir « %s ».', $capability)
@@ -185,7 +191,7 @@ final class ControlCenterRbacTest extends TestCase
         $this->assertDoesNotMatchRegularExpression(
             // Guillemets SIMPLES : en double quote, PHP interpolerait $user
             // et le motif ne correspondrait plus à rien.
-            '/PlatformRole::require\(\$user, \'(operations|audit_read|credential_inventory)\'\)/',
+            '/PlatformRole::require\(\$user, \'(operations|audit_read|credential_inventory|kyc_read)\'\)/',
             $source,
             'Aucune capacité ne doit être codée en dur dans authorize().'
         );
@@ -208,5 +214,84 @@ final class ControlCenterRbacTest extends TestCase
 
         $this->assertStringContainsString("authorize(\$request, 'credential_inventory')", $controlCenter);
         $this->assertStringContainsString("'credential_inventory'", $providerCtrl);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // BOUCLE 18 — LES DOSSIERS D'IDENTITÉ NE SONT PAS DE L'EXPLOITATION
+    // ══════════════════════════════════════════════════════════════════════
+
+    /**
+     * LE DÉFAUT (CRITICAL, prouvé en HTTP réel)
+     * ─────────────────────────────────────────
+     * `GET /api/control/kyc` était gardé par `operations`. Un compte promu
+     * `qa_engineer` a obtenu :
+     *
+     *     HTTP 200
+     *     full_name    : "Victime KYC"
+     *     email        : "victime.kyc.b18@nexus.test"
+     *     applicant_id : "APPLICANT-SECRET-7781"
+     *     reason       : "Document falsifie - suspicion de fraude documentaire"
+     *
+     * Ce n'est pas un secret technique qui fuit, c'est pire : l'identité
+     * nominative d'un client assortie d'un soupçon de fraude, lisible par
+     * neuf rôles internes dont le support, la QA et le backend.
+     *
+     * Le moindre privilège ne se limite pas aux clés d'API. Une donnée de
+     * conformité n'est consultable que par la conformité.
+     */
+    public function test_kyc_dossiers_are_restricted_to_compliance(): void
+    {
+        foreach (['qa_engineer', 'support_operator', 'backend_engineer', 'sre_operator', 'provider_engineer', 'finance_operator'] as $role) {
+            $this->assertTrue(
+                $this->allows($role, 'operations'),
+                sprintf('%s doit conserver la lecture d\'exploitation.', $role)
+            );
+            $this->assertFalse(
+                $this->allows($role, 'kyc_read'),
+                sprintf('%s ne doit pas lire les dossiers d\'identité des clients.', $role)
+            );
+        }
+    }
+
+    /**
+     * Test POSITIF (leçon de mutation n°3) : une garde sans contre-épreuve
+     * peut être supprimée sans qu'aucun test ne tombe. La conformité DOIT
+     * conserver l'accès, sinon le correctif casse le métier qu'il protège.
+     */
+    public function test_compliance_and_superadmin_keep_kyc_access(): void
+    {
+        $this->assertTrue($this->allows('compliance_operator', 'kyc_read'));
+        $this->assertTrue($this->allows('superadmin', 'kyc_read'));
+    }
+
+    /**
+     * `security_engineer` est délibérément EXCLU malgré `audit_read`.
+     *
+     * Instruire un incident se fait par le journal d'audit — cela n'exige
+     * pas de parcourir les pièces d'identité de l'ensemble des clients.
+     * Ce test fige cette décision : l'élargir devra être un choix explicite,
+     * pas un glissement silencieux.
+     */
+    public function test_security_engineer_investigates_without_identity_files(): void
+    {
+        $this->assertTrue($this->allows('security_engineer', 'audit_read'));
+        $this->assertFalse($this->allows('security_engineer', 'kyc_read'));
+    }
+
+    /**
+     * CÂBLAGE : la table des capacités peut être parfaite pendant que le
+     * contrôleur demande la mauvaise clé. C'est exactement la mutation qui
+     * avait survécu en boucle 16.
+     */
+    public function test_the_kyc_endpoint_requests_the_kyc_capability(): void
+    {
+        $source = file_get_contents(__DIR__ . '/../src/Controllers/ControlCenterController.php');
+        $this->assertIsString($source);
+
+        $this->assertMatchesRegularExpression(
+            '/function kyc\(Request \$request\): void.*?authorize\(\$request, \'kyc_read\'\)/s',
+            $source,
+            'GET /control/kyc doit exiger la capacité kyc_read.'
+        );
     }
 }

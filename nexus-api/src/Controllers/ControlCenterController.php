@@ -140,7 +140,15 @@ final class ControlCenterController
     /** GET /api/control/kyc — tableau de bord KYC/KYB (§17, §18). */
     public static function kyc(Request $request): void
     {
-        $user = self::authorize($request);
+        // CORRECTIF CRITICAL (boucle 18). Cette surface était gardée par
+        // `operations`, donc ouverte aux 9 rôles d'exploitation. Un
+        // `qa_engineer` obtenait 200 et lisait nom, e-mail, `applicant_id` et
+        // MOTIF DE REJET des dossiers d'identité — « suspicion de fraude
+        // documentaire » pour un client nommé. Prouvé en HTTP réel.
+        //
+        // Le besoin d'en connaître prime sur le confort de diagnostic : ces
+        // dossiers relèvent de la conformité, pas de l'exploitation.
+        $user = self::authorize($request, 'kyc_read');
         $pdo  = Database::getConnection();
 
         // Applicants : aucune donnée sensible (ni document, ni selfie, ni
