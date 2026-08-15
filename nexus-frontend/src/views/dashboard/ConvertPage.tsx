@@ -1,14 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
+import { Link } from 'react-router-dom';
 import {
   apiWalletsList,
   apiIntentCoverage,
   apiCreateQuote,
   apiWalletConvert,
+  apiWalletRates,
   type WalletState,
   type IntentCoverageData,
   type QuoteData,
+  type WalletRatesData,
 } from '../../api/client';
+import AnimatedCounter from '../../components/AnimatedCounter';
 
 const CURRENCY_META: Record<string, { flag: string; symbol: string; label: string }> = {
   EUR:  { flag: '🇪🇺', symbol: '€', label: 'Euro' },
@@ -22,6 +26,7 @@ const CURRENCY_META: Record<string, { flag: string; symbol: string; label: strin
 export default function ConvertPage() {
   const [wallets, setWallets] = useState<WalletState[]>([]);
   const [, setCoverage] = useState<IntentCoverageData | null>(null);
+  const [rates, setRates] = useState<WalletRatesData | null>(null);
   const [fromCurrency, setFromCurrency] = useState<string>('EUR');
   const [toCurrency, setToCurrency] = useState<string>('XAF');
   const [amount, setAmount] = useState<string>('');
@@ -33,15 +38,19 @@ export default function ConvertPage() {
   const [convertDone, setConvertDone] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    const [walletRes, coverageRes] = await Promise.all([
+    const [walletRes, coverageRes, ratesRes] = await Promise.all([
       apiWalletsList(),
       apiIntentCoverage(),
+      apiWalletRates(),
     ]);
     if (walletRes.success && walletRes.data) {
-      setWallets(walletRes.data.wallets.filter(w => w.has_funds));
+      setWallets(walletRes.data.wallets);
     }
     if (coverageRes.success && coverageRes.data) {
       setCoverage(coverageRes.data);
+    }
+    if (ratesRes.success && ratesRes.data) {
+      setRates(ratesRes.data);
     }
   }, []);
 
@@ -117,14 +126,14 @@ export default function ConvertPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <div className="page-label">NEXUS</div>
-        <div className="page-title">Convertir des devises</div>
+        <div className="page-label">NEXUS FX</div>
+        <div className="page-title">Convertir des <span className="gc">devises</span></div>
         <p style={{ marginTop: 10, fontSize: 13, color: 'var(--text-mid)' }}>
           Convertissez instantanément entre vos devises aux meilleurs taux.
         </p>
       </motion.div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 520 }}>
+      <div className="g2" style={{ alignItems: 'start', gap: 24 }}>
         {/* Devises */}
         <motion.div className="card" style={{ padding: 20 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
           <div className="page-label" style={{ marginBottom: 12 }}>Devises</div>
@@ -277,6 +286,87 @@ export default function ConvertPage() {
             {convertDone}
           </div>
         )}
+      </div>
+
+      {/* ── Colonne latérale : aperçu du portefeuille (occupe le vide) ── */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* Solde total */}
+        <motion.div className="card card-hi-c" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+          <div className="page-label" style={{ marginBottom: 10 }}>Patrimoine</div>
+          <div className="mono" style={{ fontSize: 30, fontWeight: 800, color: 'var(--white)', letterSpacing: '-1px' }}>
+            <AnimatedCounter
+              value={wallets.reduce((s, w) => s + w.ref_equivalent, 0)}
+              format={(n) => n.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
+            />
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>
+            {wallets.filter(w => w.has_funds).length} devises actives · équivalent EUR
+          </div>
+        </motion.div>
+
+        {/* Soldes par devise */}
+        <motion.div className="card" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.22 }}>
+          <div className="page-label" style={{ marginBottom: 12 }}>Vos devises</div>
+          {wallets.length === 0 ? (
+            <div style={{ fontSize: 12, color: 'var(--text-dim)', padding: 12, textAlign: 'center' }}>
+              Aucun wallet disponible.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {wallets.filter(w => w.has_funds).map((w) => {
+                const meta = CURRENCY_META[w.currency] ?? { flag: '🌐', symbol: w.currency, label: w.currency };
+                const pct = w.balance > 0 ? Math.min(100, Math.round((w.available / w.balance) * 100)) : 0;
+                return (
+                  <div key={w.currency} style={{ padding: '10px 0' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 18 }}>{meta.flag}</span>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-bright)' }}>{w.currency}</span>
+                      </div>
+                      <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-main)' }}>
+                        {w.available.toLocaleString('fr-FR')} {w.currency}
+                      </span>
+                    </div>
+                    <div style={{ height: 5, background: 'var(--panel2)', borderRadius: 3, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${pct}%`, background: 'linear-gradient(90deg, var(--cyan2), var(--cyan))', borderRadius: 3 }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <Link to="/wallet" className="btn btn-ghost" style={{ width: '100%', marginTop: 12, fontSize: 11, textDecoration: 'none' }}>
+            Gérer mon portefeuille →
+          </Link>
+        </motion.div>
+
+        {/* Taux de référence */}
+        {rates && (
+          <motion.div className="card" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+            <div className="page-label" style={{ marginBottom: 12 }}>Taux de référence</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 12, color: 'var(--text-mid)' }}>{rates.base} → XAF</span>
+              <span className="mono" style={{ fontSize: 14, fontWeight: 700, color: 'var(--gold)' }}>
+                1 {rates.base} = {rates.fx_rate_xaf.toLocaleString('fr-FR', { maximumFractionDigits: 3 })} XAF
+              </span>
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 8, fontFamily: 'var(--font-mono)' }}>
+              Source : marché · mis à jour {new Date(rates.updated_at).toLocaleTimeString('fr-FR')}
+            </div>
+          </motion.div>
+        )}
+
+        {/* Conseil Nexus */}
+        <motion.div className="card card-hi-v" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.38 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+            <div className="ib ib-v" style={{ width: 28, height: 28, borderRadius: 8, fontSize: 14 }}>🤖</div>
+            <span style={{ fontSize: 10, color: 'var(--violet)', fontFamily: 'var(--font-mono)', letterSpacing: '0.12em' }}>NEXUS FX INTELLIGENCE</span>
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--text-mid)', lineHeight: 1.6 }}>
+            Nexus compare les taux, frais et délais pour sélectionner le meilleur
+            chemin de conversion. Le taux affiché est <strong style={{ color: 'var(--text-bright)' }}>garanti</strong> pendant sa période de validité.
+          </p>
+        </motion.div>
       </div>
     </div>
   );

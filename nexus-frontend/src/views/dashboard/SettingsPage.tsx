@@ -474,6 +474,13 @@ export default function SettingsPage() {
         </p>
       </div>
 
+      {/* Conteneur central : onglets + sections */}
+      <div style={{
+        maxWidth: 720, margin: '0 auto', padding: 24,
+        background: 'linear-gradient(180deg, rgba(255,255,255,.015), transparent 40%), var(--panel)',
+        border: '1px solid var(--border)', borderRadius: 'var(--r-lg)',
+      }}>
+
       {/* Messages d'erreur et succès */}
       {error && (
         <div className="alert alert-error animate-up" style={{ marginBottom: 20 }}>
@@ -519,6 +526,8 @@ export default function SettingsPage() {
       {activeTab === 'security' && renderSecuritySection()}
       {activeTab === 'sessions' && renderSessionsSection()}
       {activeTab === 'preferences' && renderPreferencesSection()}
+
+      </div>
     </div>
   );
 }

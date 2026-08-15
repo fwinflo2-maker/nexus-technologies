@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Link } from 'react-router-dom';
 import {
   apiTransfersList,
   type TransferTx,
 } from '../../api/client';
+import EmptyState from '../../components/EmptyState';
 
 type FilterType = 'all' | 'send' | 'receive' | 'convert' | 'fx';
 type FilterStatus = 'all' | 'completed' | 'pending' | 'failed';
@@ -23,6 +25,7 @@ export default function HistoryPage() {
   const [filterType, setFilterType] = useState<FilterType>('all');
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
   const [filterCurrency, setFilterCurrency] = useState<string>('all');
+  const [selected, setSelected] = useState<TransferTx | null>(null);
 
   // L'historique provient EXCLUSIVEMENT de l'API (GET /api/transfers).
   // Aucune donnée fictive : si l'utilisateur n'a pas de transactions,
@@ -93,12 +96,37 @@ export default function HistoryPage() {
 
   const typeLabel = (type: string): string => {
     const labels: Record<string, string> = {
-      send: '↗ Envoi',
-      receive: '↙ Réception',
-      convert: '⇄ Conversion',
-      fx: '⇆ FX',
+      send: 'Envoi',
+      receive: 'Réception',
+      convert: 'Conversion',
+      fx: 'FX',
     };
     return labels[type] || type;
+  };
+
+  const typeIcon = (type: string): string => {
+    const icons: Record<string, string> = { send: '↗', receive: '↙', convert: '⇄', fx: '⇆' };
+    return icons[type] || '◆';
+  };
+
+  const typeColor = (type: string): string => {
+    const colors: Record<string, string> = {
+      send: 'rgba(0,200,255,.12)',
+      receive: 'rgba(0,207,160,.12)',
+      convert: 'rgba(139,92,246,.12)',
+      fx: 'rgba(234,184,48,.12)',
+    };
+    return colors[type] || 'rgba(0,200,255,.1)';
+  };
+
+  const typeBorder = (type: string): string => {
+    const colors: Record<string, string> = {
+      send: 'rgba(0,200,255,.35)',
+      receive: 'rgba(0,207,160,.35)',
+      convert: 'rgba(139,92,246,.35)',
+      fx: 'rgba(234,184,48,.35)',
+    };
+    return colors[type] || 'rgba(0,200,255,.3)';
   };
 
   return (
@@ -197,62 +225,147 @@ export default function HistoryPage() {
           <button className="se-cta" onClick={fetchTransactions} style={{ fontSize: 12 }}>↻ Réessayer</button>
         </div>
       ) : filteredTxs.length === 0 ? (
-        <motion.div 
-          className="card card-hi-c" 
-          style={{ padding: 40, textAlign: 'center' }}
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-        >
-          <div style={{ fontSize: 48, marginBottom: 16 }}>📭</div>
-          <h3 style={{ color: 'var(--text-bright)', marginBottom: 8 }}>No transactions yet</h3>
-          <p style={{ color: 'var(--text-mid)' }}>
-            {transactions.length === 0
-              ? 'Aucune transaction pour le moment. Lancez un premier envoi pour la voir apparaître ici.'
-              : 'Aucune transaction ne correspond à vos filtres.'}
-          </p>
+        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
+          <div className="card card-hi-c" style={{ padding: 8 }}>
+            <EmptyState
+              icon="📭"
+              title={transactions.length === 0 ? 'Aucune transaction' : 'Aucun résultat'}
+              subtitle={transactions.length === 0
+                ? 'Lancez un premier envoi pour voir vos opérations apparaître ici, tracées dans le ledger.'
+                : 'Aucune transaction ne correspond à vos filtres actuels.'}
+              action={transactions.length === 0 ? (
+                <Link to="/send" className="btn btn-cyan" style={{ fontSize: 11, textDecoration: 'none' }}>↗ Envoyer maintenant</Link>
+              ) : undefined}
+            />
+          </div>
         </motion.div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {filteredTxs.map((tx, idx) => (
-            <motion.div
-              key={tx.id}
-              className="card"
-              style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 16 }}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: idx * 0.05 }}
-            >
-              {/* Icône type */}
-              <div style={{ width: 48, height: 48, borderRadius: 12, background: 'rgba(0,200,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>
-                {tx.type === 'send' ? '↗' : tx.type === 'receive' ? '↙' : tx.type === 'convert' ? '⇄' : '⇆'}
-              </div>
+        <div style={{ position: 'relative' }}>
+          {/* Ligne de timeline */}
+          <div style={{ position: 'absolute', left: 31, top: 12, bottom: 12, width: 2, background: 'linear-gradient(180deg, rgba(0,200,255,.3), rgba(0,200,255,.05))', borderRadius: 2 }} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {filteredTxs.map((tx, idx) => (
+              <motion.button
+                key={tx.id}
+                onClick={() => setSelected(tx)}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: idx * 0.04 }}
+                whileHover={{ x: 4 }}
+                className="card"
+                style={{
+                  padding: 14, display: 'flex', alignItems: 'center', gap: 14,
+                  textAlign: 'left', cursor: 'pointer', width: '100%', border: '1px solid var(--border)',
+                  background: 'var(--panel)', borderRadius: 14,
+                }}
+              >
+                {/* Icône type sur timeline */}
+                <div style={{
+                  width: 44, height: 44, borderRadius: '50%', flexShrink: 0,
+                  background: typeColor(tx.type), border: `1px solid ${typeBorder(tx.type)}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18,
+                  position: 'relative', zIndex: 1,
+                }}>
+                  {typeIcon(tx.type)}
+                </div>
 
-              {/* Infos */}
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-bright)', marginBottom: 2 }}>
-                  {tx.label}
-                  {tx.route_id && <span className="mono" style={{ fontSize: 10, color: 'var(--text-dim)', marginLeft: 8 }}>route {tx.route_id}</span>}
+                {/* Infos */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-bright)', marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {tx.label}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-mid)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <span style={{ color: typeColor(tx.type).replace('0.12','0.9') }}>{typeLabel(tx.type)}</span> · {formatDate(tx.created_at)}
+                    {tx.provider && ` · ${tx.provider}`}
+                  </div>
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--text-mid)' }}>
-                  {typeLabel(tx.type)} • {formatDate(tx.created_at)}
-                  {tx.provider && ` • ${tx.provider}`}
-                  {tx.destination && ` • ${tx.destination}`}
-                </div>
-              </div>
 
-              {/* Montant et statut */}
-              <div style={{ textAlign: 'right' }}>
-                <div className="mono" style={{ fontSize: 16, fontWeight: 700, color: tx.direction === 'in' ? 'var(--green)' : 'var(--text-bright)', marginBottom: 4 }}>
-                  {formatAmount(tx)}
+                {/* Montant et statut */}
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <div className="mono" style={{ fontSize: 15, fontWeight: 700, color: tx.direction === 'in' ? 'var(--green)' : 'var(--text-bright)', marginBottom: 4 }}>
+                    {formatAmount(tx)}
+                  </div>
+                  <span className={`pill ${statusClass(tx.status)}`} style={{ fontSize: 9 }}>
+                    {statusLabel(tx.status)}
+                  </span>
                 </div>
-                <span className={`pill ${statusClass(tx.status)}`} style={{ fontSize: 10 }}>
-                  {statusLabel(tx.status)}
-                </span>
-              </div>
-            </motion.div>
-          ))}
+              </motion.button>
+            ))}
+          </div>
         </div>
       )}
+
+      {/* ─── Drawer de détails ─── */}
+      <AnimatePresence>
+        {selected && (
+          <>
+            <motion.div
+              onClick={() => setSelected(null)}
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 200, backdropFilter: 'blur(2px)' }}
+            />
+            <motion.div
+              initial={{ x: 420, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 420, opacity: 0 }}
+              transition={{ type: 'spring', damping: 28, stiffness: 260 }}
+              style={{
+                position: 'fixed', top: 0, right: 0, bottom: 0, width: 'min(440px, 92vw)',
+                background: 'var(--panel)', borderLeft: '1px solid var(--border)', zIndex: 201,
+                padding: 28, overflowY: 'auto', boxShadow: '-20px 0 60px rgba(0,0,0,0.5)',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+                <span className="page-label">Détail de la transaction</span>
+                <button onClick={() => setSelected(null)} className="btn btn-ghost" style={{ fontSize: 11 }}>✕ Fermer</button>
+              </div>
+
+              {/* Icône + titre */}
+              <div style={{ textAlign: 'center', marginBottom: 24 }}>
+                <div style={{
+                  width: 72, height: 72, borderRadius: '50%', margin: '0 auto 14px',
+                  background: typeColor(selected.type), border: `1px solid ${typeBorder(selected.type)}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 30,
+                }}>
+                  {typeIcon(selected.type)}
+                </div>
+                <h2 style={{ color: 'var(--text-bright)', marginBottom: 4, fontSize: 18 }}>{selected.label}</h2>
+                <span className={`pill ${statusClass(selected.status)}`} style={{ fontSize: 10 }}>{statusLabel(selected.status)}</span>
+              </div>
+
+              {/* Montant principal */}
+              <div style={{ textAlign: 'center', padding: '20px', background: 'rgba(0,0,0,0.3)', borderRadius: 14, marginBottom: 20 }}>
+                <div className="mono" style={{ fontSize: 32, fontWeight: 800, color: selected.direction === 'in' ? 'var(--green)' : 'var(--text-bright)' }}>
+                  {formatAmount(selected)}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 6 }}>{typeLabel(selected.type)} · {new Date(selected.created_at).toLocaleString('fr-FR')}</div>
+              </div>
+
+              {/* Détails structurés */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                {[
+                  ['Type', typeLabel(selected.type)],
+                  ['Statut', statusLabel(selected.status).replace(/^[✓⏳⚙✕]+\s*/, '')],
+                  ['Devise', `${selected.currency}`],
+                  ['Provider', selected.provider || '—'],
+                  ['Destination', selected.destination || '—'],
+                  ['Réf. route', selected.route_id ? `route ${selected.route_id}` : '—'],
+                  ['Date', new Date(selected.created_at).toLocaleString('fr-FR')],
+                  selected.dest_amount != null ? ['Montant reçu', `${selected.dest_amount.toLocaleString('fr-FR')} ${selected.dest_currency || ''}`] : null,
+                  selected.fx_rate != null ? ['Taux FX', selected.fx_rate.toFixed(4)] : null,
+                  selected.fee != null && selected.fee > 0 ? ['Frais', `${selected.fee.toLocaleString('fr-FR')} ${selected.fee_currency || ''}`] : null,
+                ].filter(Boolean).map((row, i) => row && (
+                  <div key={i} style={{
+                    display: 'flex', justifyContent: 'space-between', padding: '12px 0',
+                    borderBottom: i < 4 ? '1px solid var(--border-soft)' : 'none', fontSize: 12,
+                  }}>
+                    <span style={{ color: 'var(--text-dim)' }}>{row[0]}</span>
+                    <span style={{ color: 'var(--text-bright)', fontWeight: 600, textAlign: 'right' }}>{row[1]}</span>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
