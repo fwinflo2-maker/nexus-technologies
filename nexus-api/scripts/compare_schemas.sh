@@ -14,13 +14,27 @@ set -uo pipefail
 
 HOST="${1:-127.0.0.1}"
 USER="${2:-nexus}"
-PASS="${3:-nexus_dev_pw}"
+# `${3:-defaut}` remplacerait aussi une chaîne VIDE fournie explicitement par
+# le défaut — or « pas de mot de passe » est un cas légitime (conteneur CI
+# lancé avec MYSQL_ALLOW_EMPTY_PASSWORD). `${3-defaut}`, sans les deux-points,
+# ne substitue que si l'argument est ABSENT.
+PASS="${3-nexus_dev_pw}"
 
 DB_MIG="${DB_MIG:-nexus_ref}"
 DB_FULL="${DB_FULL:-nexus_full}"
 
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
-MYSQL=(mysql -h"$HOST" -P3306 -u"$USER" -p"$PASS")
+
+# Mot de passe VIDE = « pas de mot de passe », et non « mot de passe vide ».
+# `mysql -p""` envoie une chaîne vide comme mot de passe, ce que MySQL refuse
+# (ERROR 1045) au lieu de se connecter sans authentification par mot de passe.
+# L'option doit alors être omise entièrement — c'est le cas du conteneur
+# mysql:8.0 de la CI, lancé avec MYSQL_ALLOW_EMPTY_PASSWORD.
+if [[ -n "$PASS" ]]; then
+  MYSQL=(mysql -h"$HOST" -P3306 -u"$USER" -p"$PASS")
+else
+  MYSQL=(mysql -h"$HOST" -P3306 -u"$USER")
+fi
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
@@ -147,6 +161,16 @@ echo
 FAILED=0
 [ "$MIG_ERR" -ne 0 ] && FAILED=1
 [ "$FULL_ERR" -ne 0 ] && FAILED=1
+
+# Deux bases VIDES sont trivialement identiques : sans ce garde-fou, un échec
+# de connexion produit « MATCH (0) » partout et un rapport rassurant. Une
+# installation qui ne crée aucune table est un échec, pas une équivalence.
+if [ "$N_TABLES" -eq 0 ]; then
+  FAILED=1
+  echo "ERREUR : aucune table installée — comparaison sans objet."
+  echo "         (deux bases vides sont identiques : ce n'est pas une équivalence)"
+  echo
+fi
 for kind in tables columns indexes fks; do
   if ! diff -q "$TMP/$kind.mig" "$TMP/$kind.full" >/dev/null 2>&1; then
     FAILED=1
