@@ -12,19 +12,19 @@
 import type { CSSProperties, ReactNode } from 'react';
 
 export const C = {
-  bg: '#070b12',
-  panel: 'rgba(14,20,32,0.72)',
-  panelSolid: '#0e1420',
-  border: 'rgba(120,150,190,0.16)',
-  borderStrong: 'rgba(120,150,190,0.30)',
-  text: '#e8eef7',
-  dim: '#93a4bd',
-  faint: '#5f708a',
-  accent: '#00c8ff',
-  ok: '#22c98a',
-  warn: '#eab648',
-  danger: '#ef4d6a',
-  unknown: '#6b7c95',
+  bg: '#0B0D10',
+  panel: 'rgba(20,23,28,0.72)',
+  panelSolid: '#14171C',
+  border: 'rgba(120,150,190,0.14)',
+  borderStrong: 'rgba(120,150,190,0.26)',
+  text: '#F2F4F7',
+  dim: '#8A94A0',
+  faint: '#5A6572',
+  accent: '#3B82F6',
+  ok: '#10B981',
+  warn: '#3B82F6',
+  danger: '#EF4444',
+  unknown: '#6B7C95',
 } as const;
 
 export const MONO = "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace";

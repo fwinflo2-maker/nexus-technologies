@@ -1,0 +1,118 @@
+/* ============================================================================
+   NEXUS — REVOLUT/WISE INSPIRED LAYER
+   Objectif : rendre l'interface plus épurée, premium, monochrome.
+   - Un seul accent (bleu électrique), suppression des accents multi-couleurs
+   - Glows fortement réduits, surfaces plates
+   - Fond quasi uni très sombre (moins de couches/particules)
+   ============================================================================ */
+
+.nexus-dash {
+  /* Unification des accents vers un bleu unique */
+  --cyan:  #3B82F6;   /* bleu électrique Revolut-like */
+  --cyan2: #2563EB;
+  --cyan-glow: rgba(59, 130, 246, 0.10);
+  --gold:  #3B82F6;   /* supprime l'accent doré -> bleu */
+  --gold-glow: rgba(59, 130, 246, 0.10);
+  --violet: #3B82F6;  /* supprime l'accent violet -> bleu */
+  --violet-glow: rgba(59, 130, 246, 0.10);
+  --green: #10B981;
+  --green-glow: rgba(16, 185, 129, 0.08);
+  --red:   #EF4444;
+
+  /* Fonds plus neutres (un peu plus clairs, moins bleutés) */
+  --panel:       #14171C;
+  --panel2:      #1B1F26;
+  --border:      #262B33;
+  --border-soft: #1F242B;
+  --dark:        #0E1013;
+
+  /* Textes plus contrastés */
+  --text-dim:    #5A6572;
+  --text-mid:    #8A94A0;
+  --text-main:   #C7CED6;
+  --text-bright: #F2F4F7;
+
+  /* Ombres subtiles (pas de glow criard) */
+  --shadow-sm:   0 1px 3px rgba(0,0,0,0.4);
+  --shadow-md:   0 6px 20px rgba(0,0,0,0.45);
+  --shadow-lg:   0 16px 44px rgba(0,0,0,0.5);
+  --shadow-cyan: 0 4px 16px rgba(59,130,246,0.15);
+  --shadow-gold: 0 4px 16px rgba(59,130,246,0.15);
+}
+
+/* ── Fond : quasi uni, très sombre, sans orbes/particules criards ── */
+.nexus-dash .dash-ambient-bg {
+  background: linear-gradient(180deg, #0B0D10 0%, #0E1013 100%);
+}
+.nexus-dash .dash-particles { opacity: 0.12; }
+.nexus-dash .ambient, .nexus-dash .orb { display: none !important; }
+.nexus-dash .bg-grid { opacity: 0.35; }
+.nexus-dash .ambient-vignette { opacity: 0.3; }
+
+/* ── Cartes : plates, épurées, légère élévation ── */
+.nexus-dash .card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: none;
+}
+.nexus-dash .card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(59,130,246,0.35);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+}
+/* Retire les liserés lumineux animés */
+.nexus-dash .card::before, .nexus-dash .card::after { display: none !important; }
+
+/* ── Pills / badges : une seule teinte bleue ── */
+.nexus-dash .p-c  { background: rgba(59,130,246,.10); border-color: rgba(59,130,246,.28); color: var(--cyan); }
+.nexus-dash .p-g  { background: rgba(59,130,246,.10); border-color: rgba(59,130,246,.28); color: var(--cyan); }
+.nexus-dash .p-v  { background: rgba(59,130,246,.10); border-color: rgba(59,130,246,.28); color: var(--cyan); }
+.nexus-dash .p-gr { background: rgba(16,185,129,.10); border-color: rgba(16,185,129,.28); color: var(--green); }
+.nexus-dash .p-r  { background: rgba(239,68,68,.10);  border-color: rgba(239,68,68,.28);  color: var(--red); }
+
+/* ── Boutons : aplats, sans reflet lumineux ── */
+.nexus-dash .btn {
+  box-shadow: none !important;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+.nexus-dash .btn::after { display: none !important; }
+.nexus-dash .btn-cyan {
+  background: #2563EB;
+  color: #fff;
+  border-radius: 10px;
+}
+.nexus-dash .btn-cyan:hover { background: #3B82F6; box-shadow: 0 4px 14px rgba(59,130,246,.28) !important; }
+.nexus-dash .btn-ghost {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-mid);
+}
+.nexus-dash .btn-ghost:hover { background: rgba(255,255,255,0.04); color: var(--text-bright); }
+
+/* ── Stat cards : chiffres nets, sans multicolore criard ── */
+.nexus-dash .stat-value { letter-spacing: -0.5px; }
+
+/* ── Sidebar : épurée ── */
+.nexus-dash .sidebar { background: #0B0D10; border-right: 1px solid var(--border); }
+.nexus-dash .nav-item { border-radius: 8px; }
+.nexus-dash .nav-item.active, .nexus-dash .nav-item.active-gold {
+  background: rgba(59,130,246,.10);
+  color: #fff;
+}
+
+/* ── Icones .ib : une teinte bleue unifiée ── */
+.nexus-dash .ib-c  { background: rgba(59,130,246,.10); border: 1px solid rgba(59,130,246,.22); color: #7AB0FF; }
+.nexus-dash .ib-g  { background: rgba(59,130,246,.10); border: 1px solid rgba(59,130,246,.22); color: #7AB0FF; }
+.nexus-dash .ib-v  { background: rgba(59,130,246,.10); border: 1px solid rgba(59,130,246,.22); color: #7AB0FF; }
+.nexus-dash .ib-gr { background: rgba(16,185,129,.10); border: 1px solid rgba(16,185,129,.22); color: #34D399; }
+
+/* ── Entrée de page : sobre, pas d'excès d'animation ── */
+.nexus-dash .page { animation: nx-fade .3s ease both; }
+.nexus-dash .card, .nexus-dash .stat-card { animation: nx-fade .25s ease both; }
+
+/* ── Filtres (pill-btn) : unifiés bleu ── */
+.nexus-dash .pill-btn.active, .nexus-dash .pill-btn.pill-btn-active {
+  background: rgba(59,130,246,.14); border-color: rgba(59,130,246,.4); color: var(--cyan);
+  box-shadow: none;
+}
