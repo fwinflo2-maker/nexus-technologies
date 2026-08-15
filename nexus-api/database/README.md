@@ -83,7 +83,7 @@ Code de sortie 1 en cas d'incohérence : utilisable en CI.
 ### Base de test
 
 ```bash
-DB_USER=nexus DB_PASS=nexus_dev_pw php setup_test_db.php
+DB_USER=nexus DB_PASS=nexus_dev_pw php scripts/setup_test_db.php
 ```
 
 ---

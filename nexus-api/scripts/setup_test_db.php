@@ -12,8 +12,8 @@ declare(strict_types=1);
  *   DB_HOST (127.0.0.1)  DB_PORT (3306)  DB_USER (root)  DB_PASS ('')
  *   DB_TEST_NAME (nexus_test)  DB_NAME (nexus, base de dev vérifiée en fin)
  *
- * Usage :  php setup_test_db.php
- *          DB_USER=nexus DB_PASS=secret php setup_test_db.php
+ * Usage :  php scripts/setup_test_db.php
+ *          DB_USER=nexus DB_PASS=secret php scripts/setup_test_db.php
  */
 
 $host    = getenv('DB_HOST') ?: '127.0.0.1';
@@ -143,18 +143,18 @@ try {
     // Liste lue depuis database/migrations.manifest — SOURCE DE VÉRITÉ UNIQUE.
     // Une liste codée en dur ici ferait tourner les tests sur un schéma périmé
     // (et donc verdir des tests qui devraient échouer).
-    $manifest = __DIR__ . '/database/migrations.manifest';
+    $manifest = dirname(__DIR__) . '/database/migrations.manifest';
     if (!is_file($manifest)) {
         fwrite(STDERR, "Manifeste de migrations introuvable : {$manifest}\n");
         exit(1);
     }
-    $files = [__DIR__ . '/database/schema.sql'];
+    $files = [dirname(__DIR__) . '/database/schema.sql'];
     foreach (file($manifest, FILE_IGNORE_NEW_LINES) as $line) {
         $line = trim(preg_replace('/#.*$/', '', $line) ?? '');
         if ($line === '') {
             continue;
         }
-        $files[] = __DIR__ . '/database/migrations/' . $line;
+        $files[] = dirname(__DIR__) . '/database/migrations/' . $line;
     }
 
     $pdo = connect($host, $port, $user, $pass, $pdoOptions, $testDb);
