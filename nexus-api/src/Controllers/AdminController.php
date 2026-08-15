@@ -307,4 +307,85 @@ final class AdminController
             throw $e;
         }
     }
+
+    /**
+     * GET /api/admin/overview — tableau de bord Super Admin (données réelles).
+     *
+     * Agrège l'ensemble des activités de Nexus en un seul appel :
+     * comptes, wallets, transactions, volumes, KYC, providers, audits.
+     * Réservé au superadmin. Aucun secret n'est renvoyé.
+     */
+    public static function overview(Request $request): void
+    {
+        self::authorize($request);
+        $pdo = Database::getConnection();
+
+        // Comptes par type et statut.
+        $accounts = [
+            'total'     => (int) $pdo->query('SELECT COUNT(*) FROM users')->fetchColumn(),
+            'personal'  => (int) $pdo->query("SELECT COUNT(*) FROM users WHERE account_type='personal'")->fetchColumn(),
+            'business'  => (int) $pdo->query("SELECT COUNT(*) FROM users WHERE account_type='business'")->fetchColumn(),
+            'active'    => (int) $pdo->query("SELECT COUNT(*) FROM users WHERE status='ACTIVE'")->fetchColumn(),
+            'pending'   => (int) $pdo->query("SELECT COUNT(*) FROM users WHERE status='PENDING'")->fetchColumn(),
+            'suspended' => (int) $pdo->query("SELECT COUNT(*) FROM users WHERE status='SUSPENDED'")->fetchColumn(),
+        ];
+        $accounts['connect'] = (int) $pdo->query('SELECT COUNT(*) FROM connect_accounts')->fetchColumn();
+
+        // Wallets & actifs.
+        $wallets = (int) $pdo->query('SELECT COUNT(*) FROM wallets')->fetchColumn();
+        $walletBal = $pdo->query(
+            "SELECT COALESCE(SUM(CASE WHEN currency='EUR' THEN balance ELSE 0 END),0) eur,
+                    COALESCE(SUM(CASE WHEN currency='USD' THEN balance ELSE 0 END),0) usd,
+                    COALESCE(SUM(CASE WHEN currency='XAF' THEN balance ELSE 0 END),0) xaf
+             FROM wallets"
+        )->fetch();
+
+        // Transactions & volumes.
+        $tx = $pdo->query(
+            "SELECT COUNT(*) total,
+                    COALESCE(SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END),0) completed,
+                    COALESCE(SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END),0) failed,
+                    COALESCE(SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END),0) pending,
+                    COALESCE(SUM(CASE WHEN status='processing' THEN 1 ELSE 0 END),0) processing,
+                    COALESCE(SUM(amount),0) volume
+             FROM transactions"
+        )->fetch();
+        $volumeXaf = (int) $pdo->query(
+            "SELECT COALESCE(SUM(amount_xaf),0) FROM transactions WHERE status='completed'"
+        )->fetchColumn();
+
+        // KYC.
+        $kyc = [
+            'total'    => (int) $pdo->query('SELECT COUNT(*) FROM kyc_verifications')->fetchColumn(),
+            'pending'  => (int) $pdo->query("SELECT COUNT(*) FROM kyc_verifications WHERE status='pending' OR status='in_progress'")->fetchColumn(),
+            'approved' => (int) $pdo->query("SELECT COUNT(*) FROM kyc_verifications WHERE status='verified'")->fetchColumn(),
+            'rejected' => (int) $pdo->query("SELECT COUNT(*) FROM kyc_verifications WHERE status='rejected'")->fetchColumn(),
+        ];
+
+        // Providers.
+        $providers = [
+            'total' => (int) $pdo->query('SELECT COUNT(*) FROM provider_credentials')->fetchColumn(),
+            'configured' => (int) $pdo->query("SELECT COUNT(*) FROM provider_credentials WHERE credentials_enc IS NOT NULL AND credentials_enc <> ''")->fetchColumn(),
+        ];
+
+        // Audit récent (activité).
+        $recentAudit = $pdo->query(
+            'SELECT action, COUNT(*) AS count FROM audit_logs GROUP BY action ORDER BY count DESC LIMIT 8'
+        )->fetchAll();
+
+        Response::success([
+            'accounts'   => $accounts,
+            'wallets'    => $wallets,
+            'assets'     => ['EUR' => $walletBal['eur'], 'USD' => $walletBal['usd'], 'XAF' => $walletBal['xaf']],
+            'transactions' => [
+                'total' => (int) $tx['total'], 'completed' => (int) $tx['completed'],
+                'failed' => (int) $tx['failed'], 'pending' => (int) $tx['pending'],
+                'processing' => (int) $tx['processing'], 'volume_xaf' => (int) $volumeXaf,
+            ],
+            'kyc'        => $kyc,
+            'providers'  => $providers,
+            'recent_activity' => $recentAudit,
+            'generated_at' => gmdate(DATE_ATOM),
+        ]);
+    }
 }

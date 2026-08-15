@@ -29,6 +29,7 @@ import ApprovalsPage from './views/business/ApprovalsPage';
 import TeamPage from './views/business/TeamPage';
 import ReconciliationPage from './views/business/ReconciliationPage';
 import AnalyticsPage from './views/business/AnalyticsPage';
+import SuperAdminDashboard from './views/admin/SuperAdminDashboard';
 import { useDashT } from './data/dashboard-i18n';
 import './styles/design-system.css';
 import './styles/dashboard-system.css';
@@ -173,9 +174,13 @@ function AppRoutes() {
 
   if (!user) return <PublicRouter />;
 
-  // Tous les comptes connectés utilisent le dashboard client.
+  // Dashboard Super Admin : réservé au rôle superadmin. Les autres comptes
+  // sont redirigés vers leur dashboard client.
+  const isSuperAdmin = user.platform_role === 'superadmin';
+
   return (
     <Routes>
+      {isSuperAdmin && <Route path="/admin" element={<SuperAdminDashboard />} />}
       <Route path="*" element={<DashboardLayout />} />
     </Routes>
   );

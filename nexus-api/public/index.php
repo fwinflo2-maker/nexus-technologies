@@ -175,6 +175,7 @@ $router->put('/control/employees/{id}', [AdminController::class, 'updateEmployee
 $router->patch('/control/employees/{id}/status', [AdminController::class, 'setEmployeeStatus']);
 $router->get('/control/connect/accounts', [AdminController::class, 'connectAccounts']);
 $router->post('/control/connect/accounts', [AdminController::class, 'createConnectAccount']);
+$router->get('/admin/overview', [AdminController::class, 'overview']);
 
 // Maintenance d'exploitation : le diagnostic est en lecture seule (capacité
 // « operations »), la reprise modifie des paiements réels (capacité
