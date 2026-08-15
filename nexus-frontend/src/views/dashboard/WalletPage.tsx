@@ -11,6 +11,8 @@ import {
 } from '../../api/client';
 import AccountsPanel from './AccountsPanel';
 import PendingHolds from '../../components/dashboard/PendingHolds';
+import AnimatedCounter from '../../components/AnimatedCounter';
+import EmptyState from '../../components/EmptyState';
 
 /**
  * WalletPage — Vue unifiée multi-devises (données réelles).
@@ -210,7 +212,7 @@ export default function WalletPage() {
               Solde total · équivalent EUR
             </div>
             <div style={{ fontSize: 34, fontWeight: 800, color: 'var(--white)', fontFamily: 'var(--font-mono)', letterSpacing: '-1px', marginTop: 6 }}>
-              {formatCurrency(totals.total_ref, 'EUR')}
+              <AnimatedCounter value={totals.total_ref} format={(n) => formatCurrency(n, 'EUR')} />
             </div>
             <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 4 }}>
               {totals.currencies} devises supportées · {totals.with_funds} avec des fonds
@@ -226,14 +228,16 @@ export default function WalletPage() {
       {/* KPIs : totaux par état */}
       <div className="g4 animate-up delay-1" style={{ marginBottom: 24 }}>
         {[
-          { label: 'Total portefeuille', val: formatCurrency(totals.total_ref, 'EUR'), color: 'var(--cyan)', sub: 'Équivalent EUR' },
-          { label: 'Disponible', val: formatCurrency(totals.available_ref, 'EUR'), color: 'var(--green)', sub: 'Immédiatement disponible' },
-          { label: 'En attente', val: formatCurrency(totals.pending_ref, 'EUR'), color: 'var(--gold)', sub: 'Créancier — règlement ~24h' },
-          { label: 'En transit', val: formatCurrency(totals.in_transit_ref, 'EUR'), color: 'var(--violet)', sub: 'Vers / depuis un provider' },
+          { label: 'Total portefeuille', raw: totals.total_ref, color: 'var(--cyan)', sub: 'Équivalent EUR' },
+          { label: 'Disponible', raw: totals.available_ref, color: 'var(--green)', sub: 'Immédiatement disponible' },
+          { label: 'En attente', raw: totals.pending_ref, color: 'var(--gold)', sub: 'Créancier — règlement ~24h' },
+          { label: 'En transit', raw: totals.in_transit_ref, color: 'var(--violet)', sub: 'Vers / depuis un provider' },
         ].map((s) => (
           <div key={s.label} className="card stat-card">
             <div className="stat-label">{s.label}</div>
-            <div className="stat-value" style={{ fontSize: 24, color: s.color }}>{s.val}</div>
+            <div className="stat-value" style={{ fontSize: 24, color: s.color }}>
+              <AnimatedCounter value={s.raw} format={(n) => formatCurrency(n, 'EUR')} />
+            </div>
             <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>{s.sub}</div>
           </div>
         ))}
@@ -541,13 +545,12 @@ export default function WalletPage() {
                   <button className="btn btn-cyan" style={{ fontSize: 11 }} onClick={() => fetchTxs(selected)}>↻ Réessayer</button>
                 </div>
               ) : !txs || txs.length === 0 ? (
-                <div style={{ padding: 32, textAlign: 'center' }}>
-                  <div style={{ fontSize: 28, marginBottom: 10 }}>🕘</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-bright)' }}>Aucune transaction</div>
-                  <p style={{ fontSize: 11, color: 'var(--text-mid)', marginTop: 6 }}>
-                    Aucune opération sur {selectedWallet.currency} pour le moment.
-                  </p>
-                </div>
+                <EmptyState
+                  icon="🕘"
+                  title="Aucune transaction"
+                  subtitle={`Aucune opération sur ${selectedWallet.currency} pour le moment.`}
+                  action={<Link to="/send" className="btn btn-ghost" style={{ fontSize: 11, textDecoration: 'none' }}>↗ Envoyer maintenant</Link>}
+                />
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                   {txs.map((tx) => {

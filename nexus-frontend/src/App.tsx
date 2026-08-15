@@ -33,6 +33,7 @@ import ControlCenterLayout from './views/control/ControlCenterLayout';
 import { useDashT } from './data/dashboard-i18n';
 import './styles/design-system.css';
 import './styles/dashboard-system.css';
+import './styles/premium.css';
 
 type Mode = 'personal' | 'business';
 

@@ -12,6 +12,7 @@ import {
   type WalletRatesData,
 } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import AnimatedCounter from '../../components/AnimatedCounter';
 
 type Mode = 'personal' | 'business';
 type Period = '7d' | '30d' | '12m';
@@ -178,16 +179,37 @@ export default function DashboardPage({ mode }: DashboardProps) {
         </div>
       </motion.div>
 
+      {/* Quick actions — barre d'actions premium */}
+      <motion.div variants={staggerContainer} initial="hidden" animate="visible"
+        style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 26 }}>
+        {quickActions.map((qa, i) => (
+          <motion.div key={qa.href + qa.label} variants={fadeInUp} custom={i + 1}>
+            <Link to={qa.href} className="btn btn-ghost" style={{
+              display: 'inline-flex', alignItems: 'center', gap: 10, padding: '10px 16px', textDecoration: 'none',
+              fontSize: 12, borderRadius: 12, border: '1px solid var(--border)',
+            }}>
+              <span className={`ib ${qa.cls}`} style={{ width: 30, height: 30, borderRadius: 8, fontSize: 14 }}>{qa.icon}</span>
+              <span style={{ textAlign: 'left' }}>
+                <span style={{ display: 'block', fontWeight: 700, color: 'var(--text-bright)' }}>{qa.label}</span>
+                <span style={{ display: 'block', fontSize: 9, color: 'var(--text-dim)' }}>{qa.sub}</span>
+              </span>
+            </Link>
+          </motion.div>
+        ))}
+      </motion.div>
+
       <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="g4" style={{ marginBottom: 30, perspective: '1000px' }}>
-        {[{ l: 'Total', v: formatCurrency(totals.total_ref, totals.ref_currency), c: 'var(--cyan)', icon: '💰' },
-          { l: 'Transactions', v: `${kpis.transactions_month}`, c: 'var(--green)', icon: '🔄' },
-          { l: 'Volume 30j', v: formatXAF(kpis.volume_xaf), c: 'var(--gold)', icon: '📊' },
-          { l: 'Temps Moy.', v: `${kpis.avg_exec_time_sec}s`, c: 'var(--violet)', icon: '⏱️' }
+        {[{ l: 'Total', v: totals.total_ref, fmt: (n: number) => formatCurrency(n, totals.ref_currency), c: 'var(--cyan)', icon: '💰' },
+          { l: 'Transactions', v: kpis.transactions_month, fmt: (n: number) => `${n}`, c: 'var(--green)', icon: '🔄' },
+          { l: 'Volume 30j', v: kpis.volume_xaf, fmt: (n: number) => formatXAF(n), c: 'var(--gold)', icon: '📊' },
+          { l: 'Temps Moy.', v: kpis.avg_exec_time_sec ?? 0, fmt: (n: number) => `${Math.round(n)}s`, c: 'var(--violet)', icon: '⏱️' }
         ].map((kpi, i) => (
           <motion.div key={i} variants={fadeInUp} custom={i + 1} whileHover={{ y: -5, scale: 1.02 }}
             className="card glass-card stat-card" style={{ padding: 24, transformStyle: 'preserve-3d' }}>
             <div className="stat-label">{kpi.l}</div>
-            <div className="stat-value" style={{ color: kpi.c, fontSize: 28 }}>{kpi.v}</div>
+            <div className="stat-value" style={{ color: kpi.c, fontSize: 28 }}>
+              <AnimatedCounter value={kpi.v} format={kpi.fmt} />
+            </div>
             <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 4 }}>{kpi.icon} Dernière heure</div>
           </motion.div>
         ))}
