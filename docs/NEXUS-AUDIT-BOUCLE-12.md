@@ -174,3 +174,58 @@ explicite et un commentaire « §29 : jamais en production ». Ils n'ont été
 trouvés qu'en exécutant le vrai parcours et en interrogeant la base derrière.
 Une suite verte prouve l'absence des régressions qu'elle couvre, pas
 l'honnêteté du système.
+
+---
+
+## Addendum — la CI a révélé une famille entière de défauts
+
+Le premier run de la CI a échoué. Non pas à cause du workflow, mais parce
+qu'il exécutait pour la première fois le projet **sur MySQL 8** au lieu de
+MariaDB. Quatre défauts de portabilité en sont sortis, tous invisibles en
+développement (XAMPP et la plupart des postes tournent sous MariaDB, plus
+permissive) :
+
+| # | Défaut | Erreur MySQL |
+|---|---|---|
+| P1 | `ADD COLUMN/KEY IF NOT EXISTS` — extension MariaDB, 27 clauses sur 7 migrations | 1064 |
+| P2 | `PERSISTENT` au lieu de `STORED` (colonne générée) | 1064 |
+| P3 | FK `ON DELETE CASCADE` sur la colonne de base d'une colonne générée `STORED` | 1215 |
+| P4 | `full_schema.sql` figeait la forme MariaDB des colonnes JSON (`longtext + CHECK json_valid`) | divergence de types |
+
+Conséquence réelle : **le projet était inapplicable sur MySQL 8**, alors que
+`README.dev.md` annonce « MariaDB / **MySQL 8+** ». Aucun test ne pouvait le
+détecter — ils tournaient tous sur le même moteur que le poste de
+développement.
+
+### Un faux PASS dans l'outil d'audit lui-même
+
+En corrigeant le job de schéma, `compare_schemas.sh` s'est révélé capable
+d'afficher un rapport rassurant sur **deux bases vides** :
+
+```
+MIGRATION INSTALLATION     FAIL
+TABLE COUNT                MATCH (0)
+COLUMN STRUCTURE           MATCH (0 colonnes)
+INDEXES                    MATCH (0)
+```
+
+Quand la connexion échoue, rien n'est installé de part et d'autre — et deux
+bases vides sont trivialement identiques. Le script refuse désormais de
+conclure si aucune table n'a été installée. C'est le même motif que celui
+traqué dans le code applicatif : *l'absence de vérification ne doit jamais se
+présenter comme une vérification réussie.*
+
+### État final de la CI
+
+```
+API PHP 8.1            success      484 tests sur MySQL 8
+API PHP 8.3            success      484 tests sur MySQL 8
+Cohérence du schéma    success      21 tables, 264 colonnes, 77 index, 24 FK
+Frontend React         success      tsc + oxlint + build
+Agents Node            success      tsc
+```
+
+La suite tourne désormais sur **deux versions de PHP et un moteur SQL
+différent du poste de développement**. C'est précisément ce que la CI apporte
+ici : elle a trouvé en un run une classe de bugs qu'aucune relecture n'aurait
+mise en évidence.
