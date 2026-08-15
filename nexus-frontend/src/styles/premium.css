@@ -217,6 +217,12 @@
   letter-spacing: -0.3px;
 }
 .nexus-dash .form-group { display: grid; gap: 6px; padding: 4px 0; }
+/* Grille 2 colonnes pour disposer les champs de formulaire sur une même ligne */
+.nexus-dash .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 20px; align-items: start; }
+.nexus-dash .form-grid .form-group--full { grid-column: 1 / -1; }
+@media (max-width: 600px) {
+  .nexus-dash .form-grid { grid-template-columns: 1fr; }
+}
 .nexus-dash .form-label {
   font-size: 10px; font-weight: 600; color: var(--text-dim);
   letter-spacing: 1.5px; text-transform: uppercase;
@@ -302,6 +308,24 @@
 .nexus-dash .data-table tbody tr:last-child td { border-bottom: none; }
 .nexus-dash .data-table tbody tr { transition: background .2s ease; }
 .nexus-dash .data-table tbody tr:hover { background: rgba(0,200,255,.03); }
+
+/* Filtres (selects) de l'Historique — cohérents avec le design system */
+.nexus-dash select.filter-select {
+  appearance: none; -webkit-appearance: none;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  color: var(--text-main);
+  padding: 8px 30px 8px 12px;
+  border-radius: 10px;
+  font-size: 12px; font-weight: 600; font-family: var(--font-sans);
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%236A8EA8' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center;
+  transition: border-color .2s ease, background .2s ease, color .2s ease;
+}
+.nexus-dash select.filter-select:hover { border-color: rgba(0,200,255,.35); color: var(--text-bright); }
+.nexus-dash select.filter-select:focus { outline: none; border-color: rgba(0,200,255,.5); box-shadow: 0 0 0 3px rgba(0,200,255,.12); }
+.nexus-dash select.filter-select option { background: var(--panel); color: var(--text-main); }
 
 /* Alertes (succès / erreur) */
 .nexus-dash .alert {

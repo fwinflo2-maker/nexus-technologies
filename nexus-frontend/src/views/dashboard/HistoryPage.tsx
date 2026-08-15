@@ -147,7 +147,7 @@ export default function HistoryPage() {
           <select
             value={filterType}
             onChange={(e) => setFilterType(e.target.value as FilterType)}
-            className="pill p"
+            className="filter-select"
             style={{ cursor: 'pointer', fontSize: 12 }}
           >
             <option value="all">Tous les types</option>
@@ -160,7 +160,7 @@ export default function HistoryPage() {
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value as FilterStatus)}
-            className="pill p"
+            className="filter-select"
             style={{ cursor: 'pointer', fontSize: 12 }}
           >
             <option value="all">Tous les statuts</option>
@@ -172,7 +172,7 @@ export default function HistoryPage() {
           <select
             value={filterCurrency}
             onChange={(e) => setFilterCurrency(e.target.value)}
-            className="pill p"
+            className="filter-select"
             style={{ cursor: 'pointer', fontSize: 12 }}
           >
             <option value="all">Toutes devises</option>

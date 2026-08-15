@@ -168,8 +168,9 @@ export default function SettingsPage() {
     return (
       <div className="settings-section animate-up">
         <h3 className="section-title">Profil</h3>
-        
-        <div className="form-group">
+
+        <div className="form-grid">
+        <div className="form-group form-group--full">
           <label className="form-label">Adresse e-mail</label>
           <input
             type="email"
@@ -247,6 +248,7 @@ export default function SettingsPage() {
             {profile.kyc_level === 'standard' && '✅ Vérification standard'}
             {profile.kyc_level === 'advanced' && '✅✅ Vérification avancée'}
           </div>
+        </div>
         </div>
 
         <div className="form-actions" style={{ marginTop: 24 }}>

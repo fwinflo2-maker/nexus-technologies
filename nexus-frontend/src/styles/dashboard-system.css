@@ -1043,7 +1043,7 @@ html.light-mode .nexus-dash .status-dot {
   padding: 16px 18px; border-radius: 16px;
   background: linear-gradient(180deg, rgba(0,200,255,0.045), rgba(16,24,32,0.55));
   border: 1px solid var(--border); position: relative; overflow: hidden;
-  margin-bottom: 28px;
+  margin-bottom: 36px;
 }
 .nexus-dash .se-corridor::after {
   content: ''; position: absolute; inset: 0; pointer-events: none;
