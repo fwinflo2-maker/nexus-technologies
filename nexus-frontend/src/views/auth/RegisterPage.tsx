@@ -48,6 +48,51 @@ const emptyBusiness: BusinessData = {
 
 const legalForms = ['SARL', 'SA', 'SAS', 'SASU', 'EURL', 'Entreprise individuelle', 'Coopérative', 'ONL', 'GIE', 'Autre'];
 
+// Formes juridiques par pays (code ISO-2) — pour l'inscription entreprise.
+// La liste s'adapte au pays sélectionné ; par défaut, liste générique.
+const LEGAL_FORMS_BY_COUNTRY: Record<string, string[]> = {
+  FR: ['SARL', 'SAS', 'SASU', 'SA', 'EURL', 'SNC', 'SCI', 'Entreprise individuelle', 'Micro-entreprise', 'Société civile'],
+  CG: ['SARL', 'SA', 'EURL', 'SAS', 'Entreprise individuelle', 'Association', 'Société en nom collectif'],
+  CM: ['SARL', 'SA', 'EURL', 'SUARL', 'SNC', 'Société coopérative', 'Entreprise individuelle'],
+  GA: ['SARL', 'SA', 'EURL', 'SAS', 'SNC', 'Entreprise individuelle', 'Société en participation'],
+  SN: ['SARL', 'SA', 'SUARL', 'SNC', 'GIE', 'Société coopérative', 'Entreprise individuelle'],
+  CI: ['SARL', 'SA', 'EURL', 'SAS', 'SNC', 'GIE', 'Société coopérative', 'Entreprise individuelle'],
+  TG: ['SARL', 'SA', 'EURL', 'SAS', 'SNC', 'Société coopérative', 'Entreprise individuelle'],
+  BJ: ['SARL', 'SA', 'EURL', 'SAS', 'SNC', 'Société coopérative', 'Entreprise individuelle'],
+  BF: ['SARL', 'SA', 'EURL', 'SAS', 'SNC', 'Société coopérative', 'Entreprise individuelle'],
+  ML: ['SARL', 'SA', 'EURL', 'SAS', 'SNC', 'GIE', 'Société coopérative', 'Entreprise individuelle'],
+  NE: ['SARL', 'SA', 'EURL', 'SAS', 'SNC', 'Société coopérative', 'Entreprise individuelle'],
+  CD: ['SARL', 'SA', 'EURL', 'SAS', 'SNC', 'Société coopérative', 'Entreprise individuelle'],
+  MA: ['SARL', 'SA', 'SAS', 'SNC', 'Société en participation', 'Entreprise individuelle'],
+  DZ: ['SARL', 'SPA', 'EURL', 'SNC', 'Société en participation', 'Entreprise individuelle'],
+  TN: ['SARL', 'SA', 'SUARL', 'SNC', 'Société en participation', 'Entreprise individuelle'],
+  US: ['LLC', 'Corporation (Inc.)', 'S-Corp', 'C-Corp', 'LLP', 'Sole Proprietorship', 'Nonprofit'],
+  GB: ['Limited (Ltd)', 'Public Limited Company (PLC)', 'LLP', 'Sole Trader', 'Community Interest Company'],
+  DE: ['GmbH', 'AG', 'UG (haftungsbeschränkt)', 'GbR', 'OHG', 'KG', 'Einzelunternehmen'],
+  BE: ['SPRL', 'SA', 'SCRL', 'SNC', 'SCS', 'Société simple'],
+  CH: ['GmbH', 'AG', 'Einzelunternehmen', 'Kollektivgesellschaft', 'Kommanditgesellschaft'],
+  ES: ['Sociedad Limitada (SL)', 'Sociedad Anónima (SA)', 'Sociedad Civil', 'Comunidad de Bienes', 'Autónomo'],
+  IT: ['Società a Responsabilità Limitata (SRL)', 'Società per Azioni (SPA)', 'SNC', 'SAS', 'Ditta Individuale'],
+  PT: ['Sociedade por Quotas (Lda)', 'Sociedade Anónima (SA)', 'Empresário em Nome Individual'],
+  NL: ['Besloten Vennootschap (BV)', 'Naamloze Vennootschap (NV)', 'VOF', 'Eenmanszaak', 'Coöperatie'],
+  CA: ['Corporation (Inc.)', 'Limited (Ltd)', 'Sole Proprietorship', 'Partnership'],
+  BR: ['Sociedade Limitada (LTDA)', 'Sociedade Anônima (SA)', 'Empresa Individual (EI)', 'Microempreendedor Individual (MEI)'],
+  IN: ['Private Limited (Pvt Ltd)', 'Public Limited (Ltd)', 'LLP', 'Sole Proprietorship', 'Partnership'],
+  CN: ['有限责任公司 (LLC)', '股份有限公司 (Co., Ltd)', '合伙企业 (Partnership)', '个体工商户 (Sole Proprietor)'],
+  JP: ['株式会社 (Kabushiki Kaisha)', '合同会社 (Godo Gaisha)', '合名会社 (Gomei Gaisha)', '個人事業主 (Sole Proprietor)'],
+  NG: ['Limited Liability Company (Ltd)', 'Public Limited Company (PLC)', 'Business Name', 'Partnership'],
+  KE: ['Limited Company (Ltd)', 'Sole Proprietorship', 'Partnership', 'Company Limited by Guarantee'],
+  GH: ['Limited Company (Ltd)', 'Sole Proprietorship', 'Partnership', 'Company Limited by Guarantee'],
+  ZA: ['Private Company (Pty) Ltd', 'Public Company (Ltd)', 'Sole Proprietorship', 'Partnership', 'Close Corporation (CC)'],
+};
+
+/** Résout le code ISO du pays depuis son nom, puis retourne les formes juridiques adaptées. */
+function legalFormsForCountry(countryName: string): string[] {
+  const match = countries.find(c => c.name === countryName);
+  const code = match?.code ?? '';
+  return LEGAL_FORMS_BY_COUNTRY[code] ?? legalForms;
+}
+
 const emailValid = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
 export function RegisterPage({ onSwitchToLogin, onBackHome }: RegisterPageProps) {
@@ -156,7 +201,15 @@ export function RegisterPage({ onSwitchToLogin, onBackHome }: RegisterPageProps)
   const b = (field: keyof BusinessData, value: string) => setBusiness(prev => ({ ...prev, [field]: value }));
 
   const countryOptions = (
-    <select className="form-control" value={isBusiness ? business.companyCountry : personal.country} onChange={e => isBusiness ? b('companyCountry', e.target.value) : p('country', e.target.value)}>
+    <select className="form-control" value={isBusiness ? business.companyCountry : personal.country} onChange={e => {
+      const val = e.target.value;
+      if (isBusiness) {
+        // Changement de pays : la forme juridique précédente peut ne plus être valide.
+        setBusiness(prev => ({ ...prev, companyCountry: val, legalForm: '' }));
+      } else {
+        p('country', val);
+      }
+    }}>
       {countries.map(c => <option key={c.code} value={c.name}>{c.name} ({c.dial})</option>)}
     </select>
   );
@@ -226,8 +279,9 @@ export function RegisterPage({ onSwitchToLogin, onBackHome }: RegisterPageProps)
                       <label htmlFor="legalForm" className="form-label">{t('reg_legal_form')}</label>
                       <select id="legalForm" className="form-control" value={business.legalForm} onChange={e => b('legalForm', e.target.value)}>
                         <option value="">{t('reg_select')}</option>
-                        {legalForms.map(f => <option key={f} value={f}>{f}</option>)}
+                        {legalFormsForCountry(business.companyCountry).map(f => <option key={f} value={f}>{f}</option>)}
                       </select>
+                      <small className="form-hint">Adapté au pays : {business.companyCountry}</small>
                     </div>
                     <div>
                       <label htmlFor="companyCountry" className="form-label">{t('reg_company_country')}</label>

@@ -354,10 +354,10 @@ function CountrySelector({
       {open && (
         <motion.div
           className="card"
-          initial={{ opacity: 0, y: -8, scale: 0.97 }}
+          initial={{ opacity: 0, y: 8, scale: 0.97 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.2, ease: BEZIER }}
-          style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100, marginTop: 4, padding: 8, maxHeight: 280, overflowY: 'auto' }}
+          style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, zIndex: 100, marginBottom: 6, padding: 8, maxHeight: 280, overflowY: 'auto' }}
           onClick={e => e.stopPropagation()}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 6, marginBottom: 8 }}>
