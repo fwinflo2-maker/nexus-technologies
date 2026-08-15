@@ -51,6 +51,7 @@ export interface ApiUser {
   email: string;
   phone?: string;
   account_type: 'personal' | 'business';
+  platform_role?: string;
   auth_provider: 'local';
   status: string;
   kyc_level: string;
@@ -1280,6 +1281,27 @@ export interface PublicKeyRow {
 
 export async function apiControlOverview(): Promise<ApiResponse<ControlOverview>> {
   return request<ControlOverview>('GET', '/control/overview');
+}
+
+// --- Accès interne (dashboards RBAC) ----------------------------------------
+
+export interface InternalAccess {
+  role: string;
+  dashboard: string | null;
+  surfaces: {
+    overview: boolean;
+    providers: boolean;
+    clients: boolean;
+    audit: boolean;
+    kyc: boolean;
+    maintenance: boolean;
+    credentials: boolean;
+    dashboard: string | null;
+  };
+}
+
+export async function apiControlAccess(): Promise<ApiResponse<InternalAccess>> {
+  return request<InternalAccess>('GET', '/control/access');
 }
 
 export async function apiControlProviders(): Promise<ApiResponse<{
