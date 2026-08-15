@@ -67,10 +67,12 @@ CREATE TABLE `fx_rates_cache` (
   `rate` decimal(20,8) NOT NULL,
   `spread_pct` decimal(8,4) NOT NULL DEFAULT 0.0000,
   `source` varchar(50) NOT NULL DEFAULT 'manual',
+  `environment` enum('sandbox','production') NOT NULL DEFAULT 'sandbox' COMMENT 'Environnement du taux. Un taux sandbox ne doit jamais coter de l''argent reel.',
   `fetched_at` datetime NOT NULL DEFAULT current_timestamp(),
   `expires_at` datetime NOT NULL,
   PRIMARY KEY (`id`),
-  KEY `idx_fx_pair` (`base_currency`,`quote_currency`,`fetched_at`)
+  UNIQUE KEY `uq_fx_pair_env_fetched` (`base_currency`,`quote_currency`,`environment`,`fetched_at`),
+  KEY `idx_fx_pair_env` (`base_currency`,`quote_currency`,`environment`,`fetched_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -522,19 +524,23 @@ CREATE TABLE `wallets` (
 --     mysql -u nexus -p nexus < database/seeds/demo_fx_rates.sql
 -- =============================================================================
 
-INSERT INTO fx_rates_cache (base_currency, quote_currency, rate, source, fetched_at, expires_at) VALUES
-    ('EUR', 'USD',  1.08700000, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
-    ('EUR', 'GBP',  0.85500000, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
-    ('EUR', 'XAF',  655.95700000, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
-    ('EUR', 'XOF',  655.95700000, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
-    ('EUR', 'NGN',  1650.00000000, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
-    ('EUR', 'GHS',  14.80000000, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
-    ('EUR', 'KES',  141.00000000, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
-    ('EUR', 'USDT', 1.08700000, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
-    ('EUR', 'USDC', 1.08700000, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
-    ('USD', 'EUR',  0.92000000, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
-    ('GBP', 'EUR',  1.17000000, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
-    ('XAF', 'EUR',  0.00152400, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR));
+-- `environment` est fourni EXPLICITEMENT : ces taux sont un jeu de
+-- DÉMONSTRATION et ne doivent jamais coter de l'argent réel. Le défaut de la
+-- colonne vaut déjà « sandbox », mais un défaut est une protection passive :
+-- le seeder reste correct par lui-même si ce défaut change un jour.
+INSERT INTO fx_rates_cache (base_currency, quote_currency, rate, source, environment, fetched_at, expires_at) VALUES
+    ('EUR', 'USD',  1.08700000, 'manual', 'sandbox', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
+    ('EUR', 'GBP',  0.85500000, 'manual', 'sandbox', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
+    ('EUR', 'XAF',  655.95700000, 'manual', 'sandbox', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
+    ('EUR', 'XOF',  655.95700000, 'manual', 'sandbox', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
+    ('EUR', 'NGN',  1650.00000000, 'manual', 'sandbox', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
+    ('EUR', 'GHS',  14.80000000, 'manual', 'sandbox', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
+    ('EUR', 'KES',  141.00000000, 'manual', 'sandbox', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
+    ('EUR', 'USDT', 1.08700000, 'manual', 'sandbox', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
+    ('EUR', 'USDC', 1.08700000, 'manual', 'sandbox', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
+    ('USD', 'EUR',  0.92000000, 'manual', 'sandbox', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
+    ('GBP', 'EUR',  1.17000000, 'manual', 'sandbox', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
+    ('XAF', 'EUR',  0.00152400, 'manual', 'sandbox', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR));
 
 -- demo_payment_accounts.sql
 -- =============================================================================

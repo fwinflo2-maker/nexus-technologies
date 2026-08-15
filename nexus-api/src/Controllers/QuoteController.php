@@ -109,7 +109,7 @@ final class QuoteController
 
         foreach ($providers as $provider) {
             try {
-                $quotes[] = QuoteEngine::quote($intent, $provider, $quoteId);
+                $quotes[] = QuoteEngine::quote($intent, $provider, $quoteId, $context->environment);
             } catch (\Nexus\Services\QuoteRateUnavailable $e) {
                 // Aucun taux réel pour cette paire : on refuse de coter plutôt
                 // que d'annoncer un montant reçu sans fondement (§12).

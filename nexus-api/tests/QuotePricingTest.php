@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nexus\Tests;
 
 use Nexus\Core\Database;
+use Nexus\Execution\ExecutionEnvironment;
 use Nexus\Services\QuoteEngine;
 use Nexus\Services\QuotePricing;
 use Nexus\Services\QuoteRateUnavailable;
@@ -75,7 +76,7 @@ final class QuotePricingTest extends TestCase
     {
         $this->seedRate('EUR', 'XAF', '600.00000000', '0.0000', 'audit_source');
 
-        $res = QuotePricing::resolveRate('EUR', 'XAF');
+        $res = QuotePricing::resolveRate('EUR', 'XAF', ExecutionEnvironment::SANDBOX);
 
         self::assertSame(QuotePricing::RESOLVED, $res['status']);
         self::assertSame(600.0, $res['rate']);
@@ -90,11 +91,11 @@ final class QuotePricingTest extends TestCase
     public function test_modifier_la_source_change_reellement_le_taux(): void
     {
         $this->seedRate('EUR', 'XAF', '655.95700000', '0.0000', 'test_a');
-        $a = QuotePricing::resolveRate('EUR', 'XAF');
+        $a = QuotePricing::resolveRate('EUR', 'XAF', ExecutionEnvironment::SANDBOX);
 
         $this->seedRate('EUR', 'XAF', '100.00000000', '0.0000', 'test_b');
         QuotePricing::resetCache();
-        $b = QuotePricing::resolveRate('EUR', 'XAF');
+        $b = QuotePricing::resolveRate('EUR', 'XAF', ExecutionEnvironment::SANDBOX);
 
         self::assertSame(655.957, $a['rate']);
         self::assertSame(
@@ -107,7 +108,7 @@ final class QuotePricingTest extends TestCase
     public function test_une_paire_inconnue_est_UNAVAILABLE_sans_taux_invente(): void
     {
         // ZZZ n'existe ni en cache ni dans ManualRateProvider.
-        $res = QuotePricing::resolveRate('EUR', 'ZZZ');
+        $res = QuotePricing::resolveRate('EUR', 'ZZZ', ExecutionEnvironment::SANDBOX);
 
         self::assertSame(QuotePricing::UNAVAILABLE, $res['status']);
         self::assertNull($res['rate'], 'Aucun taux ne doit être inventé pour une paire inconnue.');
@@ -118,7 +119,7 @@ final class QuotePricingTest extends TestCase
     {
         $this->seedRate('EUR', 'XAF', '0.00000000', '0.0000', 'broken');
 
-        $res = QuotePricing::resolveRate('EUR', 'XAF');
+        $res = QuotePricing::resolveRate('EUR', 'XAF', ExecutionEnvironment::SANDBOX);
 
         self::assertSame(QuotePricing::UNAVAILABLE, $res['status']);
         self::assertNull($res['rate']);
@@ -128,7 +129,7 @@ final class QuotePricingTest extends TestCase
     {
         $this->seedRate('EUR', 'XAF', '655.95700000', '0.5000', 'with_spread');
 
-        $res = QuotePricing::resolveRate('EUR', 'XAF');
+        $res = QuotePricing::resolveRate('EUR', 'XAF', ExecutionEnvironment::SANDBOX);
 
         // 0.5000 % en base → 0.005 en ratio.
         self::assertEqualsWithDelta(0.005, $res['spread_pct'], 0.0000001);
@@ -298,7 +299,8 @@ final class QuotePricingTest extends TestCase
         string $quote,
         string $rate,
         string $spread,
-        string $source
+        string $source,
+        string $environment = 'sandbox'
     ): void {
         $this->pdo
             ->prepare('DELETE FROM fx_rates_cache WHERE base_currency = ? AND quote_currency = ?')
@@ -306,9 +308,9 @@ final class QuotePricingTest extends TestCase
 
         $this->pdo->prepare(
             'INSERT INTO fx_rates_cache
-                (base_currency, quote_currency, rate, spread_pct, source, fetched_at, expires_at)
-             VALUES (?, ?, ?, ?, ?, NOW(), DATE_ADD(NOW(), INTERVAL 1 HOUR))'
-        )->execute([$base, $quote, $rate, $spread, $source]);
+                (base_currency, quote_currency, rate, spread_pct, source, environment, fetched_at, expires_at)
+             VALUES (?, ?, ?, ?, ?, ?, NOW(), DATE_ADD(NOW(), INTERVAL 1 HOUR))'
+        )->execute([$base, $quote, $rate, $spread, $source, $environment]);
 
         $this->seededPairs[] = [$base, $quote];
         QuotePricing::resetCache();

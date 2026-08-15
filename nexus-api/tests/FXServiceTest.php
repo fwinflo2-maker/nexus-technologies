@@ -7,6 +7,7 @@ namespace Nexus\Tests;
 use Nexus\Core\Database;
 use Nexus\Models\FXRate;
 use Nexus\Services\FXRateCache;
+use Nexus\Execution\ExecutionEnvironment;
 use Nexus\Services\FXService;
 use PDO;
 use PHPUnit\Framework\TestCase;
@@ -46,13 +47,14 @@ final class FXServiceTest extends TestCase
         string $rate,
         string $source,
         int $ttlSeconds = 86400,
-        string $spread = '0.0000'
+        string $spread = '0.0000',
+        string $environment = 'sandbox'
     ): int {
         $now = gmdate('Y-m-d H:i:s');
         $expires = gmdate('Y-m-d H:i:s', time() + $ttlSeconds);
         $stmt = $this->pdo->prepare(
-            'INSERT INTO fx_rates_cache (base_currency, quote_currency, rate, spread_pct, source, fetched_at, expires_at)'
-            . ' VALUES (:base, :quote, :rate, :spread, :source, :fetched, :expires)'
+            'INSERT INTO fx_rates_cache (base_currency, quote_currency, rate, spread_pct, source, environment, fetched_at, expires_at)'
+            . ' VALUES (:base, :quote, :rate, :spread, :source, :env, :fetched, :expires)'
         );
         $stmt->execute([
             'base'    => $base,
@@ -60,6 +62,7 @@ final class FXServiceTest extends TestCase
             'rate'    => $rate,
             'spread'  => $spread,
             'source'  => $source,
+            'env'     => $environment,
             'fetched' => $now,
             'expires' => $expires,
         ]);
@@ -73,7 +76,7 @@ final class FXServiceTest extends TestCase
         // Insert a fresh cache entry for EUR → USD.
         $this->insertCacheRow('EUR', 'USD', '2.50000000', 'manual');
 
-        $rate = FXService::resolve('EUR', 'USD');
+        $rate = FXService::resolve('EUR', 'USD', ExecutionEnvironment::SANDBOX);
         $this->assertInstanceOf(FXRate::class, $rate);
         $this->assertSame('2.50000000', $rate->getRate());
         $this->assertSame('manual', $rate->getSource());
@@ -85,7 +88,7 @@ final class FXServiceTest extends TestCase
         $stmt = $this->pdo->prepare('DELETE FROM fx_rates_cache WHERE base_currency = :b AND quote_currency = :q');
         $stmt->execute(['b' => 'EUR', 'q' => 'USD']);
 
-        $rate = FXService::resolve('EUR', 'USD');
+        $rate = FXService::resolve('EUR', 'USD', ExecutionEnvironment::SANDBOX);
         $this->assertInstanceOf(FXRate::class, $rate);
         // Manual rate defined in ManualRateProvider.
         $this->assertSame('1.08700000', $rate->getRate());
@@ -97,7 +100,7 @@ final class FXServiceTest extends TestCase
         // Insert an expired cache entry.
         $this->insertCacheRow('EUR', 'GBP', '0.80000000', 'manual', ttlSeconds: -3600);
 
-        $rate = FXService::resolve('EUR', 'GBP');
+        $rate = FXService::resolve('EUR', 'GBP', ExecutionEnvironment::SANDBOX);
         $this->assertInstanceOf(FXRate::class, $rate);
         // Expect manual fallback value.
         $this->assertSame('0.85500000', $rate->getRate());
@@ -138,7 +141,7 @@ final class FXServiceTest extends TestCase
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('Aucun taux de change configuré');
 
-        FXService::resolve('USD', 'GBP');
+        FXService::resolve('USD', 'GBP', ExecutionEnvironment::SANDBOX);
     }
 
     public function test_spread_pct_n_altere_pas_le_taux(): void
@@ -147,7 +150,7 @@ final class FXServiceTest extends TestCase
         // taux brut, le spread est simplement conservé (stocké).
         $this->insertCacheRow('EUR', 'USD', '1.50000000', 'manual', spread: '0.5000');
 
-        $rate = FXService::resolve('EUR', 'USD');
+        $rate = FXService::resolve('EUR', 'USD', ExecutionEnvironment::SANDBOX);
         $this->assertInstanceOf(FXRate::class, $rate);
         $this->assertSame('1.50000000', $rate->getRate());
         $this->assertSame('0.5000', $rate->getSpreadPct());

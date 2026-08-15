@@ -8,6 +8,7 @@ use Nexus\Core\Database;
 use Nexus\Core\HttpException;
 use Nexus\Execution\EnvironmentGuard;
 use Nexus\Execution\ExecutionContext;
+use Nexus\Execution\ExecutionEnvironment;
 use Nexus\Providers\ProviderConfig;
 use PDO;
 use PDOException;
@@ -830,7 +831,12 @@ final class WalletService
             );
             $destAmount = $sourceAmount;
         } else {
-            $rate       = FXService::resolve($sourceCurrency, $destCurrency);
+            // Le taux est résolu DANS l'environnement de l'opération : une
+            // conversion sandbox ne doit pas consommer un taux de production,
+            // ni l'inverse.
+            $fxEnvironment = $context?->environment
+                ?? ExecutionEnvironment::fromString(ProviderConfig::defaultEnvironment());
+            $rate       = FXService::resolve($sourceCurrency, $destCurrency, $fxEnvironment);
             $destAmount = FXService::convert($sourceAmount, $rate);
         }
         $fxRate   = $rate->getRate();

@@ -36,6 +36,31 @@ final class ContextCompletenessTest extends TestCase
     {
         $this->pdo = Database::getConnection();
         $this->clearEnv();
+
+        // Ces tests convertissent EUR→USD dans les DEUX environnements. Depuis
+        // l'isolation du cache FX, la production exige un taux réel : sans lui
+        // elle refuse de coter, et ces tests échoueraient pour une raison
+        // étrangère à ce qu'ils vérifient (propagation du contexte et
+        // idempotence scopée). On fournit donc un taux dans chaque
+        // environnement, ce qui reflète aussi la configuration réelle attendue.
+        $this->seedFxBothEnvironments('EUR', 'USD', '1.08700000');
+    }
+
+    /** Pose un taux identique en sandbox ET en production. */
+    private function seedFxBothEnvironments(string $base, string $quote, string $rate): void
+    {
+        $this->pdo
+            ->prepare('DELETE FROM fx_rates_cache WHERE base_currency = ? AND quote_currency = ? AND source = ?')
+            ->execute([$base, $quote, 'context_test']);
+
+        $stmt = $this->pdo->prepare(
+            'INSERT INTO fx_rates_cache
+                (base_currency, quote_currency, rate, spread_pct, source, environment, fetched_at, expires_at)
+             VALUES (?, ?, ?, 0, ?, ?, NOW(), DATE_ADD(NOW(), INTERVAL 1 HOUR))'
+        );
+        foreach (['sandbox', 'production'] as $env) {
+            $stmt->execute([$base, $quote, $rate, 'context_test', $env]);
+        }
     }
 
     protected function tearDown(): void
@@ -48,6 +73,7 @@ final class ContextCompletenessTest extends TestCase
             $this->pdo->prepare('DELETE FROM users WHERE id = ?')->execute([$uid]);
         }
         $this->users = [];
+        $this->pdo->prepare("DELETE FROM fx_rates_cache WHERE source = 'context_test'")->execute();
         $this->clearEnv();
     }
 

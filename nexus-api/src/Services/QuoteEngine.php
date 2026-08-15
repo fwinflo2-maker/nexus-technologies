@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Nexus\Services;
 
+use Nexus\Execution\ExecutionEnvironment;
+use Nexus\Providers\ProviderConfig;
+
 /**
  * Quote Engine — calcule les quotes pour chaque provider éligible.
  *
@@ -84,8 +87,17 @@ final class QuoteEngine
      *     effective_rate: float,
      * }
      */
-    public static function quote(array $intent, array $provider, ?string $seed = null): array
-    {
+    public static function quote(
+        array $intent,
+        array $provider,
+        ?string $seed = null,
+        ?ExecutionEnvironment $environment = null
+    ): array {
+        // À défaut de contexte, on suit le défaut du DÉPLOIEMENT, jamais
+        // « sandbox » en dur : un appelant oublieux ne doit pas contourner
+        // l'isolation.
+        $environment ??= ExecutionEnvironment::fromString(ProviderConfig::defaultEnvironment());
+
         $methodType   = $intent['receivingMethod'];
         $destCurrency = $intent['destCurrency'];
         $sourceAmount = (float) $intent['amount'];
@@ -94,7 +106,7 @@ final class QuoteEngine
         // La paire réellement cotée est source → destination. Utiliser le
         // taux EUR→XAF pour une destination en GHS ou KES produisait un
         // montant sans rapport avec la devise demandée.
-        $pricing = QuotePricing::resolveRate((string) $intent['sourceCurrency'], (string) $destCurrency);
+        $pricing = QuotePricing::resolveRate((string) $intent['sourceCurrency'], (string) $destCurrency, $environment);
 
         if ($pricing['status'] !== QuotePricing::RESOLVED || $pricing['rate'] === null) {
             throw new QuoteRateUnavailable(
@@ -117,7 +129,7 @@ final class QuoteEngine
         // ── Montant reçu ───────────────────────────────────────
         // Les frais sont exprimés en EUR : ils se déduisent du montant source
         // converti en EUR, avant application du taux vers la destination.
-        $sourceToEur    = self::rateToEur((string) $intent['sourceCurrency']);
+        $sourceToEur    = self::rateToEur((string) $intent['sourceCurrency'], $environment);
         $amountInEur    = $sourceToEur > 0.0 ? $sourceAmount / $sourceToEur : 0.0;
         $feesInSource   = $fees * $sourceToEur;
         $amountAfterFee = max(0.0, $sourceAmount - $feesInSource);
@@ -173,12 +185,12 @@ final class QuoteEngine
      * Pour XAF/XOF : taux fixe.
      * Pour les autres devises : taux du Currency module.
      */
-    private static function rateToEur(string $currency): float
+    private static function rateToEur(string $currency, ExecutionEnvironment $environment): float
     {
         // Les frais du barème sont libellés en EUR : convertir le montant
         // source en EUR exige un taux. On interroge d'abord la source FX
         // réelle, comme pour le taux principal.
-        $pricing = QuotePricing::resolveRate('EUR', $currency);
+        $pricing = QuotePricing::resolveRate('EUR', $currency, $environment);
         if ($pricing['status'] === QuotePricing::RESOLVED && $pricing['rate'] !== null) {
             return (float) $pricing['rate'];
         }

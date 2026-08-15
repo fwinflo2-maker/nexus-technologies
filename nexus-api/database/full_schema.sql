@@ -83,10 +83,12 @@ CREATE TABLE `fx_rates_cache` (
   `rate` decimal(20,8) NOT NULL,
   `spread_pct` decimal(8,4) NOT NULL DEFAULT 0.0000,
   `source` varchar(50) NOT NULL DEFAULT 'manual',
+  `environment` enum('sandbox','production') NOT NULL DEFAULT 'sandbox' COMMENT 'Environnement du taux. Un taux sandbox ne doit jamais coter de l''argent reel.',
   `fetched_at` datetime NOT NULL DEFAULT current_timestamp(),
   `expires_at` datetime NOT NULL,
   PRIMARY KEY (`id`),
-  KEY `idx_fx_pair` (`base_currency`,`quote_currency`,`fetched_at`)
+  UNIQUE KEY `uq_fx_pair_env_fetched` (`base_currency`,`quote_currency`,`environment`,`fetched_at`),
+  KEY `idx_fx_pair_env` (`base_currency`,`quote_currency`,`environment`,`fetched_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;

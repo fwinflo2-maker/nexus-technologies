@@ -37,19 +37,23 @@ SET NAMES utf8mb4;
 --     mysql -u nexus -p nexus < database/seeds/demo_fx_rates.sql
 -- =============================================================================
 
-INSERT INTO fx_rates_cache (base_currency, quote_currency, rate, source, fetched_at, expires_at) VALUES
-    ('EUR', 'USD',  1.08700000, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
-    ('EUR', 'GBP',  0.85500000, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
-    ('EUR', 'XAF',  655.95700000, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
-    ('EUR', 'XOF',  655.95700000, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
-    ('EUR', 'NGN',  1650.00000000, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
-    ('EUR', 'GHS',  14.80000000, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
-    ('EUR', 'KES',  141.00000000, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
-    ('EUR', 'USDT', 1.08700000, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
-    ('EUR', 'USDC', 1.08700000, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
-    ('USD', 'EUR',  0.92000000, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
-    ('GBP', 'EUR',  1.17000000, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
-    ('XAF', 'EUR',  0.00152400, 'manual', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR));
+-- `environment` est fourni EXPLICITEMENT : ces taux sont un jeu de
+-- DÉMONSTRATION et ne doivent jamais coter de l'argent réel. Le défaut de la
+-- colonne vaut déjà « sandbox », mais un défaut est une protection passive :
+-- le seeder reste correct par lui-même si ce défaut change un jour.
+INSERT INTO fx_rates_cache (base_currency, quote_currency, rate, source, environment, fetched_at, expires_at) VALUES
+    ('EUR', 'USD',  1.08700000, 'manual', 'sandbox', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
+    ('EUR', 'GBP',  0.85500000, 'manual', 'sandbox', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
+    ('EUR', 'XAF',  655.95700000, 'manual', 'sandbox', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
+    ('EUR', 'XOF',  655.95700000, 'manual', 'sandbox', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
+    ('EUR', 'NGN',  1650.00000000, 'manual', 'sandbox', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
+    ('EUR', 'GHS',  14.80000000, 'manual', 'sandbox', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
+    ('EUR', 'KES',  141.00000000, 'manual', 'sandbox', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
+    ('EUR', 'USDT', 1.08700000, 'manual', 'sandbox', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
+    ('EUR', 'USDC', 1.08700000, 'manual', 'sandbox', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
+    ('USD', 'EUR',  0.92000000, 'manual', 'sandbox', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
+    ('GBP', 'EUR',  1.17000000, 'manual', 'sandbox', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
+    ('XAF', 'EUR',  0.00152400, 'manual', 'sandbox', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR));
 
 -- ─── demo_payment_accounts.sql ───
 -- =============================================================================

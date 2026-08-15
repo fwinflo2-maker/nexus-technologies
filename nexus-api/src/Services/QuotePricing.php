@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nexus\Services;
 
+use Nexus\Execution\ExecutionEnvironment;
 use Nexus\Models\FXRate;
 use Throwable;
 
@@ -51,6 +52,13 @@ use Throwable;
  * montant reçu est le cœur de la promesse financière. On refuse donc de
  * coter plutôt que d'annoncer un chiffre non fondé (§12, §13).
  *
+ * ISOLATION PAR ENVIRONNEMENT
+ * ───────────────────────────
+ * La résolution est scopée : un taux sandbox ne peut pas coter en production,
+ * et inversement. Le cache par requête est lui aussi clé par environnement —
+ * sans quoi la première quote d'une requête fixerait le taux des suivantes,
+ * quel que soit leur environnement.
+ *
  * TRAÇABILITÉ
  * ───────────
  * Chaque quote transporte désormais l'origine de son taux (`rate_source`),
@@ -89,8 +97,11 @@ final class QuotePricing
      *         `spread_pct` est celui DÉCLARÉ par la source (0 si aucune
      *         marge n'est déclarée) — jamais une valeur tirée au sort.
      */
-    public static function resolveRate(string $sourceCurrency, string $destCurrency): array
-    {
+    public static function resolveRate(
+        string $sourceCurrency,
+        string $destCurrency,
+        ExecutionEnvironment $environment
+    ): array {
         $source = strtoupper(trim($sourceCurrency));
         $dest   = strtoupper(trim($destCurrency));
 
@@ -111,22 +122,23 @@ final class QuotePricing
             ];
         }
 
-        $key = $source . '>' . $dest;
+        $key = $environment->value . '|' . $source . '>' . $dest;
         if (isset(self::$cache[$key])) {
             return self::$cache[$key];
         }
 
         try {
-            $fxRate = FXService::resolve($source, $dest);
+            $fxRate = FXService::resolve($source, $dest, $environment);
             $result = self::fromFxRate($fxRate);
         } catch (Throwable $e) {
             // FXService lève quand aucune source ne connaît la paire. C'est
             // le comportement voulu : on le traduit en état explicite plutôt
             // que de retomber sur une constante.
             $result = self::unavailable(sprintf(
-                'Aucun taux de change disponible pour %s → %s.',
+                'Aucun taux de change disponible pour %s → %s en %s.',
                 $source,
-                $dest
+                $dest,
+                $environment->value
             ));
         }
 

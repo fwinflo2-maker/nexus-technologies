@@ -48,7 +48,7 @@ final class QuoteService
         foreach ($providers as $provider) {
             // QuoteRateUnavailable remonte volontairement : un paiement
             // Business ne doit pas davantage être coté sans taux réel.
-            $quotes[] = QuoteEngine::quote($intent, $provider, $quoteId);
+            $quotes[] = QuoteEngine::quote($intent, $provider, $quoteId, $environment);
         }
 
         // Routing Engine : scoring + classement.
