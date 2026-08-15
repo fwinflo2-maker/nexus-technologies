@@ -56,3 +56,6 @@
 
 # 0.18 — Une ecriture comptable ne peut pas changer d'environnement (FK composite)
 2026_08_15_ledger_environment_fk.sql
+
+# 0.19 — Defaut d'environnement sûr : sandbox, jamais production
+2026_08_15_safe_environment_default.sql

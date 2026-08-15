@@ -505,14 +505,23 @@ final class AuthController
         }
 
         $stmt = $pdo->prepare(
+            // `environment` est fourni EXPLICITEMENT.
+            //
+            // La colonne a pour défaut 'production' : omettre le champ
+            // marquait ces transactions de démonstration comme de l'argent
+            // réel. Vérifié en base avant correctif — 5 lignes de démo en
+            // `production` après une simple inscription. Elles apparaissaient
+            // donc dans les vues production et dans les totaux comptables.
             'INSERT INTO transactions
                 (user_id, type, direction, label, description, amount, currency,
                  amount_ref, ref_currency, amount_xaf, fee, fee_currency,
-                 status, provider, destination, execution_time_seconds, created_at)
+                 status, provider, destination, execution_time_seconds, created_at,
+                 environment)
              VALUES
                 (:user_id, :type, :direction, :label, :description, :amount, :currency,
                  :amount_ref, :ref_currency, :amount_xaf, :fee, :fee_currency,
-                 :status, :provider, :destination, :execution_time, :created_at)'
+                 :status, :provider, :destination, :execution_time, :created_at,
+                 \'sandbox\')'
         );
 
         foreach (self::DEMO_TRANSACTIONS as $tx) {
