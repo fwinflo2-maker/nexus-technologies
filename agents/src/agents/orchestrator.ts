@@ -2,6 +2,7 @@ import { ComplianceAgent } from './compliance-agent';
 import { RoutingAgent } from './routing-agent';
 import { ExecutionAgent } from './execution-agent';
 import { TransferIntent, RouteOption, ComplianceResult, AgentResponse } from '../types';
+import { AgentNotConfiguredError } from '../errors';
 
 export class NexusOrchestrator {
   private complianceAgent: ComplianceAgent;
@@ -48,6 +49,14 @@ export class NexusOrchestrator {
         timestamp: new Date().toISOString(),
       };
     } catch (error) {
+      // Un agent non branché doit remonter tel quel jusqu'au transport, qui
+      // le traduit en 501. L'aplatir ici en `success: false` générique ferait
+      // passer « fonctionnalité absente » pour « erreur ponctuelle » — le
+      // client croirait qu'un nouvel essai peut réussir.
+      if (error instanceof AgentNotConfiguredError) {
+        throw error;
+      }
+
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Erreur inconnue',
