@@ -164,6 +164,7 @@ $router->get('/control/kyc', [ControlCenterController::class, 'kyc']);
 $router->get('/control/webhooks', [ControlCenterController::class, 'webhooks']);
 $router->get('/control/audit', [ControlCenterController::class, 'audit']);
 $router->get('/control/clients', [ControlCenterController::class, 'clients']);
+$router->get('/control/clients/{id}', [ControlCenterController::class, 'clientDetail']);
 
 // Maintenance d'exploitation : le diagnostic est en lecture seule (capacité
 // « operations »), la reprise modifie des paiements réels (capacité

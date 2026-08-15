@@ -1348,3 +1348,47 @@ export async function apiControlClients(): Promise<ApiResponse<{
 }>> {
   return request('GET', '/control/clients');
 }
+
+export interface ControlAccount {
+  id: number;
+  role: string;
+  kind: string;
+  label: string;
+  holder_name: string | null;
+  country: string | null;
+  city: string | null;
+  operator: string | null;
+  network: string | null;
+  is_default: boolean;
+  verification_status: string;
+  status: string;
+  provider_slug: string | null;
+  address: string | null;
+  phone: string | null;
+  created_at: string;
+}
+
+export interface ControlClientDetail {
+  id: number;
+  full_name: string;
+  email: string;
+  phone: string | null;
+  account_type: 'personal' | 'business';
+  platform_role: string;
+  status: string;
+  kyc_level: string;
+  country_of_residence: string | null;
+  avatar: string | null;
+  auth_provider: string;
+  created_at: string;
+  updated_at: string;
+  address: string | null;
+  city: string | null;
+  balances: { EUR: string; USD: string; XAF: string };
+  accounts: ControlAccount[];
+  transactions: Array<Record<string, unknown>>;
+}
+
+export async function apiControlClient(id: number): Promise<ApiResponse<{ client: ControlClientDetail }>> {
+  return request<{ client: ControlClientDetail }>('GET', `/control/clients/${id}`);
+}

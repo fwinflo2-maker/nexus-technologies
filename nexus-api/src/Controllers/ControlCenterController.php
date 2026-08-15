@@ -319,4 +319,130 @@ final class ControlCenterController
             'generated_at' => gmdate(DATE_ATOM),
         ]);
     }
+
+    /**
+     * GET /api/control/clients/{id} — fiche détaillée d'un client.
+     *
+     * Renvoie toutes les informations d'un client : profil complet, pays de
+     * résidence, adresse/ville (déchiffrées depuis ses comptes de paiement),
+     * comptes de paiement, soldes par devise et historique des transactions.
+     *
+     * Réservé au SUPERADMIN. Aucun secret (mot de passe, token, credential)
+     * n'est renvoyé — seule l'adresse chiffrée dans payment_accounts est
+     * déchiffrée car c'est une donnée d'identification du client.
+     */
+    public static function clientDetail(Request $request): void
+    {
+        $user = self::authorize($request, 'superadmin');
+        $pdo  = Database::getConnection();
+        $id   = (int) $request->param('id', '0');
+
+        if ($id <= 0) {
+            Response::badRequest('Identifiant de client invalide.');
+        }
+
+        // Profil + soldes par devise.
+        $stmt = $pdo->prepare(
+            'SELECT u.id, u.full_name, u.email, u.phone, u.account_type, u.platform_role,
+                    u.status, u.kyc_level, u.country_of_residence, u.avatar, u.auth_provider,
+                    u.created_at, u.updated_at,
+                    COALESCE(SUM(CASE WHEN w.currency = \'EUR\' THEN w.balance ELSE 0 END), 0) AS balance_eur,
+                    COALESCE(SUM(CASE WHEN w.currency = \'USD\' THEN w.balance ELSE 0 END), 0) AS balance_usd,
+                    COALESCE(SUM(CASE WHEN w.currency = \'XAF\' THEN w.balance ELSE 0 END), 0) AS balance_xaf
+             FROM users u
+             LEFT JOIN wallets w ON w.user_id = u.id
+             WHERE u.id = :id
+             GROUP BY u.id'
+        );
+        $stmt->execute(['id' => $id]);
+        $row = $stmt->fetch();
+
+        if ($row === false) {
+            Response::notFound('Client introuvable.');
+        }
+
+        // Comptes de paiement (avec adresse/ville déchiffrées).
+        $acc = $pdo->prepare(
+            'SELECT id, role, kind, label, holder_name, country, city, operator, network,
+                    is_default, verification_status, status, provider_slug, address_enc, phone_enc, created_at
+             FROM payment_accounts
+             WHERE user_id = :id
+             ORDER BY created_at DESC'
+        );
+        $acc->execute(['id' => $id]);
+        $accounts = array_map(static function (array $a): array {
+            return [
+                'id'                 => (int) $a['id'],
+                'role'               => $a['role'],
+                'kind'               => $a['kind'],
+                'label'              => $a['label'],
+                'holder_name'        => $a['holder_name'],
+                'country'            => $a['country'],
+                'city'               => $a['city'],
+                'operator'           => $a['operator'],
+                'network'            => $a['network'],
+                'is_default'         => (bool) $a['is_default'],
+                'verification_status'=> $a['verification_status'],
+                'status'             => $a['status'],
+                'provider_slug'      => $a['provider_slug'],
+                // Adresse et téléphone déchiffrés (données d'identification client).
+                'address'            => \Nexus\Core\Crypto::decrypt($a['address_enc']),
+                'phone'              => \Nexus\Core\Crypto::decrypt($a['phone_enc']),
+                'created_at'         => $a['created_at'],
+            ];
+        }, $acc->fetchAll());
+
+        // Adresse/ville agrégée : la première adresse non vide parmi les comptes.
+        $address = null;
+        $city    = null;
+        foreach ($accounts as $a) {
+            if (($address === null) && $a['address'] !== null && $a['address'] !== '') {
+                $address = $a['address'];
+            }
+            if (($city === null) && $a['city'] !== null && $a['city'] !== '') {
+                $city = $a['city'];
+            }
+            if ($address !== null && $city !== null) {
+                break;
+            }
+        }
+
+        // Historique des transactions (récentes d'abord, limité).
+        $tx = $pdo->prepare(
+            'SELECT id, type, direction, label, description, amount, currency,
+                    status, provider, destination, created_at, environment
+             FROM transactions
+             WHERE user_id = :id
+             ORDER BY created_at DESC
+             LIMIT 100'
+        );
+        $tx->execute(['id' => $id]);
+
+        Response::success([
+            'client' => [
+                'id'                   => (int) $row['id'],
+                'full_name'            => $row['full_name'],
+                'email'                => $row['email'],
+                'phone'                => $row['phone'],
+                'account_type'         => $row['account_type'],
+                'platform_role'        => $row['platform_role'],
+                'status'               => $row['status'],
+                'kyc_level'            => $row['kyc_level'],
+                'country_of_residence' => $row['country_of_residence'],
+                'avatar'               => $row['avatar'],
+                'auth_provider'        => $row['auth_provider'],
+                'created_at'           => $row['created_at'],
+                'updated_at'           => $row['updated_at'],
+                'address'              => $address,
+                'city'                 => $city,
+                'balances'             => [
+                    'EUR' => $row['balance_eur'],
+                    'USD' => $row['balance_usd'],
+                    'XAF' => $row['balance_xaf'],
+                ],
+                'accounts'             => $accounts,
+                'transactions'         => $tx->fetchAll(),
+            ],
+        ]);
+    }
 }
