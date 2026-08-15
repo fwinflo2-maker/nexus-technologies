@@ -109,24 +109,14 @@ export default function HistoryPage() {
     return icons[type] || '◆';
   };
 
-  const typeColor = (type: string): string => {
-    const colors: Record<string, string> = {
-      send: 'rgba(0,200,255,.12)',
-      receive: 'rgba(0,207,160,.12)',
-      convert: 'rgba(139,92,246,.12)',
-      fx: 'rgba(234,184,48,.12)',
+  const typeIb = (type: string): string => {
+    const cls: Record<string, string> = {
+      send: 'ib-c',
+      receive: 'ib-gr',
+      convert: 'ib-v',
+      fx: 'ib-g',
     };
-    return colors[type] || 'rgba(0,200,255,.1)';
-  };
-
-  const typeBorder = (type: string): string => {
-    const colors: Record<string, string> = {
-      send: 'rgba(0,200,255,.35)',
-      receive: 'rgba(0,207,160,.35)',
-      convert: 'rgba(139,92,246,.35)',
-      fx: 'rgba(234,184,48,.35)',
-    };
-    return colors[type] || 'rgba(0,200,255,.3)';
+    return cls[type] || 'ib-c';
   };
 
   return (
@@ -136,8 +126,8 @@ export default function HistoryPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <div className="page-label">NEXUS</div>
-        <div className="page-title">Historique des transactions</div>
+        <div className="page-label">NEXUS LEDGER</div>
+        <div className="page-title">Historique des <span className="gc">transactions</span></div>
         <p style={{ marginTop: 10, fontSize: 13, color: 'var(--text-mid)' }}>
           Consultez toutes vos opérations financières enregistrées dans le ledger.
         </p>
@@ -240,58 +230,48 @@ export default function HistoryPage() {
           </div>
         </motion.div>
       ) : (
-        <div style={{ position: 'relative' }}>
-          {/* Ligne de timeline */}
-          <div style={{ position: 'absolute', left: 31, top: 12, bottom: 12, width: 2, background: 'linear-gradient(180deg, rgba(0,200,255,.3), rgba(0,200,255,.05))', borderRadius: 2 }} />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {filteredTxs.map((tx, idx) => (
-              <motion.button
-                key={tx.id}
-                onClick={() => setSelected(tx)}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: idx * 0.04 }}
-                whileHover={{ x: 4 }}
-                className="card"
-                style={{
-                  padding: 14, display: 'flex', alignItems: 'center', gap: 14,
-                  textAlign: 'left', cursor: 'pointer', width: '100%', border: '1px solid var(--border)',
-                  background: 'var(--panel)', borderRadius: 14,
-                }}
-              >
-                {/* Icône type sur timeline */}
-                <div style={{
-                  width: 44, height: 44, borderRadius: '50%', flexShrink: 0,
-                  background: typeColor(tx.type), border: `1px solid ${typeBorder(tx.type)}`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18,
-                  position: 'relative', zIndex: 1,
-                }}>
-                  {typeIcon(tx.type)}
-                </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {filteredTxs.map((tx, idx) => (
+            <motion.button
+              key={tx.id}
+              onClick={() => setSelected(tx)}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.04 }}
+              whileHover={{ x: 4 }}
+              className="card"
+              style={{
+                padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14,
+                textAlign: 'left', cursor: 'pointer', width: '100%',
+              }}
+            >
+              {/* Icône type — primitive .ib (carrée, cohérente avec le dashboard) */}
+              <div className={`ib ${typeIb(tx.type)}`} style={{ width: 40, height: 40, borderRadius: 10, fontSize: 18, flexShrink: 0 }}>
+                {typeIcon(tx.type)}
+              </div>
 
-                {/* Infos */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-bright)', marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {tx.label}
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-mid)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    <span style={{ color: typeColor(tx.type).replace('0.12','0.9') }}>{typeLabel(tx.type)}</span> · {formatDate(tx.created_at)}
-                    {tx.provider && ` · ${tx.provider}`}
-                  </div>
+              {/* Infos */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="tx-name" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {tx.label}
                 </div>
+                <div className="tx-meta" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {typeLabel(tx.type)} · {formatDate(tx.created_at)}
+                  {tx.provider && ` · ${tx.provider}`}
+                </div>
+              </div>
 
-                {/* Montant et statut */}
-                <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  <div className="mono" style={{ fontSize: 15, fontWeight: 700, color: tx.direction === 'in' ? 'var(--green)' : 'var(--text-bright)', marginBottom: 4 }}>
-                    {formatAmount(tx)}
-                  </div>
-                  <span className={`pill ${statusClass(tx.status)}`} style={{ fontSize: 9 }}>
-                    {statusLabel(tx.status)}
-                  </span>
+              {/* Montant et statut */}
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <div className="tx-amount" style={{ color: tx.direction === 'in' ? 'var(--green)' : 'var(--text-bright)' }}>
+                  {formatAmount(tx)}
                 </div>
-              </motion.button>
-            ))}
-          </div>
+                <span className={`pill ${statusClass(tx.status)}`} style={{ marginTop: 4, fontSize: 9 }}>
+                  {statusLabel(tx.status)}
+                </span>
+              </div>
+            </motion.button>
+          ))}
         </div>
       )}
 
@@ -320,11 +300,7 @@ export default function HistoryPage() {
 
               {/* Icône + titre */}
               <div style={{ textAlign: 'center', marginBottom: 24 }}>
-                <div style={{
-                  width: 72, height: 72, borderRadius: '50%', margin: '0 auto 14px',
-                  background: typeColor(selected.type), border: `1px solid ${typeBorder(selected.type)}`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 30,
-                }}>
+                <div className={`ib ${typeIb(selected.type)}`} style={{ width: 64, height: 64, borderRadius: 16, margin: '0 auto 14px', fontSize: 26 }}>
                   {typeIcon(selected.type)}
                 </div>
                 <h2 style={{ color: 'var(--text-bright)', marginBottom: 4, fontSize: 18 }}>{selected.label}</h2>
