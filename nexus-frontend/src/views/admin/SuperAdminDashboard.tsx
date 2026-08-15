@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import AdminLayout from './AdminLayout';
+import ProviderKeys from './ProviderKeys';
 
 /** Données agrégées du Super Admin (GET /api/admin/overview). */
 interface AdminOverview {
@@ -165,8 +166,21 @@ export default function SuperAdminDashboard() {
           )}
 
           {/* ── Autres sections (placeholders données réelles quand disponibles) ── */}
-          {['operations', 'treasury', 'compliance', 'risk', 'providers', 'support', 'security', 'technical', 'audit'].includes(section) && (
+          {['operations', 'treasury', 'compliance', 'risk', 'support', 'security', 'technical', 'audit'].includes(section) && (
             <SectionPlaceholder section={section} ov={ov} />
+          )}
+
+          {/* ── Providers : vue d'ensemble + clés API/publiques ── */}
+          {section === 'providers' && (
+            <>
+              <Header title="Providers" desc="Réseau de providers et clés API / publiques associées." />
+              <div className="g3" style={{ marginBottom: 20 }}>
+                <Card title="Total providers" icon="🔌"><Num v={ov.providers.total} /></Card>
+                <Card title="Configurés" icon="✅" tone="gr"><Num v={ov.providers.configured} c="var(--green)" /></Card>
+                <Card title="État" icon="📡"><div style={{ fontSize: 18, fontWeight: 700, color: 'var(--gold)' }}>À configurer</div></Card>
+              </div>
+              <ProviderKeys />
+            </>
           )}
 
           {section === 'settings' && (
