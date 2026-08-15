@@ -23,6 +23,14 @@ use Nexus\Providers\ProviderRegistry;
  * expliquant pourquoi elle ne l'est pas) et les métadonnées nécessaires au
  * Quote Engine.
  *
+ * DÉLAIS : MESURÉS OU DÉCLARÉS INCONNUS (§12, §17)
+ * ────────────────────────────────────────────────
+ * `CATEGORY_DELAYS` fixait le délai par CATÉGORIE : les trois providers
+ * Mobile Money d'un corridor annonçaient donc le même « ~3 min », quels que
+ * soient leurs temps réels. Elle est supprimée au profit de
+ * `ProviderLatency`, qui mesure depuis `transactions.execution_time_seconds`.
+ * Sans mesure, `delay_seconds` vaut `null` et `delay_status` dit pourquoi.
+ *
  * FIABILITÉ : MESURÉE OU DÉCLARÉE INCONNUE (§12, §17)
  * ───────────────────────────────────────────────────
  * Ce moteur portait une constante `PERFORMANCE_SCORES` de 20 valeurs écrites
@@ -43,18 +51,6 @@ final class CapabilityEngine
         'cash_pickup'  => ['payout_network'],
     ];
 
-    /**
-     * Temps de transfert moyen par catégorie (secondes, simulation démo).
-     */
-    private const CATEGORY_DELAYS = [
-        'mobile_money'  => [60, 300],    // 1-5 min
-        'banking'       => [180, 600],   // 3-10 min
-        'fx'            => [120, 480],   // 2-8 min
-        'payout_network'=> [60, 900],    // 1-15 min
-        'crypto'        => [30, 180],    // 30s-3 min
-        'onramp'        => [60, 360],    // 1-6 min
-    ];
-
     private function __construct() {}
 
     /**
@@ -70,8 +66,10 @@ final class CapabilityEngine
      *     reliability: float|null,
      *     reliability_status: string,
      *     reliability_obs: int,
-     *     delay_min: int,
-     *     delay_max: int,
+     *     delay_seconds: int|null,
+     *     delay_status: string,
+     *     delay_obs: int,
+     *     delay_p90_seconds: int|null,
      *     method_type: string,
      * }>
      *
@@ -120,8 +118,8 @@ final class CapabilityEngine
             // ── Fiabilité : mesurée, ou explicitement inconnue ───
             $reliability = ProviderReliability::forProvider($slug, $environment);
 
-            // ── Délai estimé ─────────────────────────────────────
-            $delays = self::CATEGORY_DELAYS[$provider['category']] ?? [60, 600];
+            // ── Délai : mesuré, ou explicitement inconnu ────────
+            $latency = ProviderLatency::forProvider($slug, $environment);
 
             $eligible[] = [
                 'slug'               => $slug,
@@ -130,8 +128,10 @@ final class CapabilityEngine
                 'reliability'        => $reliability['score'],
                 'reliability_status' => $reliability['status'],
                 'reliability_obs'    => $reliability['observations'],
-                'delay_min'          => $delays[0],
-                'delay_max'          => $delays[1],
+                'delay_seconds'      => $latency['seconds'],
+                'delay_status'       => $latency['status'],
+                'delay_obs'          => $latency['observations'],
+                'delay_p90_seconds'  => $latency['p90_seconds'],
                 'method_type'        => $methodType,
             ];
         }

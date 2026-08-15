@@ -11,7 +11,7 @@ namespace Nexus\Services;
  * Engine, calcule :
  *   - received_amount (taux fixe 655.957 − frais/spread)
  *   - fees (EUR)
- *   - delay_minutes (estimation)
+ *   - delay_avg (minutes, mesuré par ProviderLatency ; null si non mesuré)
  *   - reliability (mesurée par ProviderReliability, ou null si non mesurée)
  *
  * Source du taux : fixe (655.957 XAF pour 1 EUR) — sera remplacé
@@ -57,7 +57,7 @@ final class QuoteEngine
      * @param array{amount: float, sourceCurrency: string, destCountry: string,
      *              destCurrency: string, receivingMethod: string} $intent
      * @param array{slug: string, name: string, category: string, reliability: float|null,
-     *              delay_min: int, delay_max: int, method_type: string} $provider
+     *              delay_seconds: int|null, delay_status: string, method_type: string} $provider
      * @param string|null $seed Graine pour reproductibilité (optionnel).
      *
      * @return array{
@@ -69,9 +69,9 @@ final class QuoteEngine
      *     fee_currency: string,
      *     rate: float,
      *     spread_pct: float,
-     *     delay_min: int,
-     *     delay_max: int,
-     *     delay_avg: int,
+     *     delay_seconds: int|null,
+     *     delay_avg: int|null,
+     *     delay_status: string,
      *     reliability: float|null,
      *     reliability_status: string,
      *     effective_rate: float,
@@ -114,7 +114,14 @@ final class QuoteEngine
         $received      = round($amountAfterFee * $effectiveRate, 0);
 
         // ── Délai moyen (référence, arrondi en minutes) ─────────
-        $delayAvg = (int) round(($provider['delay_min'] + $provider['delay_max']) / 2 / 60);
+        // Délai : mesuré (médiane, en secondes) ou inconnu. La moyenne d'une
+        // fourchette inventée n'a plus lieu d'être — il n'y a plus de
+        // fourchette inventée. `null` traverse la chaîne pour que le
+        // Routing Engine ne puisse pas confondre « non mesuré » et « rapide ».
+        $delaySeconds = $provider['delay_seconds'] ?? null;
+        $delayAvg     = $delaySeconds === null
+            ? null
+            : max(1, (int) round($delaySeconds / 60));
 
         mt_srand(); // reset seed
 
@@ -127,9 +134,11 @@ final class QuoteEngine
             'fee_currency'     => 'EUR',
             'rate'             => self::FIXED_RATE_EUR_TO_XAF,
             'spread_pct'       => round($spreadPct * 100, 3),
-            'delay_min'        => $provider['delay_min'],
-            'delay_max'        => $provider['delay_max'],
-            'delay_avg'        => $delayAvg,
+            'delay_seconds'     => $delaySeconds,
+            'delay_avg'         => $delayAvg,
+            'delay_status'      => $provider['delay_status'] ?? ProviderLatency::UNAVAILABLE,
+            'delay_obs'         => $provider['delay_obs'] ?? 0,
+            'delay_p90_seconds' => $provider['delay_p90_seconds'] ?? null,
             // La fiabilité peut être inconnue (null) : on transporte l'état
             // avec la valeur, pour que le Routing Engine ne puisse pas
             // confondre « non mesuré » avec « mauvais score ».
