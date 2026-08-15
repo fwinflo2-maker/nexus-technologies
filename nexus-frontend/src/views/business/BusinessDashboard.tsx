@@ -10,6 +10,10 @@ export default function BusinessDashboard() {
   const [data, setData] = useState<BusinessOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Appelé inconditionnellement, avant tout retour anticipé (règles des Hooks) :
+  // les branches loading/error/!data sortent plus bas et changeraient sinon
+  // l'ordre des Hooks d'un rendu à l'autre.
+  const td = useDashT();
 
   const fetch = useCallback(async () => {
     setLoading(true);
@@ -35,7 +39,6 @@ export default function BusinessDashboard() {
   if (!data) return null;
 
   const t = data.totals;
-  const td = useDashT();
   const kpis: [string, string, string][] = [
     [td('biz.total_assets'), fmtMoney(t.total_assets, t.ref_currency), 'var(--cyan)'],
     [td('biz.available'), fmtMoney(t.available, t.ref_currency), 'var(--green)'],
