@@ -108,7 +108,18 @@ final class QuoteController
         $quotes  = [];
 
         foreach ($providers as $provider) {
-            $quotes[] = QuoteEngine::quote($intent, $provider, $quoteId);
+            try {
+                $quotes[] = QuoteEngine::quote($intent, $provider, $quoteId);
+            } catch (\Nexus\Services\QuoteRateUnavailable $e) {
+                // Aucun taux réel pour cette paire : on refuse de coter plutôt
+                // que d'annoncer un montant reçu sans fondement (§12).
+                Response::error(
+                    $e->getMessage(),
+                    503,
+                    \Nexus\Services\QuoteRateUnavailable::ERROR_CODE
+                );
+                return;
+            }
         }
 
         // ── 5. Routing Engine : classement et top 3 ─────────────

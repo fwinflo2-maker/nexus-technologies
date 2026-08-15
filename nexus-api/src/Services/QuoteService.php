@@ -46,6 +46,8 @@ final class QuoteService
         $quoteId = self::generateQuoteId();
         $quotes  = [];
         foreach ($providers as $provider) {
+            // QuoteRateUnavailable remonte volontairement : un paiement
+            // Business ne doit pas davantage être coté sans taux réel.
             $quotes[] = QuoteEngine::quote($intent, $provider, $quoteId);
         }
 

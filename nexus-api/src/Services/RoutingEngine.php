@@ -281,6 +281,13 @@ final class RoutingEngine
                 'recommended'       => $isFirst,
                 'spread'            => number_format((float) ($q['spread_pct'] ?? 0), 2) . '%',
                 'rate'              => (float) ($q['effective_rate'] ?? 0),
+                // Provenance des chiffres financiers : le client doit pouvoir
+                // savoir d'où vient le taux qu'on lui annonce, quand il a été
+                // obtenu et jusqu'à quand il vaut (§12).
+                'rateSource'        => $q['rate_source'] ?? null,
+                'rateFetchedAt'     => $q['rate_fetched_at'] ?? null,
+                'rateExpiresAt'     => $q['rate_expires_at'] ?? null,
+                'feeSource'         => $q['fee_source'] ?? null,
             ];
         }
 
