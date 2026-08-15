@@ -75,11 +75,33 @@ final class PaymentRecoveryService
      * L'opération est idempotente : un second passage ne trouve plus rien à
      * reprendre, puisque chaque paiement traité quitte l'état « executing ».
      *
-     * @param  int $staleSeconds Ancienneté minimale, en secondes.
-     * @return array{completed:int,failed:int,reset:int,skipped_in_progress:int,examined:int,details:array<int,array<string,mixed>>}
+     * ─── CORRECTIF CRITICAL (boucle 19) ──────────────────────────────────
+     * Ce balayage ignorait l'environnement. Depuis un contexte SANDBOX
+     * explicite (`X-Nexus-Environment: sandbox`), un opérateur remettait des
+     * paiements de PRODUCTION en état exécutable. Prouvé en HTTP réel : un
+     * paiement production de 9 500 EUR est passé de `executing` à `approved`,
+     * c'est-à-dire de « bloqué » à « prêt à envoyer de l'argent réel ».
+     *
+     * L'en-tête de ce fichier affirmait pourtant que le service ne contourne
+     * pas la séparation sandbox/production. C'était faux — un commentaire
+     * n'est pas une garantie ; seul le `WHERE` en est une.
+     *
+     * `$environment` est donc OBLIGATOIRE et non nullable. Un défaut aurait
+     * laissé les appels existants compiler en silence et la faille se
+     * réintroduire au prochain appelant.
+     *
+     * @param  string $environment Environnement de l'appelant (borne le balayage).
+     * @param  int    $staleSeconds Ancienneté minimale, en secondes.
+     * @return array{completed:int,failed:int,reset:int,skipped_in_progress:int,examined:int,environment:string,details:array<int,array<string,mixed>>}
      */
-    public static function sweep(PDO $pdo, int $staleSeconds = self::DEFAULT_STALE_SECONDS): array
+    public static function sweep(PDO $pdo, string $environment, int $staleSeconds = self::DEFAULT_STALE_SECONDS): array
     {
+        if (!in_array($environment, ['sandbox', 'production'], true)) {
+            // Un environnement inconnu ne doit surtout pas se comporter comme
+            // « tous les environnements ».
+            throw new \InvalidArgumentException('Environnement de balayage invalide.');
+        }
+
         $staleSeconds = max(0, $staleSeconds);
 
         $report = [
@@ -88,6 +110,7 @@ final class PaymentRecoveryService
             'reset'               => 0,
             'skipped_in_progress' => 0,
             'examined'            => 0,
+            'environment'         => $environment,
             'details'             => [],
         ];
 
@@ -100,10 +123,12 @@ final class PaymentRecoveryService
                       ON k.idempotency_key = CONCAT('payment:', p.id, ':execute')
                      AND k.user_id = p.user_id
               WHERE p.status = :stuck
+                AND p.environment = :env
                 AND p.updated_at < DATE_SUB(NOW(), INTERVAL :secs SECOND)
               ORDER BY p.id"
         );
         $stmt->bindValue('stuck', self::STUCK_STATUS);
+        $stmt->bindValue('env', $environment);
         $stmt->bindValue('secs', $staleSeconds, PDO::PARAM_INT);
         $stmt->execute();
 
@@ -137,10 +162,19 @@ final class PaymentRecoveryService
             // La transition est conditionnée sur l'état de départ : si un
             // autre processus a repris le paiement entre-temps, on n'écrase
             // pas sa décision.
+            // L'environnement est répété DANS l'écriture, pas seulement dans
+            // la sélection. Défense en profondeur : si un futur refactor élargit
+            // la lecture, l'écriture refusera toujours de franchir la frontière.
             $upd = $pdo->prepare(
-                "UPDATE payments SET status = :new WHERE id = :id AND status = :stuck"
+                "UPDATE payments SET status = :new
+                  WHERE id = :id AND status = :stuck AND environment = :env"
             );
-            $upd->execute(['new' => $newStatus, 'id' => $paymentId, 'stuck' => self::STUCK_STATUS]);
+            $upd->execute([
+                'new'   => $newStatus,
+                'id'    => $paymentId,
+                'stuck' => self::STUCK_STATUS,
+                'env'   => $environment,
+            ]);
 
             if ($upd->rowCount() === 0) {
                 continue; // Déjà repris par un concurrent : rien à signaler.
@@ -153,9 +187,9 @@ final class PaymentRecoveryService
                 if ($txId > 0) {
                     $link = $pdo->prepare(
                         'UPDATE payments SET transaction_id = :tx, executed_at = COALESCE(executed_at, NOW())
-                          WHERE id = :id AND transaction_id IS NULL'
+                          WHERE id = :id AND transaction_id IS NULL AND environment = :env'
                     );
-                    $link->execute(['tx' => $txId, 'id' => $paymentId]);
+                    $link->execute(['tx' => $txId, 'id' => $paymentId, 'env' => $environment]);
                 }
             }
 

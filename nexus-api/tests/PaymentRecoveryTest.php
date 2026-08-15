@@ -84,7 +84,7 @@ final class PaymentRecoveryTest extends TestCase
         }
     }
 
-    private function payment(string $status, string $ageExpr = 'NOW()'): int
+    private function payment(string $status, string $ageExpr = 'NOW()', string $environment = 'sandbox'): int
     {
         $stmt = $this->pdo->prepare(
             'INSERT INTO payments
@@ -95,7 +95,7 @@ final class PaymentRecoveryTest extends TestCase
         $stmt->execute([
             'u' => $this->userId, 'b' => $this->beneficiaryId, 'sc' => 'EUR', 'dc' => 'EUR',
             'amt' => '100.00', 'aref' => '100.00', 'fee' => '0.00', 'fc' => 'EUR',
-            'st' => $status, 'cb' => $this->userId, 'env' => 'sandbox',
+            'st' => $status, 'cb' => $this->userId, 'env' => $environment,
         ]);
 
         return (int) $this->pdo->lastInsertId();
@@ -137,7 +137,7 @@ final class PaymentRecoveryTest extends TestCase
         $id = $this->payment('executing', "DATE_SUB(NOW(), INTERVAL 2 HOUR)");
         $this->idempotency($id, 'completed', ['id' => 4242]);
 
-        $report = PaymentRecoveryService::sweep($this->pdo, 3600);
+        $report = PaymentRecoveryService::sweep($this->pdo, 'sandbox', 3600);
 
         $this->assertSame('completed', $this->statusOf($id));
         $this->assertSame(1, $report['completed']);
@@ -150,7 +150,7 @@ final class PaymentRecoveryTest extends TestCase
         $id = $this->payment('executing', "DATE_SUB(NOW(), INTERVAL 2 HOUR)");
         $this->idempotency($id, 'error', ['error' => 'provider indisponible']);
 
-        $report = PaymentRecoveryService::sweep($this->pdo, 3600);
+        $report = PaymentRecoveryService::sweep($this->pdo, 'sandbox', 3600);
 
         $this->assertSame('failed', $this->statusOf($id));
         $this->assertSame(1, $report['failed']);
@@ -167,7 +167,7 @@ final class PaymentRecoveryTest extends TestCase
         $id = $this->payment('executing', "DATE_SUB(NOW(), INTERVAL 2 HOUR)");
         // Aucune clé d'idempotence : la saga n'a pas commencé.
 
-        $report = PaymentRecoveryService::sweep($this->pdo, 3600);
+        $report = PaymentRecoveryService::sweep($this->pdo, 'sandbox', 3600);
 
         $this->assertSame('approved', $this->statusOf($id));
         $this->assertSame(1, $report['reset']);
@@ -198,7 +198,7 @@ final class PaymentRecoveryTest extends TestCase
     {
         $id = $this->payment('executing', 'NOW()'); // réservé à l'instant
 
-        $report = PaymentRecoveryService::sweep($this->pdo, 3600);
+        $report = PaymentRecoveryService::sweep($this->pdo, 'sandbox', 3600);
 
         $this->assertSame(
             'executing',
@@ -213,7 +213,7 @@ final class PaymentRecoveryTest extends TestCase
         $id = $this->payment('executing', "DATE_SUB(NOW(), INTERVAL 2 HOUR)");
         $this->idempotency($id, 'processing'); // saga toujours en cours
 
-        $report = PaymentRecoveryService::sweep($this->pdo, 3600);
+        $report = PaymentRecoveryService::sweep($this->pdo, 'sandbox', 3600);
 
         $this->assertSame(
             'executing',
@@ -232,7 +232,7 @@ final class PaymentRecoveryTest extends TestCase
             $ids[$status] = $this->payment($status, "DATE_SUB(NOW(), INTERVAL 5 HOUR)");
         }
 
-        PaymentRecoveryService::sweep($this->pdo, 3600);
+        PaymentRecoveryService::sweep($this->pdo, 'sandbox', 3600);
 
         foreach ($ids as $status => $id) {
             $this->assertSame($status, $this->statusOf($id), sprintf('Le statut « %s » ne doit pas bouger.', $status));
@@ -246,8 +246,8 @@ final class PaymentRecoveryTest extends TestCase
         $id = $this->payment('executing', "DATE_SUB(NOW(), INTERVAL 2 HOUR)");
         $this->idempotency($id, 'completed', ['id' => 99]);
 
-        $first  = PaymentRecoveryService::sweep($this->pdo, 3600);
-        $second = PaymentRecoveryService::sweep($this->pdo, 3600);
+        $first  = PaymentRecoveryService::sweep($this->pdo, 'sandbox', 3600);
+        $second = PaymentRecoveryService::sweep($this->pdo, 'sandbox', 3600);
 
         $this->assertSame(1, $first['completed']);
         $this->assertSame(0, $second['completed'], 'Un second passage ne doit plus rien avoir à reprendre.');
@@ -266,7 +266,7 @@ final class PaymentRecoveryTest extends TestCase
         $id = $this->payment('executing', "DATE_SUB(NOW(), INTERVAL 2 HOUR)");
         $this->idempotency($id, 'error', ['error' => 'timeout']);
 
-        PaymentRecoveryService::sweep($this->pdo, 3600);
+        PaymentRecoveryService::sweep($this->pdo, 'sandbox', 3600);
 
         $stmt = $this->pdo->prepare(
             "SELECT COUNT(*) FROM audit_logs
@@ -275,5 +275,162 @@ final class PaymentRecoveryTest extends TestCase
         $stmt->execute(['u' => $this->userId]);
 
         $this->assertGreaterThan(0, (int) $stmt->fetchColumn(), 'Toute reprise doit être auditée.');
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // BOUCLE 19 — LA MAINTENANCE NE TRAVERSE PAS LA FRONTIÈRE D'ENVIRONNEMENT
+    // ══════════════════════════════════════════════════════════════════════
+
+    /**
+     * LE DÉFAUT (CRITICAL, prouvé en HTTP réel)
+     * ─────────────────────────────────────────
+     * `sweep()` ne filtrait pas sur `environment`. Un opérateur en contexte
+     * SANDBOX explicite (`X-Nexus-Environment: sandbox`) a fait passer un
+     * paiement de PRODUCTION de 9 500 EUR de `executing` à `approved` —
+     * c'est-à-dire de « bloqué » à « prêt à envoyer de l'argent réel ».
+     *
+     * L'en-tête du service affirmait pourtant qu'il ne contourne pas la
+     * séparation sandbox/production. Un commentaire n'est pas une garantie ;
+     * seul le `WHERE` en est une.
+     */
+    public function test_a_sandbox_sweep_never_touches_production_payments(): void
+    {
+        $prod    = $this->payment('executing', "DATE_SUB(NOW(), INTERVAL 2 HOUR)", 'production');
+        $sandbox = $this->payment('executing', "DATE_SUB(NOW(), INTERVAL 2 HOUR)", 'sandbox');
+
+        $report = PaymentRecoveryService::sweep($this->pdo, 'sandbox', 3600);
+
+        $this->assertSame(
+            'executing',
+            $this->statusOf($prod),
+            'Un balayage sandbox ne doit JAMAIS modifier un paiement de production.'
+        );
+        $this->assertSame('approved', $this->statusOf($sandbox));
+        $this->assertSame(1, $report['examined'], 'Seul le paiement sandbox devait être examiné.');
+        $this->assertSame('sandbox', $report['environment']);
+    }
+
+    /**
+     * Le symétrique (leçon de mutation n°4 : tester CHAQUE côté d'une garde).
+     *
+     * Sans ce test, un `WHERE environment = 'sandbox'` codé en dur passerait
+     * le test précédent tout en rendant la maintenance de production
+     * totalement inopérante.
+     */
+    public function test_a_production_sweep_never_touches_sandbox_payments(): void
+    {
+        $prod    = $this->payment('executing', "DATE_SUB(NOW(), INTERVAL 2 HOUR)", 'production');
+        $sandbox = $this->payment('executing', "DATE_SUB(NOW(), INTERVAL 2 HOUR)", 'sandbox');
+
+        $report = PaymentRecoveryService::sweep($this->pdo, 'production', 3600);
+
+        $this->assertSame('approved', $this->statusOf($prod));
+        $this->assertSame(
+            'executing',
+            $this->statusOf($sandbox),
+            'Un balayage production ne doit pas modifier un paiement sandbox.'
+        );
+        $this->assertSame(1, $report['examined']);
+        $this->assertSame('production', $report['environment']);
+    }
+
+    /**
+     * Un environnement invalide ne doit pas se comporter comme « tous ».
+     *
+     * C'est le mode de défaillance le plus dangereux d'un filtre : une valeur
+     * inattendue qui, faute de validation, élargit le périmètre au lieu de le
+     * fermer.
+     */
+    public function test_an_invalid_environment_is_refused_rather_than_broadened(): void
+    {
+        $prod = $this->payment('executing', "DATE_SUB(NOW(), INTERVAL 2 HOUR)", 'production');
+
+        $this->expectException(\InvalidArgumentException::class);
+
+        try {
+            PaymentRecoveryService::sweep($this->pdo, 'toutes', 3600);
+        } finally {
+            $this->assertSame(
+                'executing',
+                $this->statusOf($prod),
+                'Un environnement invalide ne doit rien modifier du tout.'
+            );
+        }
+    }
+
+    /**
+     * LA DÉFENSE EN PROFONDEUR DOIT ÊTRE TESTÉE POUR SES PROPRES MÉRITES.
+     *
+     * MUTATION SURVIVANTE (boucle 19) : retirer `AND environment = :env` de
+     * l'UPDATE ne cassait aucun test, parce que le SELECT filtre déjà. La
+     * seconde garde était donc décorative — exactement ce que la leçon n°1
+     * décrit : deux protections testées sur une même fixture se masquent.
+     *
+     * On appelle donc l'UPDATE dans les conditions qu'il est censé couvrir :
+     * un paiement dont l'environnement a CHANGÉ entre la lecture et
+     * l'écriture. On le simule en réutilisant la même requête d'écriture que
+     * le service, avec un environnement qui ne correspond pas.
+     *
+     * Sans le filtre, cette écriture aboutit ; avec lui, elle n'affecte
+     * aucune ligne.
+     */
+    public function test_the_recovery_update_itself_refuses_to_cross_environments(): void
+    {
+        $prod = $this->payment('executing', "DATE_SUB(NOW(), INTERVAL 2 HOUR)", 'production');
+
+        // Reproduction exacte de l'écriture du service, mais depuis un
+        // balayage « sandbox » : c'est la fenêtre que la seconde garde ferme.
+        $source = file_get_contents(__DIR__ . '/../src/Services/PaymentRecoveryService.php');
+        $this->assertIsString($source);
+        $this->assertStringContainsString(
+            'AND status = :stuck AND environment = :env',
+            $source,
+            'L\'UPDATE de reprise doit porter sa propre garde d\'environnement.'
+        );
+
+        $upd = $this->pdo->prepare(
+            "UPDATE payments SET status = 'approved'
+              WHERE id = :id AND status = 'executing' AND environment = :env"
+        );
+        $upd->execute(['id' => $prod, 'env' => 'sandbox']);
+
+        $this->assertSame(
+            0,
+            $upd->rowCount(),
+            'Une écriture de reprise sandbox ne doit atteindre aucun paiement production.'
+        );
+        $this->assertSame('executing', $this->statusOf($prod));
+    }
+
+    /**
+     * L'AUDIT DOIT DIRE LA VÉRITÉ (HIGH).
+     *
+     * L'entrée `maintenance.recover_payments` portait `environment = 'sandbox'`
+     * EN DUR dans le contrôleur. Le journal affirmait donc « sandbox » alors
+     * que l'opération avait modifié des paiements de production. Une trace
+     * fausse est pire qu'une trace absente : elle est crue.
+     *
+     * Ici on vérifie le versant service : chaque reprise est journalisée avec
+     * l'environnement RÉEL du paiement repris.
+     */
+    public function test_the_recovery_audit_records_the_real_environment(): void
+    {
+        $prod = $this->payment('executing', "DATE_SUB(NOW(), INTERVAL 2 HOUR)", 'production');
+        $this->idempotency($prod, 'error', ['error' => 'timeout']);
+
+        PaymentRecoveryService::sweep($this->pdo, 'production', 3600);
+
+        $stmt = $this->pdo->prepare(
+            "SELECT environment FROM audit_logs
+              WHERE user_id = :u AND action LIKE 'payment.recovery%' AND entity_id = :id
+              ORDER BY id DESC LIMIT 1"
+        );
+        $stmt->execute(['u' => $this->userId, 'id' => $prod]);
+
+        $this->assertSame(
+            'production',
+            (string) $stmt->fetchColumn(),
+            'La trace doit porter l\'environnement réel du paiement repris.'
+        );
     }
 }

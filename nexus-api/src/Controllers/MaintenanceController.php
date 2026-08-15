@@ -8,6 +8,7 @@ use Nexus\Auth\AuthMiddleware;
 use Nexus\Core\Database;
 use Nexus\Core\Request;
 use Nexus\Core\Response;
+use Nexus\Execution\ExecutionContext;
 use Nexus\Execution\PlatformRole;
 use Nexus\Services\PaymentRecoveryService;
 use PDO;
@@ -69,11 +70,17 @@ final class MaintenanceController
      */
     public static function stuckPayments(Request $request): void
     {
-        self::authorize($request, 'operations');
+        $user = self::authorize($request, 'operations');
+
+        // CORRECTIF (boucle 19) : le diagnostic listait les paiements de TOUS
+        // les environnements. Un contexte sandbox voyait les montants réels de
+        // production — et surtout, la liste servait de plan de tir au balayage
+        // qui, lui, les modifiait vraiment.
+        $environment = ExecutionContext::fromRequest($request, $user)->environmentValue();
 
         $pdo = Database::getConnection();
 
-        $stmt = $pdo->query(
+        $stmt = $pdo->prepare(
             "SELECT p.id, p.user_id, p.environment, p.source_currency, p.amount, p.updated_at,
                     COALESCE(k.status, 'never_started') AS saga_status,
                     TIMESTAMPDIFF(SECOND, p.updated_at, NOW()) AS stuck_seconds
@@ -82,11 +89,13 @@ final class MaintenanceController
                       ON k.idempotency_key = CONCAT('payment:', p.id, ':execute')
                      AND k.user_id = p.user_id
               WHERE p.status = 'executing'
+                AND p.environment = :env
               ORDER BY p.updated_at ASC
               LIMIT 200"
         );
+        $stmt->execute(['env' => $environment]);
 
-        $rows  = $stmt !== false ? ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: []) : [];
+        $rows  = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
         $items = [];
 
         foreach ($rows as $row) {
@@ -115,6 +124,7 @@ final class MaintenanceController
         Response::success([
             'stuck_payments' => $items,
             'count'          => count($items),
+            'environment'    => $environment,
             'note'           => 'Diagnostic en lecture seule. Aucun statut modifié.',
         ]);
     }
@@ -153,8 +163,13 @@ final class MaintenanceController
             );
         }
 
-        $pdo    = Database::getConnection();
-        $report = PaymentRecoveryService::sweep($pdo, $stale);
+        // CORRECTIF CRITICAL (boucle 19). Le balayage s'appliquait à TOUS les
+        // environnements : depuis un contexte sandbox, un paiement production
+        // de 9 500 EUR est repassé de `executing` à `approved` — prouvé en
+        // HTTP réel. L'environnement de l'appelant borne désormais l'action.
+        $pdo         = Database::getConnection();
+        $environment = ExecutionContext::fromRequest($request, $user)->environmentValue();
+        $report      = PaymentRecoveryService::sweep($pdo, $environment, $stale);
 
         // Trace de l'ACTEUR. Le service audite chaque paiement repris ; cette
         // entrée-ci enregistre qui a déclenché le balayage, et avec quels
@@ -168,10 +183,15 @@ final class MaintenanceController
             'a'    => 'maintenance.recover_payments',
             'et'   => 'maintenance',
             'ei'   => 0,
-            'env'  => 'sandbox',
+            // L'environnement était codé en dur à 'sandbox'. Le journal
+            // affirmait donc « sandbox » alors que l'opération avait modifié
+            // des paiements de production : une trace fausse est pire que
+            // pas de trace, car elle est crue.
+            'env'  => $environment,
             'meta' => json_encode([
                 'actor_id'      => (int) $user['id'],
                 'platform_role' => PlatformRole::of($user),
+                'environment'   => $environment,
                 'stale_seconds' => $stale,
                 'examined'      => $report['examined'],
                 'completed'     => $report['completed'],
