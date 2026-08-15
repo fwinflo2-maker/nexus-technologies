@@ -75,3 +75,6 @@
 
 # 0.24 — Rôles internes v2 : business_manager, technical_admin + alias
 2026_08_15_internal_roles_v2.sql
+
+# 0.25 — Nexus Connect (comptes B2B/API) + employés internes
+2026_08_15_connect_accounts_employees.sql

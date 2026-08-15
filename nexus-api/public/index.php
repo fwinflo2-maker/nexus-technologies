@@ -10,6 +10,7 @@ declare(strict_types=1);
  */
 
 use Nexus\Controllers\AccountController;
+use Nexus\Controllers\AdminController;
 use Nexus\Controllers\AuthController;
 use Nexus\Controllers\BeneficiaryController;
 use Nexus\Controllers\BusinessController;
@@ -166,6 +167,14 @@ $router->get('/control/webhooks', [ControlCenterController::class, 'webhooks']);
 $router->get('/control/audit', [ControlCenterController::class, 'audit']);
 $router->get('/control/clients', [ControlCenterController::class, 'clients']);
 $router->get('/control/clients/{id}', [ControlCenterController::class, 'clientDetail']);
+
+// --- Super Admin : employés internes + comptes Nexus Connect ---
+$router->get('/control/employees', [AdminController::class, 'employees']);
+$router->post('/control/employees', [AdminController::class, 'createEmployee']);
+$router->put('/control/employees/{id}', [AdminController::class, 'updateEmployee']);
+$router->patch('/control/employees/{id}/status', [AdminController::class, 'setEmployeeStatus']);
+$router->get('/control/connect/accounts', [AdminController::class, 'connectAccounts']);
+$router->post('/control/connect/accounts', [AdminController::class, 'createConnectAccount']);
 
 // Maintenance d'exploitation : le diagnostic est en lecture seule (capacité
 // « operations »), la reprise modifie des paiements réels (capacité

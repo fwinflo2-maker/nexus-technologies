@@ -60,6 +60,66 @@ CREATE TABLE `beneficiaries` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `connect_accounts` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint(20) unsigned DEFAULT NULL,
+  `company_name` varchar(190) NOT NULL,
+  `email` varchar(190) NOT NULL,
+  `status` enum('active','pending','suspended','closed') NOT NULL DEFAULT 'pending',
+  `environment` enum('sandbox','production') NOT NULL DEFAULT 'sandbox',
+  `api_key_hash` varchar(255) DEFAULT NULL,
+  `api_key_prefix` varchar(20) DEFAULT NULL,
+  `webhook_url` varchar(500) DEFAULT NULL,
+  `webhook_secret_enc` text DEFAULT NULL,
+  `country` char(2) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_connect_email` (`email`),
+  UNIQUE KEY `uq_connect_api_key_prefix` (`api_key_prefix`),
+  KEY `idx_connect_user` (`user_id`),
+  KEY `idx_connect_status` (`status`),
+  CONSTRAINT `fk_connect_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `connect_events` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `connect_account_id` bigint(20) unsigned NOT NULL,
+  `event_type` varchar(50) NOT NULL,
+  `event_status` varchar(30) DEFAULT NULL,
+  `payload` json DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_connect_events_account` (`connect_account_id`),
+  CONSTRAINT `fk_connect_events_account` FOREIGN KEY (`connect_account_id`) REFERENCES `connect_accounts` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `employees` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint(20) unsigned NOT NULL,
+  `department` varchar(100) DEFAULT NULL,
+  `role` varchar(50) NOT NULL DEFAULT 'operations_manager',
+  `permissions` json DEFAULT NULL,
+  `status` enum('active','invited','disabled') NOT NULL DEFAULT 'invited',
+  `manager_id` bigint(20) unsigned DEFAULT NULL,
+  `last_login_at` datetime DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_employee_user` (`user_id`),
+  KEY `idx_employee_role` (`role`),
+  KEY `idx_employee_status` (`status`),
+  KEY `fk_employee_manager` (`manager_id`),
+  CONSTRAINT `fk_employee_manager` FOREIGN KEY (`manager_id`) REFERENCES `employees` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_employee_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
 CREATE TABLE `fx_rates_cache` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `base_currency` varchar(5) NOT NULL,
