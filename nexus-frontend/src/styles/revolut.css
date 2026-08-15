@@ -116,3 +116,36 @@
   background: rgba(59,130,246,.14); border-color: rgba(59,130,246,.4); color: var(--cyan);
   box-shadow: none;
 }
+
+/* ============================================================================
+   THÈME PUBLIC (login / register / landing) — remplace le violet par le bleu
+   ============================================================================ */
+:root {
+  --primary: #2563EB;
+  --primary-light: #3B82F6;
+  --primary-dark: #1D4ED8;
+  --primary-glow: rgba(59, 130, 246, 0.25);
+  --gold: #2563EB;
+  --gold-glow: rgba(59, 130, 246, 0.2);
+  --bg-base: #0B0D10;
+  --bg-surface: #14171C;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-focus: rgba(59, 130, 246, 0.6);
+}
+.btn-primary {
+  background: linear-gradient(135deg, var(--primary), var(--primary-light));
+  box-shadow: 0 4px 16px rgba(59,130,246,0.25);
+}
+.btn-glow {
+  background: linear-gradient(135deg, var(--primary), var(--primary-light));
+}
+.btn-primary:hover, .btn-glow:hover {
+  box-shadow: 0 6px 24px rgba(59,130,246,0.35);
+}
+/* Landing ambient orbs -> bleu */
+.ambient-orb-a { background: radial-gradient(circle, rgba(59,130,246,.14), transparent 70%); }
+.ambient-orb-b { background: radial-gradient(circle, rgba(59,130,246,.10), transparent 70%); }
+.auth-glow {
+  background: conic-gradient(from 0deg, rgba(59,130,246,.4), rgba(59,130,246,.1) 35%, transparent 55%, rgba(59,130,246,.35) 90%, rgba(59,130,246,.4));
+}
+
