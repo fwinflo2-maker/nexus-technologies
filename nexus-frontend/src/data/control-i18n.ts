@@ -140,6 +140,12 @@ const fr: Dict = {
   'ctrl.st.yes': 'Oui',
   'ctrl.st.no': 'Non',
   'ctrl.st.forbidden': 'Accès refusé — le Control Center est réservé aux comptes habilités.',
+  'ctrl.nav.clients': 'Clients',
+  'ctrl.cl.title': 'Registre des clients',
+  'ctrl.cl.subtitle': 'Tous les utilisateurs et entreprises, avec pays, statut, KYC, soldes et activité.',
+  'ctrl.cl.client': 'Client', 'ctrl.cl.type': 'Type', 'ctrl.cl.country': 'Pays',
+  'ctrl.cl.status': 'Statut', 'ctrl.cl.kyc': 'KYC', 'ctrl.cl.balances': 'Soldes',
+  'ctrl.cl.actions': 'Transactions', 'ctrl.cl.since': 'Inscrit le',
 };
 
 const en: Dict = {
@@ -261,6 +267,12 @@ const en: Dict = {
   'ctrl.st.yes': 'Yes',
   'ctrl.st.no': 'No',
   'ctrl.st.forbidden': 'Access denied — the Control Center is restricted to authorised accounts.',
+  'ctrl.nav.clients': 'Clients',
+  'ctrl.cl.title': 'Client registry',
+  'ctrl.cl.subtitle': 'All users and businesses, with country, status, KYC, balances and activity.',
+  'ctrl.cl.client': 'Client', 'ctrl.cl.type': 'Type', 'ctrl.cl.country': 'Country',
+  'ctrl.cl.status': 'Status', 'ctrl.cl.kyc': 'KYC', 'ctrl.cl.balances': 'Balances',
+  'ctrl.cl.actions': 'Transactions', 'ctrl.cl.since': 'Since',
 };
 
 const es: Dict = {
@@ -382,6 +394,12 @@ const es: Dict = {
   'ctrl.st.yes': 'Sí',
   'ctrl.st.no': 'No',
   'ctrl.st.forbidden': 'Acceso denegado: el Centro de Control está reservado a cuentas autorizadas.',
+  'ctrl.nav.clients': 'Clientes',
+  'ctrl.cl.title': 'Registro de clientes',
+  'ctrl.cl.subtitle': 'Todos los usuarios y empresas, con país, estado, KYC, saldos y actividad.',
+  'ctrl.cl.client': 'Cliente', 'ctrl.cl.type': 'Tipo', 'ctrl.cl.country': 'País',
+  'ctrl.cl.status': 'Estado', 'ctrl.cl.kyc': 'KYC', 'ctrl.cl.balances': 'Saldos',
+  'ctrl.cl.actions': 'Transacciones', 'ctrl.cl.since': 'Desde',
 };
 
 const pt: Dict = {
@@ -503,6 +521,12 @@ const pt: Dict = {
   'ctrl.st.yes': 'Sim',
   'ctrl.st.no': 'Não',
   'ctrl.st.forbidden': 'Acesso negado — o Centro de Controlo está reservado a contas autorizadas.',
+  'ctrl.nav.clients': 'Clientes',
+  'ctrl.cl.title': 'Registo de clientes',
+  'ctrl.cl.subtitle': 'Todos os utilizadores e empresas, com país, estado, KYC, saldos e atividade.',
+  'ctrl.cl.client': 'Cliente', 'ctrl.cl.type': 'Tipo', 'ctrl.cl.country': 'País',
+  'ctrl.cl.status': 'Estado', 'ctrl.cl.kyc': 'KYC', 'ctrl.cl.balances': 'Saldos',
+  'ctrl.cl.actions': 'Transações', 'ctrl.cl.since': 'Desde',
 };
 
 const de: Dict = {
@@ -624,6 +648,12 @@ const de: Dict = {
   'ctrl.st.yes': 'Ja',
   'ctrl.st.no': 'Nein',
   'ctrl.st.forbidden': 'Zugriff verweigert — das Control Center ist berechtigten Konten vorbehalten.',
+  'ctrl.nav.clients': 'Kunden',
+  'ctrl.cl.title': 'Kundenregister',
+  'ctrl.cl.subtitle': 'Alle Benutzer und Unternehmen, mit Land, Status, KYC, Salden und Aktivität.',
+  'ctrl.cl.client': 'Kunde', 'ctrl.cl.type': 'Typ', 'ctrl.cl.country': 'Land',
+  'ctrl.cl.status': 'Status', 'ctrl.cl.kyc': 'KYC', 'ctrl.cl.balances': 'Salden',
+  'ctrl.cl.actions': 'Transaktionen', 'ctrl.cl.since': 'Seit',
 };
 
 const ar: Dict = {
@@ -745,6 +775,12 @@ const ar: Dict = {
   'ctrl.st.yes': 'نعم',
   'ctrl.st.no': 'لا',
   'ctrl.st.forbidden': 'تم رفض الوصول — مركز التحكم مخصص للحسابات المصرّح لها.',
+  'ctrl.nav.clients': 'العملاء',
+  'ctrl.cl.title': 'سجل العملاء',
+  'ctrl.cl.subtitle': 'جميع المستخدمين والشركات، مع البلد والحالة وKYC والأرصدة والنشاط.',
+  'ctrl.cl.client': 'العميل', 'ctrl.cl.type': 'النوع', 'ctrl.cl.country': 'البلد',
+  'ctrl.cl.status': 'الحالة', 'ctrl.cl.kyc': 'KYC', 'ctrl.cl.balances': 'الأرصدة',
+  'ctrl.cl.actions': 'المعاملات', 'ctrl.cl.since': 'منذ',
 };
 
 const zh: Dict = {
@@ -866,6 +902,12 @@ const zh: Dict = {
   'ctrl.st.yes': '是',
   'ctrl.st.no': '否',
   'ctrl.st.forbidden': '拒绝访问——控制中心仅限授权账户使用。',
+  'ctrl.nav.clients': '客户',
+  'ctrl.cl.title': '客户登记册',
+  'ctrl.cl.subtitle': '所有用户和企业，包括国家、状态、KYC、余额和活动。',
+  'ctrl.cl.client': '客户', 'ctrl.cl.type': '类型', 'ctrl.cl.country': '国家',
+  'ctrl.cl.status': '状态', 'ctrl.cl.kyc': 'KYC', 'ctrl.cl.balances': '余额',
+  'ctrl.cl.actions': '交易', 'ctrl.cl.since': '自',
 };
 
 const DICTS: Record<LangCode, Dict> = { fr, en, es, pt, de, ar, zh };

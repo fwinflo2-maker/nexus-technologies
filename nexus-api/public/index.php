@@ -163,6 +163,7 @@ $router->get('/control/public-keys', [ControlCenterController::class, 'publicKey
 $router->get('/control/kyc', [ControlCenterController::class, 'kyc']);
 $router->get('/control/webhooks', [ControlCenterController::class, 'webhooks']);
 $router->get('/control/audit', [ControlCenterController::class, 'audit']);
+$router->get('/control/clients', [ControlCenterController::class, 'clients']);
 
 // Maintenance d'exploitation : le diagnostic est en lecture seule (capacité
 // « operations »), la reprise modifie des paiements réels (capacité

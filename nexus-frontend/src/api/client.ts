@@ -1322,3 +1322,29 @@ export async function apiControlAudit(): Promise<ApiResponse<{
 }>> {
   return request('GET', '/control/audit');
 }
+
+// --- Clients (registre des clients & entreprises — superadmin) ---------------
+
+export interface ControlClient {
+  id: number;
+  full_name: string;
+  email: string;
+  phone: string | null;
+  account_type: 'personal' | 'business';
+  platform_role: string;
+  status: string;
+  kyc_level: string;
+  country_of_residence: string | null;
+  avatar: string | null;
+  auth_provider: string;
+  created_at: string;
+  updated_at: string;
+  balances: { EUR: string; USD: string; XAF: string };
+  transactions: number;
+}
+
+export async function apiControlClients(): Promise<ApiResponse<{
+  items: ControlClient[]; total: number; generated_at: string;
+}>> {
+  return request('GET', '/control/clients');
+}

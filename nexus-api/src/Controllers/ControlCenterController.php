@@ -257,4 +257,66 @@ final class ControlCenterController
 
         Response::success(['items' => $items, 'total' => count($items)]);
     }
+
+    /**
+     * GET /api/control/clients — registre complet des clients & entreprises.
+     *
+     * Liste tous les utilisateurs (personnes et entreprises) avec leurs
+     * informations agrégées : profil, pays de résidence, type de compte,
+     * statut, niveau KYC, soldes par devise et compteurs d'activité.
+     *
+     * DONNÉES SENSIBLES : concerne tous les clients. Réservé au SUPERADMIN
+     * (capacité `superadmin`), pas aux autres rôles d'exploitation.
+     * Aucun secret (mot de passe, token, credential) n'est renvoyé.
+     */
+    public static function clients(Request $request): void
+    {
+        $user = self::authorize($request, 'superadmin');
+        $pdo  = Database::getConnection();
+
+        // Profil + agrégats wallet (soldes par devise) + compteurs.
+        $stmt = $pdo->query(
+            'SELECT u.id, u.full_name, u.email, u.phone, u.account_type, u.platform_role,
+                    u.status, u.kyc_level, u.country_of_residence, u.avatar, u.auth_provider,
+                    u.created_at, u.updated_at,
+                    COALESCE(SUM(CASE WHEN w.currency = \'EUR\' THEN w.balance ELSE 0 END), 0)  AS balance_eur,
+                    COALESCE(SUM(CASE WHEN w.currency = \'USD\' THEN w.balance ELSE 0 END), 0)  AS balance_usd,
+                    COALESCE(SUM(CASE WHEN w.currency = \'XAF\' THEN w.balance ELSE 0 END), 0)  AS balance_xaf,
+                    (SELECT COUNT(*) FROM transactions t WHERE t.user_id = u.id) AS tx_count
+             FROM users u
+             LEFT JOIN wallets w ON w.user_id = u.id
+             GROUP BY u.id
+             ORDER BY u.created_at DESC'
+        );
+
+        $clients = array_map(static function (array $row): array {
+            return [
+                'id'                   => (int) $row['id'],
+                'full_name'            => $row['full_name'],
+                'email'                => $row['email'],
+                'phone'                => $row['phone'],
+                'account_type'         => $row['account_type'],
+                'platform_role'        => $row['platform_role'],
+                'status'               => $row['status'],
+                'kyc_level'            => $row['kyc_level'],
+                'country_of_residence' => $row['country_of_residence'],
+                'avatar'               => $row['avatar'],
+                'auth_provider'        => $row['auth_provider'],
+                'created_at'           => $row['created_at'],
+                'updated_at'           => $row['updated_at'],
+                'balances'             => [
+                    'EUR' => $row['balance_eur'],
+                    'USD' => $row['balance_usd'],
+                    'XAF' => $row['balance_xaf'],
+                ],
+                'transactions'         => (int) $row['tx_count'],
+            ];
+        }, $stmt->fetchAll());
+
+        Response::success([
+            'items'      => $clients,
+            'total'      => count($clients),
+            'generated_at' => gmdate(DATE_ATOM),
+        ]);
+    }
 }

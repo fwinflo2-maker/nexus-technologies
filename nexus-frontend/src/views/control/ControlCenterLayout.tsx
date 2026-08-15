@@ -18,12 +18,14 @@ import ProviderNetworkPage from './ProviderNetworkPage';
 import ProviderDetailPage from './ProviderDetailPage';
 import PublicKeyCenterPage from './PublicKeyCenterPage';
 import ControlAuditPage from './ControlAuditPage';
+import ControlClientsPage from './ControlClientsPage';
 
 interface NavItem { to: string; key: string; }
 
 const NAV: NavItem[] = [
   { to: '/control', key: 'ctrl.nav.overview' },
   { to: '/control/providers', key: 'ctrl.nav.providers' },
+  { to: '/control/clients', key: 'ctrl.nav.clients' },
   { to: '/control/keys', key: 'ctrl.nav.keys' },
   { to: '/control/audit', key: 'ctrl.nav.audit' },
 ];
@@ -113,6 +115,7 @@ export default function ControlCenterLayout() {
           <Route path="/" element={<Frame><ControlOverviewPage /></Frame>} />
           <Route path="/providers" element={<Frame><ProviderNetworkPage /></Frame>} />
           <Route path="/provider/:slug" element={<Frame><ProviderDetailPage /></Frame>} />
+          <Route path="/clients" element={<Frame><ControlClientsPage /></Frame>} />
           <Route path="/keys" element={<Frame><PublicKeyCenterPage /></Frame>} />
           <Route path="/audit" element={<Frame><ControlAuditPage /></Frame>} />
           <Route path="*" element={<Navigate to="/control" replace />} />
