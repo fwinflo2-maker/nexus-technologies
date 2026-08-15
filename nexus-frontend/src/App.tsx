@@ -7,6 +7,7 @@ import { LoginPage } from './views/auth/LoginPage';
 import { RegisterPage } from './views/auth/RegisterPage';
 import ForgotPasswordPage from './views/auth/ForgotPasswordPage';
 import GearsBackground from './components/dashboard/GearsBackground';
+import { ParticlesBackground } from './components/ParticlesBackground';
 import Sidebar from './components/dashboard/Sidebar';
 import DashTopbar from './components/dashboard/DashTopbar';
 import DashboardPage from './views/dashboard/DashboardPage';
@@ -97,13 +98,17 @@ function DashboardLayout() {
 
   return (
     <div className="nexus-dash layout">
+      {/* Fond bleu animé + particules (ambiance premium, comme la landing/login) */}
+      <div className="dash-ambient-bg" aria-hidden="true" />
       <GearsBackground />
       <div className="bg-grid" />
       <div className="ambient">
-        <div className="orb" style={{ width: 500, height: 500, top: '-10%', left: '5%', background: 'radial-gradient(circle, rgba(0,200,255,0.08), transparent 70%)' }} />
-        <div className="orb" style={{ width: 400, height: 400, bottom: '5%', right: '10%', background: 'radial-gradient(circle, rgba(139,92,246,0.06), transparent 70%)' }} />
-        <div className="orb" style={{ width: 300, height: 300, top: '40%', left: '50%', background: 'radial-gradient(circle, rgba(234,184,48,0.04), transparent 70%)' }} />
+        <div className="orb" style={{ width: 520, height: 520, top: '-12%', left: '2%', background: 'radial-gradient(circle, rgba(0,140,255,0.14), transparent 70%)' }} />
+        <div className="orb" style={{ width: 420, height: 420, bottom: '2%', right: '6%', background: 'radial-gradient(circle, rgba(0,200,255,0.10), transparent 70%)' }} />
+        <div className="orb" style={{ width: 300, height: 300, top: '42%', left: '48%', background: 'radial-gradient(circle, rgba(120,120,255,0.06), transparent 70%)' }} />
       </div>
+      <ParticlesBackground density={55} color="#00C8FF" opacity={0.5} className="dash-particles" />
+      <div className="ambient-vignette" aria-hidden="true" />
 
       <NotificationsProvider>
         <Sidebar mode={effectiveMode} />

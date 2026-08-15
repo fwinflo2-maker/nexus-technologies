@@ -217,8 +217,8 @@
   letter-spacing: -0.3px;
 }
 .nexus-dash .form-group { display: grid; gap: 6px; padding: 4px 0; }
-/* Grille 2 colonnes pour disposer les champs de formulaire sur une même ligne */
-.nexus-dash .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 20px; align-items: start; }
+/* Grille pour disposer les champs de formulaire sur une même ligne */
+.nexus-dash .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 6px 20px; align-items: start; }
 .nexus-dash .form-grid .form-group--full { grid-column: 1 / -1; }
 @media (max-width: 600px) {
   .nexus-dash .form-grid { grid-template-columns: 1fr; }

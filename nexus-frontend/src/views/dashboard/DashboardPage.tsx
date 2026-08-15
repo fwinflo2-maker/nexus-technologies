@@ -13,6 +13,7 @@ import {
 } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import AnimatedCounter from '../../components/AnimatedCounter';
+import Avatar from '../../components/Avatar';
 
 type Mode = 'personal' | 'business';
 type Period = '7d' | '30d' | '12m';
@@ -173,9 +174,14 @@ export default function DashboardPage({ mode }: DashboardProps) {
       </AnimatePresence>
 
       <motion.div variants={fadeInUp} initial="hidden" animate="visible" custom={0} className="page-header" style={{ marginBottom: 30 }}>
-          <div className="page-label">Nexus {isBiz ? 'Business' : 'Personnel'} — Tableau de bord</div>
-        <div className="page-title" style={{ fontSize: 'clamp(26px, 3vw, 38px)' }}>
-          Bonjour, <span className={isBiz ? 'gg' : 'gc'}>{displayName}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+          <Avatar avatar={authUser?.avatar} accountType={isBiz ? 'business' : 'personal'} size={58} />
+          <div>
+            <div className="page-label">Nexus {isBiz ? 'Business' : 'Personnel'} — Tableau de bord</div>
+            <div className="page-title" style={{ fontSize: 'clamp(26px, 3vw, 38px)' }}>
+              Bonjour, <span className={isBiz ? 'gg' : 'gc'}>{displayName}</span>
+            </div>
+          </div>
         </div>
       </motion.div>
 

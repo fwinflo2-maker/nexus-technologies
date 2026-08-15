@@ -569,7 +569,7 @@ export default function SettingsPage() {
 
       {/* Conteneur central : onglets + sections */}
       <div style={{
-        maxWidth: 900, margin: 0, padding: 24,
+        width: '100%', maxWidth: 'none', margin: 0, padding: 24,
         background: 'linear-gradient(180deg, rgba(255,255,255,.015), transparent 40%), var(--panel)',
         border: '1px solid var(--border)', borderRadius: 'var(--r-lg)',
       }}>
