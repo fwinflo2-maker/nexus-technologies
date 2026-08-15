@@ -74,6 +74,11 @@ echo "==> Export de la structure vers database/full_schema.sql"
 --   * Équivalence avec le runner de migrations vérifiée par
 --     scripts/compare_schemas.sh (tables, colonnes, types, index, clés
 --     étrangères, ENUM, valeurs par défaut, nullabilité).
+--   * PORTABILITÉ : généré depuis MariaDB, ce dump rendait les colonnes JSON
+--     sous leur forme interne MariaDB (longtext + CHECK json_valid). MySQL 8
+--     possède un vrai type JSON : les deux chemins d'installation
+--     divergeaient donc selon le moteur ayant servi à la génération. Le
+--     générateur renormalise ces colonnes en `json`, accepté par les deux.
 -- =============================================================================
 
 SET NAMES utf8mb4;
@@ -90,7 +95,8 @@ HEADER
     --routines=FALSE \
     --triggers=FALSE \
     "$BUILD_DB" \
-    | sed 's/ AUTO_INCREMENT=[0-9]*//g'
+    | sed 's/ AUTO_INCREMENT=[0-9]*//g' \
+    | sed -E 's/`([a-z_]+)` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin (DEFAULT NULL|NOT NULL) CHECK \(json_valid\(`\1`\)\)/`\1` json \2/g'
 
   cat <<'FOOTER'
 
