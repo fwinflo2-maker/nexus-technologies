@@ -12,7 +12,7 @@ namespace Nexus\Services;
  *   - received_amount (taux fixe 655.957 − frais/spread)
  *   - fees (EUR)
  *   - delay_minutes (estimation)
- *   - reliability_score (depuis CapabilityEngine)
+ *   - reliability (mesurée par ProviderReliability, ou null si non mesurée)
  *
  * Source du taux : fixe (655.957 XAF pour 1 EUR) — sera remplacé
  * par un service FX temps réel dans une itération ultérieure.
@@ -56,7 +56,7 @@ final class QuoteEngine
      *
      * @param array{amount: float, sourceCurrency: string, destCountry: string,
      *              destCurrency: string, receivingMethod: string} $intent
-     * @param array{slug: string, name: string, category: string, reliability: float,
+     * @param array{slug: string, name: string, category: string, reliability: float|null,
      *              delay_min: int, delay_max: int, method_type: string} $provider
      * @param string|null $seed Graine pour reproductibilité (optionnel).
      *
@@ -72,7 +72,8 @@ final class QuoteEngine
      *     delay_min: int,
      *     delay_max: int,
      *     delay_avg: int,
-     *     reliability: float,
+     *     reliability: float|null,
+     *     reliability_status: string,
      *     effective_rate: float,
      * }
      */
@@ -129,7 +130,13 @@ final class QuoteEngine
             'delay_min'        => $provider['delay_min'],
             'delay_max'        => $provider['delay_max'],
             'delay_avg'        => $delayAvg,
-            'reliability'      => $provider['reliability'],
+            // La fiabilité peut être inconnue (null) : on transporte l'état
+            // avec la valeur, pour que le Routing Engine ne puisse pas
+            // confondre « non mesuré » avec « mauvais score ».
+            'reliability'        => $provider['reliability'] ?? null,
+            'reliability_status' => $provider['reliability_status']
+                ?? ProviderReliability::UNAVAILABLE,
+            'reliability_obs'    => $provider['reliability_obs'] ?? 0,
             'effective_rate'   => round($effectiveRate, 4),
         ];
     }

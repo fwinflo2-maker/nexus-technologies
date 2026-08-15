@@ -105,8 +105,15 @@ final class RoutingEngine
         $minFees     = min(array_map(fn ($q) => (float) $q['fees'], $quotes));
         $maxDelay    = max(array_map(fn ($q) => (int) $q['delay_avg'], $quotes));
         $minDelay    = min(array_map(fn ($q) => (int) $q['delay_avg'], $quotes));
-        $maxRel      = max(array_map(fn ($q) => (float) $q['reliability'], $quotes));
-        $minRel      = min(array_map(fn ($q) => (float) $q['reliability'], $quotes));
+        // Fiabilité : seules les valeurs MESURÉES entrent dans la
+        // normalisation. `(float) null` vaudrait 0.0 et ferait passer un
+        // provider « non mesuré » pour le pire de tous (§17).
+        $measuredRel = array_values(array_filter(
+            array_map(static fn ($q) => $q['reliability'], $quotes),
+            static fn ($r) => $r !== null
+        ));
+        $maxRel = $measuredRel === [] ? 0.0 : max($measuredRel);
+        $minRel = $measuredRel === [] ? 0.0 : min($measuredRel);
 
         // Éviter division par zéro
         $norm = static fn (float $val, float $min, float $max): float =>
@@ -118,7 +125,13 @@ final class RoutingEngine
             $receivedScore = $norm((float) $q['received'], $minReceived, $maxReceived);
             $feesScore     = 1.0 - $norm((float) $q['fees'], $minFees, $maxFees); // inversion : moins cher = mieux
             $speedScore    = 1.0 - $norm((float) $q['delay_avg'], $minDelay, $maxDelay); // inversion : plus rapide = mieux
-            $reliabilityScore = $norm((float) $q['reliability'], $minRel, $maxRel);
+            // Non mesuré → score NEUTRE, ni bonus ni malus. Départager des
+            // routes sur une fiabilité inconnue reviendrait à inventer un
+            // classement ; à défaut de mesure, la composante n'avantage
+            // personne.
+            $reliabilityScore = $q['reliability'] === null
+                ? 0.5
+                : $norm((float) $q['reliability'], $minRel, $maxRel);
 
             $score = $receivedScore * $weights['received']
                 + $reliabilityScore * $weights['reliability']
@@ -139,6 +152,26 @@ final class RoutingEngine
 
         // ── Badge de l'objectif principal ───────────────────────
         $objBadge = self::OBJECTIVE_BADGES[$objective] ?? self::OBJECTIVE_BADGES['optimized'];
+
+        // « 🛡️ PLUS FIABLE » affirme un fait mesuré. Or ce badge était décerné
+        // sur le seul objectif demandé : sur un corridor sans historique,
+        // `most_reliable` le collait à la première route alors qu'AUCUNE
+        // fiabilité n'était connue — constaté en HTTP après la correction du
+        // score lui-même. À défaut de mesure, on retombe sur le badge neutre
+        // « RECOMMANDÉE », qui décrit un classement et non une performance
+        // observée.
+        if ($objective === 'most_reliable') {
+            $anyMeasured = false;
+            foreach ($best as $candidate) {
+                if (($candidate['reliability'] ?? null) !== null) {
+                    $anyMeasured = true;
+                    break;
+                }
+            }
+            if (!$anyMeasured) {
+                $objBadge = self::OBJECTIVE_BADGES['optimized'];
+            }
+        }
 
         // ── Icônes de méthode ──────────────────────────────────
         $methodIcons = [
@@ -170,10 +203,18 @@ final class RoutingEngine
             $received = (float) $q['received'];
             $fees     = (float) $q['fees'];
 
-            // Fiabilité → label texte + couleur
-            $reliabilityNum = (float) $q['reliability'];
-            $reliabilityText = self::reliabilityLabel($reliabilityNum);
-            $reliabilityColor = self::reliabilityColor($reliabilityNum);
+            // Fiabilité → label texte + couleur, UNIQUEMENT si mesurée.
+            // Auparavant `(float) null` produisait 0.0, donc « Modérée » en
+            // orange : une note inventée pour un provider jamais observé.
+            $reliabilityRaw    = $q['reliability'] ?? null;
+            $reliabilityStatus = (string) ($q['reliability_status'] ?? ProviderReliability::UNAVAILABLE);
+            $reliabilityNum    = $reliabilityRaw === null ? null : (float) $reliabilityRaw;
+            $reliabilityText   = $reliabilityNum === null
+                ? 'Non mesurée'
+                : self::reliabilityLabel($reliabilityNum);
+            $reliabilityColor  = $reliabilityNum === null
+                ? 'var(--text-mid)'
+                : self::reliabilityColor($reliabilityNum);
 
             $delayAvg = (int) $q['delay_avg'];
             $delayText = $delayAvg < 1 ? '~1 min' : "~{$delayAvg} min";
@@ -195,9 +236,14 @@ final class RoutingEngine
                 'feesNum'           => $fees,
                 'delay'             => $delayText,
                 'delayMinutes'      => $delayAvg,
-                'reliability'       => $reliabilityText,
-                'reliabilityNum'    => $reliabilityNum,
-                'reliabilityColor'  => $reliabilityColor,
+                'reliability'         => $reliabilityText,
+                'reliabilityNum'      => $reliabilityNum,
+                'reliabilityColor'    => $reliabilityColor,
+                // L'interface doit pouvoir distinguer « fiabilité mesurée »
+                // de « pas encore d'historique » sans le deviner.
+                'reliabilityStatus'   => $reliabilityStatus,
+                'reliabilityMeasured' => $reliabilityNum !== null,
+                'reliabilityObs'      => (int) ($q['reliability_obs'] ?? 0),
                 'recommended'       => $isFirst,
                 'spread'            => number_format((float) ($q['spread_pct'] ?? 0), 2) . '%',
                 'rate'              => (float) ($q['effective_rate'] ?? 0),
@@ -218,7 +264,14 @@ final class RoutingEngine
         if ($receivedDiff > 1000) {
             return ['badge' => '💰 MAX REÇU', 'cls' => 'p-g'];
         }
-        if ((float) $q['reliability'] > (float) $best['reliability']) {
+        // Badge « PLUS FIABLE » : uniquement si les DEUX fiabilités sont
+        // réellement mesurées. Le comparatif s'appuyait sur `(float) null`,
+        // ce qui décernait le badge à partir de scores inventés — c'est
+        // précisément ce que l'audit a constaté en HTTP.
+        if ($q['reliability'] !== null
+            && $best['reliability'] !== null
+            && (float) $q['reliability'] > (float) $best['reliability']
+        ) {
             return ['badge' => '🛡️ PLUS FIABLE', 'cls' => 'p-v'];
         }
         if ((int) $q['delay_avg'] < (int) $best['delay_avg']) {

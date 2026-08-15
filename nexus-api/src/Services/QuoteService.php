@@ -35,7 +35,7 @@ final class QuoteService
         ?ExecutionEnvironment $environment = null
     ): array {
         // Capability Engine : providers éligibles pour ce corridor.
-        $providers = CapabilityEngine::findEligible($intent);
+        $providers = CapabilityEngine::findEligible($intent, $environment);
 
         // Policy Engine : conformité avant tout calcul de prix.
         $sourceToEur = self::rateToEur((string) $intent['sourceCurrency']);

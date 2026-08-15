@@ -112,15 +112,47 @@ taux de repli lorsque `fx_rates_cache` est vide.
 
 ## État actuel
 
+Chiffres relevés sur la base réellement installée par le runner de migrations
+(`information_schema`), et non recopiés à la main :
+
 | Élément | Valeur |
 |---|---|
-| Tables | 19 |
-| Colonnes | 234 |
-| Index | 58 |
-| Contraintes uniques | 29 |
-| Clés étrangères | 20 |
-| Colonnes ENUM | 25 |
-| Migrations | 12 (+ `schema.sql`) |
+| Tables | 21 |
+| Colonnes | 264 |
+| Index | 77 |
+| Contraintes uniques | 36 |
+| Clés étrangères | 24 |
+| Colonnes ENUM | 37 |
+| Migrations | 21 (+ `schema.sql`) |
+
+## SQL de référence — `database/sql/`
+
+Le dépôt doit pouvoir être reconstruit depuis GitHub seul. Trois fichiers de
+référence, **générés depuis la base réellement installée** (jamais écrits à la
+main) :
+
+| Fichier | Contenu |
+|---|---|
+| `sql/nexus_schema.sql` | structure seule — aucune donnée |
+| `sql/nexus_seed.sql` | données de démonstration (sandbox uniquement) |
+| `sql/nexus_full.sql` | structure + données de démonstration |
+
+Régénération après toute modification du schéma :
+
+```bash
+bash scripts/export_sql_reference.sh [hôte] [utilisateur] [motdepasse]
+```
+
+Le script reconstruit une base temporaire via le manifeste de migrations,
+exporte les trois fichiers, puis supprime la base. Le SQL décrit donc ce que
+le dépôt sait installer, pas l'état accidentel d'un poste de travail.
+
+> ⚠️ `nexus_seed.sql` et la partie données de `nexus_full.sql` sont des jeux de
+> **démonstration**. Ils ne doivent jamais être chargés en production.
+
+Reproductibilité vérifiée : une base vierge reconstruite depuis
+`sql/nexus_schema.sql` présente les mêmes 264 colonnes que l'installation par
+migrations, et la suite complète (502 tests) passe dessus.
 
 ### Table à surveiller
 

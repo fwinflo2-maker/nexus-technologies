@@ -124,6 +124,22 @@ jobs:
         working-directory: nexus-api
         run: bash scripts/compare_schemas.sh 127.0.0.1 root ''
 
+      - name: Vérifier que database/sql/ est à jour
+        # Le SQL de référence est GÉNÉRÉ. S'il n'est pas régénéré après une
+        # migration, il décrit un schéma périmé tout en paraissant valide —
+        # c'est exactement ainsi que full_schema.sql avait divergé. On
+        # régénère et on exige qu'il n'y ait aucun écart.
+        working-directory: nexus-api
+        run: |
+          bash scripts/export_sql_reference.sh 127.0.0.1 root ''
+          if ! git diff --quiet -- database/sql/; then
+            echo "::error::database/sql/ n'est pas à jour. Régénérez-le avec :"
+            echo "  bash nexus-api/scripts/export_sql_reference.sh"
+            git diff --stat -- database/sql/
+            exit 1
+          fi
+          echo "database/sql/ est synchronisé avec les migrations."
+
   # ---------------------------------------------------------------------------
   # Frontend React — typecheck, lint, build de production
   # ---------------------------------------------------------------------------

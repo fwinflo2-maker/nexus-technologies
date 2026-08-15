@@ -92,7 +92,7 @@ final class QuoteController
         $intent['originCountry'] = $originCountry;
 
         // ── 2. Capability Engine : providers éligibles ───────────
-        $providers = CapabilityEngine::findEligible($intent);
+        $providers = CapabilityEngine::findEligible($intent, $context->environment);
 
         // ── 3. Policy Engine : vérification avant quotes ────────
         // Conversion du montant source en EUR pour comparer aux plafonds
