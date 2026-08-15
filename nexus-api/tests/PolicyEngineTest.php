@@ -7,6 +7,7 @@ namespace Nexus\Tests;
 use Nexus\Core\Database;
 use Nexus\Core\HttpException;
 use Nexus\Services\PolicyEngine;
+use Nexus\Services\SanctionsScreening;
 use PDO;
 use PHPUnit\Framework\TestCase;
 use Throwable;
@@ -142,10 +143,29 @@ final class PolicyEngineTest extends TestCase
             'destCountry'    => 'FR',
         ];
 
-        $res = PolicyEngine::evaluate($user, $intent, 300.0);
+        // Ce test porte sur la disponibilité du wallet : on configure une
+        // liste de sanctions réelle pour que le filtrage ait effectivement
+        // lieu. Sans elle, le verdict serait REVIEW_REQUIRED — non pas à
+        // cause du solde, mais parce qu'un contrôle réglementaire manque
+        // (cf. SanctionsScreeningTest). Un APPROVED obtenu sans liste
+        // signifierait que le moteur déclare conforme ce qu'il n'a pas
+        // vérifié.
+        $saved = getenv(SanctionsScreening::ENV_COUNTRIES);
+        putenv(SanctionsScreening::ENV_COUNTRIES . '=KP,IR');
+
+        try {
+            $res = PolicyEngine::evaluate($user, $intent, 300.0);
+        } finally {
+            if ($saved === false) {
+                putenv(SanctionsScreening::ENV_COUNTRIES);
+            } else {
+                putenv(SanctionsScreening::ENV_COUNTRIES . '=' . $saved);
+            }
+        }
 
         $this->assertSame('APPROVED', $res['decision']);
         $this->assertSame(400.0, $res['details']['wallet_available']);
+        $this->assertTrue($res['details']['sanctions_screened']);
     }
 
     /**

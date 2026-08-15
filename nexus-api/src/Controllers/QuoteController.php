@@ -101,7 +101,7 @@ final class QuoteController
         $sourceToEur = self::rateToEur($intent['sourceCurrency']);
         $amountRef   = $intent['amount'] / $sourceToEur;
 
-        PolicyEngine::evaluate($user, $intent, $amountRef);
+        PolicyEngine::evaluate($user, $intent, $amountRef, $context->environment);
 
         // ── 4. Quote Engine : calcul des quotes par provider ────
         $quoteId = self::generateQuoteId();

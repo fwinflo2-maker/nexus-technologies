@@ -1,0 +1,114 @@
+# NEXUS — Audit de reprise (boucle 12)
+
+Session de reprise. **Le dépôt est la source de vérité** : rien issu des
+rapports précédents n'a été tenu pour acquis. Tout ce qui suit a été vérifié
+par exécution réelle, pas par lecture.
+
+## Baseline mesurée
+
+| Contrôle | Commande | Résultat |
+|---|---|---|
+| Suite de tests | `phpunit` sur MySQL réel | **459 tests, 2087 assertions, OK** |
+| Schéma ↔ migrations | `scripts/compare_schemas.sh` | **PASS** — 21 tables, 264 colonnes, 77 index, 24 FK, 37 ENUM |
+| Installation par migrations | `scripts/setup_test_db.php` | schéma + 19 migrations appliqués sans erreur |
+| Typecheck frontend | `tsc -b` | 0 erreur |
+| Lint frontend | `oxlint` | 0 erreur, 6 avertissements connus |
+| Build agents | `tsc` | 0 erreur |
+
+Environnement : PHP 8.4.24, MariaDB 11.8.6, Node 20.
+
+## Vérification des correctifs antérieurs (non-régression)
+
+Vérifiés **présents dans le code actuel**, pas seulement dans les rapports :
+
+- `EnvironmentGuard`, `ExecutionContext`, `ExecutionEnvironment` — présents ;
+- `platform_role` : ENUM à 11 valeurs, `NOT NULL DEFAULT 'user'`, index dédié ;
+- séparation `account_type` / `platform_role` — la colonne n'est écrite sur
+  aucun chemin utilisateur (`grep` sur INSERT/UPDATE : aucun résultat) ;
+- `register` valide `account_type` contre une liste blanche et n'accepte
+  jamais `platform_role` ;
+- `updateProfile` : allowlist stricte (`full_name`, `phone`,
+  `country_of_residence`) — pas d'élévation de privilège par mass assignment ;
+- honnêteté providers : `AbstractProviderAdapter` lève
+  `ProviderOperationNotImplemented` sur les 6 opérations métier, jamais un
+  faux succès ;
+- honnêteté KYC : `KycController::session` renvoie 503
+  `KYC_PROVIDER_NOT_CONFIGURED` si le provider est absent ;
+- `DemoMode` : refus inconditionnel du seeding en production.
+
+Aucune régression détectée sur ces points.
+
+## File de travail
+
+### CRITICAL
+
+**C1 — Le filtrage des sanctions est un no-op qui se déclare conforme.**
+
+`PolicyEngine::SANCTION_LIST` est une constante **vide**. La boucle de
+contrôle (§3) itère donc sur zéro élément, ne teste rien, et la méthode
+retourne :
+
+> `Tous les contrôles de conformité sont passés.`
+
+C'est exactement le motif interdit par la règle d'honnêteté (§37) : afficher
+un succès pour une opération qui n'a pas eu lieu. Le sujet est aggravant sur
+trois points :
+
+1. `PolicyEngine::evaluate()` est sur le chemin de production réel — appelé
+   par `QuoteController::create` et par `QuoteService::computeRoutes`, donc
+   par le Send Personal **et** les paiements Business ;
+2. le verdict est présenté à l'utilisateur et journalisé comme un contrôle
+   de conformité effectué ;
+3. **aucun test ne couvre les sanctions** (`grep -i sanction tests/` → vide).
+   Les 459 tests verts ne disent donc rien de ce trou.
+
+Un moteur de conformité qui affirme avoir filtré les sanctions alors qu'il
+n'a consulté aucune liste est un risque réglementaire direct, pas une dette
+technique.
+
+### HIGH
+
+**H1 — Le service d'agents Node n'a aucune authentification.**
+`agents/src/index.ts` expose `POST /api/intent` et `POST /api/execute` sans
+middleware d'auth, avec `cors()` grand ouvert. `ExecutionAgent.execute()`
+fabrique un `transactionId`, une `idempotencyKey`, une `ledgerEntry` avec
+`fees: 4.5` en dur et retourne `success: true` — sans jamais toucher le
+ledger réel. Le frontend ne l'appelle pas (`AgentsPage.tsx` est une page
+descriptive statique) et le README le qualifie de « conceptuel », donc
+l'exposition n'est pas active en pratique — mais le service est démarrable
+et ment sur son résultat. À isoler explicitement ou à supprimer.
+
+**H2 — `ComplianceAgent.evaluate()` code les mêmes faux contrôles.**
+`checks = { kyc: true, aml: true, sanctions: true, … }` en dur, puis
+« Tous les contrôles sont passés ». Même violation que C1, dans la couche
+agents.
+
+### MEDIUM
+
+**M1 — `CapabilityEngine::PERFORMANCE_SCORES` : scores de fiabilité en dur.**
+Documenté comme « simulation démo », mais alimente le scoring du
+`RoutingEngine`, donc le classement des routes proposées au client. Le
+commentaire est honnête, l'affichage ne l'est pas nécessairement.
+
+**M2 — 6 avertissements `react-refresh/only-export-components`.**
+Fichiers exportant à la fois des composants et des constantes/fonctions.
+
+### LOW
+
+**L1 — Docs dupliquées / archivées** (`NEXUS TECHNOLOGIES.md` racine 58 Ko vs
+`docs/NEXUS-TECHNOLOGIES.md`, HTML dupliqués entre `docs/` et
+`nexus-api/docs/`).
+**L2 — Captures PNG à la racine** (0,5 Mo) à déplacer dans `docs/assets/`.
+**L3 — Gros fichiers** : `WalletService.php` (1076 l.), `LedgerService.php`
+(942 l.), `client.ts` (1331 l.), `SendPage.tsx` (947 l.).
+
+### BLOCKED (dépendance externe réelle)
+
+- **Intégration réelle des 22 providers** — nécessite des credentials
+  sandbox/production que le dépôt n'a pas, et ne doit pas avoir. Le
+  comportement actuel (lever `ProviderOperationNotImplemented`) est le
+  comportement correct : il refuse au lieu de simuler.
+- **Liste de sanctions réelle** (OFAC/UE/ONU) — nécessite une source de
+  données ou un provider de screening. Voir le traitement de C1 : en
+  l'absence de source, le système doit **refuser ou signaler**, jamais
+  déclarer un contrôle passé.
