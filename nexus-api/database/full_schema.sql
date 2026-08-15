@@ -294,7 +294,7 @@ CREATE TABLE `provider_credentials` (
   `last_error` text DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  `owner_scope` bigint(20) unsigned GENERATED ALWAYS AS (ifnull(`user_id`,0)) STORED,
+  `owner_scope` bigint(20) unsigned GENERATED ALWAYS AS (ifnull(`user_id`,0)) VIRTUAL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_provider_creds_scope` (`owner_scope`,`provider_slug`,`environment`),
   KEY `idx_provider_creds_user` (`user_id`),

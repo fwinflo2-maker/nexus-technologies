@@ -77,13 +77,23 @@ SET @has_scope := (
 
 SET @sql := IF(
     @has_scope = 0,
-    -- STORED, et non PERSISTENT : les deux désignent une colonne générée
-    -- matérialisée, mais PERSISTENT est propre à MariaDB et MySQL 8 le
-    -- rejette (erreur 1064). STORED est le mot-clé standard, accepté par les
-    -- deux moteurs.
+    -- VIRTUAL, et non PERSISTENT/STORED.
+    --
+    -- PERSISTENT est l'orthographe MariaDB d'une colonne générée matérialisée ;
+    -- MySQL 8 ne connaît que STORED (erreur 1064 sinon). Mais STORED se heurte
+    -- à une seconde restriction MySQL, plus subtile : une clé étrangère posée
+    -- sur la colonne de BASE d'une colonne générée STORED ne peut pas utiliser
+    -- CASCADE / SET NULL / SET DEFAULT. Or `user_id` est à la fois la base de
+    -- `owner_scope` et la colonne portant `fk_provider_creds_user … ON DELETE
+    -- CASCADE` — d'où l'erreur 1215 « Cannot add foreign key constraint ».
+    --
+    -- VIRTUAL lève les deux obstacles : accepté par MySQL 8 comme par MariaDB,
+    -- indexable (l'unicité de portée fonctionne), et hors du champ de la
+    -- restriction sur les clés étrangères. La valeur étant dérivée par une
+    -- simple expression, ne pas la matérialiser n'a pas de coût notable.
     'ALTER TABLE provider_credentials
         ADD COLUMN owner_scope BIGINT UNSIGNED
-        AS (IFNULL(user_id, 0)) STORED',
+        AS (IFNULL(user_id, 0)) VIRTUAL',
     'SELECT "owner_scope deja presente" AS info'
 );
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
