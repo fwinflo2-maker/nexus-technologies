@@ -69,3 +69,6 @@
 
 # 0.22 — Image de profil (avatar) utilisateur/entreprise
 2026_08_15_add_user_avatar.sql
+
+# 0.23 — Rôles internes Nexus (8 dashboards spécialisés RBAC)
+2026_08_15_internal_roles.sql

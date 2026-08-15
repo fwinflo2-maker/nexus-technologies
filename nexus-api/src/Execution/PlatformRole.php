@@ -47,6 +47,15 @@ final class PlatformRole
     public const AI_AGENT            = 'ai_agent';
     public const SUPERADMIN          = 'superadmin';
 
+    // ── Rôles internes Nexus (8 dashboards spécialisés) ──────────────
+    public const OPERATIONS_MANAGER = 'operations_manager';
+    public const FINANCE_TREASURY   = 'finance_treasury';
+    public const COMPLIANCE_OFFICER = 'compliance_officer';
+    public const RISK_FRAUD         = 'risk_fraud';
+    public const PROVIDER_MANAGER   = 'provider_manager';
+    public const CUSTOMER_SUPPORT   = 'customer_support';
+    public const SECURITY_TECHNICAL = 'security_technical';
+
     /** Code d'erreur unique pour un refus de privilège plateforme. */
     public const ERROR_CODE = 'FORBIDDEN_PLATFORM_ROLE';
 
@@ -60,6 +69,7 @@ final class PlatformRole
     private const CREDENTIAL_ADMINS = [
         self::SUPERADMIN,
         self::PROVIDER_ENGINEER,
+        self::PROVIDER_MANAGER,
     ];
 
     /**
@@ -70,6 +80,13 @@ final class PlatformRole
      */
     private const OPERATIONS_VIEWERS = [
         self::SUPERADMIN,
+        self::OPERATIONS_MANAGER,
+        self::FINANCE_TREASURY,
+        self::COMPLIANCE_OFFICER,
+        self::RISK_FRAUD,
+        self::PROVIDER_MANAGER,
+        self::CUSTOMER_SUPPORT,
+        self::SECURITY_TECHNICAL,
         self::PROVIDER_ENGINEER,
         self::SECURITY_ENGINEER,
         self::BACKEND_ENGINEER,
@@ -95,7 +112,9 @@ final class PlatformRole
     private const CREDENTIAL_INVENTORY_VIEWERS = [
         self::SUPERADMIN,
         self::PROVIDER_ENGINEER,
+        self::PROVIDER_MANAGER,
         self::SECURITY_ENGINEER,
+        self::SECURITY_TECHNICAL,
         self::SRE_OPERATOR,
     ];
 
@@ -114,7 +133,9 @@ final class PlatformRole
     private const AUDIT_VIEWERS = [
         self::SUPERADMIN,
         self::SECURITY_ENGINEER,
+        self::SECURITY_TECHNICAL,
         self::COMPLIANCE_OPERATOR,
+        self::COMPLIANCE_OFFICER,
     ];
 
     /**
@@ -139,6 +160,7 @@ final class PlatformRole
     private const KYC_VIEWERS = [
         self::SUPERADMIN,
         self::COMPLIANCE_OPERATOR,
+        self::COMPLIANCE_OFFICER,
     ];
 
     /**
@@ -148,6 +170,7 @@ final class PlatformRole
     private const MAINTENANCE_OPERATORS = [
         self::SUPERADMIN,
         self::SRE_OPERATOR,
+        self::OPERATIONS_MANAGER,
     ];
 
     private function __construct()
@@ -176,6 +199,16 @@ final class PlatformRole
     {
         return [
             self::USER,
+            // Rôles internes Nexus (dashboards spécialisés)
+            self::SUPERADMIN,
+            self::OPERATIONS_MANAGER,
+            self::FINANCE_TREASURY,
+            self::COMPLIANCE_OFFICER,
+            self::RISK_FRAUD,
+            self::PROVIDER_MANAGER,
+            self::CUSTOMER_SUPPORT,
+            self::SECURITY_TECHNICAL,
+            // Rôles historiques (rétrocompatibilité)
             self::SUPPORT_OPERATOR,
             self::COMPLIANCE_OPERATOR,
             self::FINANCE_OPERATOR,
@@ -185,7 +218,6 @@ final class PlatformRole
             self::QA_ENGINEER,
             self::SRE_OPERATOR,
             self::AI_AGENT,
-            self::SUPERADMIN,
         ];
     }
 
@@ -229,6 +261,46 @@ final class PlatformRole
     public static function canViewKyc(?array $user): bool
     {
         return in_array(self::of($user), self::KYC_VIEWERS, true);
+    }
+
+    /**
+     * Dashboard interne associé à un rôle.
+     *
+     * Chaque rôle interne possède un dashboard spécialisé. Les rôles
+     * historiques sont mappés vers le dashboard le plus proche. `user` et les
+     * rôles non reconnus → null (pas de dashboard interne).
+     */
+    public static function dashboardOf(?array $user): ?string
+    {
+        return match (self::of($user)) {
+            self::SUPERADMIN          => 'executive',
+            self::OPERATIONS_MANAGER  => 'operations',
+            self::FINANCE_TREASURY, self::FINANCE_OPERATOR => 'finance',
+            self::COMPLIANCE_OFFICER, self::COMPLIANCE_OPERATOR => 'compliance',
+            self::RISK_FRAUD          => 'risk',
+            self::PROVIDER_MANAGER, self::PROVIDER_ENGINEER => 'providers',
+            self::CUSTOMER_SUPPORT, self::SUPPORT_OPERATOR => 'support',
+            self::SECURITY_TECHNICAL, self::SECURITY_ENGINEER, self::SRE_OPERATOR,
+            self::BACKEND_ENGINEER, self::QA_ENGINEER, self::AI_AGENT => 'technical',
+            default                   => null,
+        };
+    }
+
+    /** Dashboard interne par défaut d'un rôle (null si aucun). */
+    public static function dashboardForRole(string $role): ?string
+    {
+        return match ($role) {
+            self::SUPERADMIN          => 'executive',
+            self::OPERATIONS_MANAGER  => 'operations',
+            self::FINANCE_TREASURY, self::FINANCE_OPERATOR => 'finance',
+            self::COMPLIANCE_OFFICER, self::COMPLIANCE_OPERATOR => 'compliance',
+            self::RISK_FRAUD          => 'risk',
+            self::PROVIDER_MANAGER, self::PROVIDER_ENGINEER => 'providers',
+            self::CUSTOMER_SUPPORT, self::SUPPORT_OPERATOR => 'support',
+            self::SECURITY_TECHNICAL, self::SECURITY_ENGINEER, self::SRE_OPERATOR,
+            self::BACKEND_ENGINEER, self::QA_ENGINEER, self::AI_AGENT => 'technical',
+            default                   => null,
+        };
     }
 
     /**

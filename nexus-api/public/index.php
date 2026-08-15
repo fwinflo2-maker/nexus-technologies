@@ -155,6 +155,7 @@ $router->post('/providers/{slug}/test', [ProviderCredentialController::class, 't
 
 // --- NEXUS CONTROL CENTER : plan de contrôle de l'infrastructure -----------
 // Accès restreint côté SERVEUR (l'UI n'est jamais une couche de sécurité).
+$router->get('/control/access', [ControlCenterController::class, 'access']);
 $router->get('/control/overview', [ControlCenterController::class, 'overview']);
 $router->get('/control/providers', [ControlCenterController::class, 'providers']);
 $router->get('/control/providers/{slug}', [ControlCenterController::class, 'providerDetail']);

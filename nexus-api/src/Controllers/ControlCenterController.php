@@ -60,6 +60,37 @@ final class ControlCenterController
         return $user;
     }
 
+    /**
+     * GET /api/control/access — surfaces internes accessibles au rôle.
+     *
+     * Détermine, côté SERVEUR, quels dashboards/surfaces le rôle connecté a
+     * le droit de voir. Le frontend n'a qu'à afficher ce que le backend
+     * accepte de renvoyer (le backend reste l'autorité sur chaque ressource).
+     */
+    public static function access(Request $request): void
+    {
+        $request = AuthMiddleware::handle($request);
+        $user    = $request->attribute('user');
+        $role    = PlatformRole::of($user);
+
+        $dashboard = PlatformRole::dashboardOf($user);
+
+        Response::success([
+            'role'      => $role,
+            'dashboard' => $dashboard,
+            'surfaces'  => [
+                'overview'            => PlatformRole::canViewOperations($user),
+                'providers'           => PlatformRole::canViewCredentialInventory($user),
+                'clients'             => PlatformRole::isSuperadmin($user),
+                'audit'               => PlatformRole::canViewAudit($user),
+                'kyc'                 => PlatformRole::canViewKyc($user),
+                'maintenance'         => PlatformRole::canRunMaintenance($user),
+                'credentials'         => PlatformRole::canAdministerCredentials($user),
+                'dashboard'           => $dashboard,
+            ],
+        ]);
+    }
+
     /** GET /api/control/overview */
     public static function overview(Request $request): void
     {
