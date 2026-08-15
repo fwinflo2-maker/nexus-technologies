@@ -138,7 +138,7 @@ export default function ControlClientsPage() {
       {detailState !== 'idle' && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 200, display: 'flex', justifyContent: 'flex-end' }}>
           <div style={{
-            width: 'min(520px, 94vw)', height: '100%', background: C.panel,
+            width: 'min(520px, 94vw)', height: '100vh', background: C.panel,
             borderLeft: `1px solid ${C.borderStrong}`, padding: 24, overflowY: 'auto', position: 'relative',
           }}>
             <button onClick={() => setDetailState('idle')} style={{ position: 'absolute', top: 14, right: 14, border: 'none', background: 'transparent', color: C.dim, fontSize: 18, cursor: 'pointer' }}>✕</button>
@@ -201,7 +201,7 @@ function ClientDetailCard({ client, onClose }: { client: ControlClientDetail; on
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 200, display: 'flex', justifyContent: 'flex-end' }}>
       <div style={{
-        width: 'min(560px, 96vw)', height: '100%', background: C.panel,
+        width: 'min(560px, 96vw)', height: '100vh', background: C.panel,
         borderLeft: `1px solid ${C.borderStrong}`, padding: 24, overflowY: 'auto', position: 'relative',
       }}>
         <button onClick={onClose} style={{ position: 'absolute', top: 14, right: 14, border: 'none', background: 'transparent', color: C.dim, fontSize: 20, cursor: 'pointer' }}>✕</button>
