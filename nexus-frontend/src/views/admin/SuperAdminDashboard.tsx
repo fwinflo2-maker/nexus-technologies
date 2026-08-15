@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import AdminLayout from './AdminLayout';
 import ProviderKeys from './ProviderKeys';
+import AdminAccounts from './AdminAccounts';
 
 /** Données agrégées du Super Admin (GET /api/admin/overview). */
 interface AdminOverview {
@@ -128,22 +129,17 @@ export default function SuperAdminDashboard() {
             </>
           )}
 
-          {/* ── Comptes ── */}
+          {/* ── Comptes : liste riche classée par secteur + popup détail ── */}
           {section === 'accounts' && (
             <>
-              <Header title="Comptes" desc="Tous les comptes Nexus par type et statut." />
-              <div className="g4">
+              <Header title="Comptes" desc="Tous les clients Nexus classés par secteur (Personnel / Business). Cliquez sur un compte pour voir le détail complet." />
+              <div className="g4" style={{ marginBottom: 20 }}>
                 <Card title="Total" icon="👥"><Num v={ov.accounts.total} /></Card>
                 <Card title="Personnel" icon="👤"><Num v={ov.accounts.personal} /></Card>
                 <Card title="Business" icon="🏢"><Num v={ov.accounts.business} /></Card>
                 <Card title="Connect" icon="🔌"><Num v={ov.accounts.connect} /></Card>
               </div>
-              <div className="g4" style={{ marginTop: 12 }}>
-                <Card title="Actifs" icon="✅" tone="gr"><Num v={ov.accounts.active} c="var(--green)" /></Card>
-                <Card title="En attente" icon="⏳" tone="g"><Num v={ov.accounts.pending} c="var(--gold)" /></Card>
-                <Card title="Suspendus" icon="⛔" tone="v"><Num v={ov.accounts.suspended} c="var(--red)" /></Card>
-                <Card title="Wallets" icon="💳"><Num v={ov.wallets} /></Card>
-              </div>
+              <AdminAccounts />
             </>
           )}
 
