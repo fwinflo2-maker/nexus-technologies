@@ -192,9 +192,30 @@ function DetailPopup({ client, loading, onClose }: { client: ControlClientDetail
               <Row k="Téléphone" v={client.phone || '—'} />
               <Row k="Adresse" v={client.address || '—'} />
               <Row k="Ville" v={client.city || '—'} />
+              {client.postal_code && <Row k="Code postal" v={client.postal_code} />}
               <Row k="Rôle plateforme" v={client.platform_role} />
               <Row k="Membre depuis" v={new Date(client.created_at).toLocaleDateString('fr-FR')} />
             </Section>
+
+            {/* Personnes physiques */}
+            {client.account_type !== 'business' && (client.birth_date || client.gender) && (
+              <Section title="Personne physique">
+                {client.birth_date && <Row k="Date de naissance" v={client.birth_date} />}
+                {client.gender && <Row k="Genre" v={client.gender} />}
+              </Section>
+            )}
+
+            {/* Entreprise */}
+            {client.account_type === 'business' && (
+              <Section title="Entreprise">
+                <Row k="Raison sociale" v={client.company_name || client.full_name} />
+                <Row k="Forme juridique" v={client.legal_form || '—'} />
+                <Row k="Immatriculation" v={client.company_registration_number || '—'} />
+                <Row k="Secteur d'activité" v={client.industry || '—'} />
+                <Row k="Taille" v={client.company_size || '—'} />
+                <Row k="Site web" v={client.website || '—'} />
+              </Section>
+            )}
 
             {/* Soldes */}
             <Section title="Soldes">

@@ -270,6 +270,9 @@ export function RegisterPage({ onSwitchToLogin, onBackHome }: RegisterPageProps)
     const phoneCode = isBusiness ? business.phoneCode : personal.phoneCode;
     const pw = isBusiness ? business.password : personal.password;
 
+    // Riche profil : envoie toutes les infos collectées pour l'admin.
+    const countryName = isBusiness ? business.companyCountry : personal.country;
+    const countryCode = countries.find((c) => c.name === countryName)?.code ?? '';
     const resp = await apiRegister({
       full_name: name,
       email,
@@ -277,6 +280,16 @@ export function RegisterPage({ onSwitchToLogin, onBackHome }: RegisterPageProps)
       account_type: accountType,
       phone_code: phoneCode,
       phone,
+      // Personnes physiques
+      birth_date: !isBusiness ? personal.birthDate : undefined,
+      country_of_residence: countryCode || undefined,
+      // Entreprises
+      company_name: isBusiness ? business.companyName : undefined,
+      legal_form: isBusiness ? business.legalForm : undefined,
+      company_registration_number: isBusiness ? business.registrationNumber : undefined,
+      industry: isBusiness ? business.industry : undefined,
+      company_size: isBusiness ? business.companySize : undefined,
+      website: isBusiness ? business.website : undefined,
     });
     setLoading(false);
     if (!resp.success) {

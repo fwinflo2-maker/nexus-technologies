@@ -78,3 +78,6 @@
 
 # 0.25 — Nexus Connect (comptes B2B/API) + employés internes
 2026_08_15_connect_accounts_employees.sql
+
+# 0.26 — Profil client riche (infos saisies à l'inscription)
+2026_08_15_rich_client_profile.sql

@@ -376,6 +376,8 @@ final class ControlCenterController
         $stmt = $pdo->prepare(
             'SELECT u.id, u.full_name, u.email, u.phone, u.account_type, u.platform_role,
                     u.status, u.kyc_level, u.country_of_residence, u.avatar, u.auth_provider,
+                    u.birth_date, u.gender, u.city, u.postal_code, u.address,
+                    u.company_name, u.legal_form, u.company_registration_number, u.industry, u.company_size, u.website,
                     u.created_at, u.updated_at,
                     COALESCE(SUM(CASE WHEN w.currency = \'EUR\' THEN w.balance ELSE 0 END), 0) AS balance_eur,
                     COALESCE(SUM(CASE WHEN w.currency = \'USD\' THEN w.balance ELSE 0 END), 0) AS balance_usd,
@@ -466,6 +468,16 @@ final class ControlCenterController
                 'updated_at'           => $row['updated_at'],
                 'address'              => $address,
                 'city'                 => $city,
+                // Profil riche (collecté à l'inscription)
+                'birth_date'           => $row['birth_date'],
+                'gender'               => $row['gender'],
+                'postal_code'          => $row['postal_code'],
+                'company_name'         => $row['company_name'],
+                'legal_form'           => $row['legal_form'],
+                'company_registration_number' => $row['company_registration_number'],
+                'industry'             => $row['industry'],
+                'company_size'         => $row['company_size'],
+                'website'              => $row['website'],
                 'balances'             => [
                     'EUR' => $row['balance_eur'],
                     'USD' => $row['balance_usd'],

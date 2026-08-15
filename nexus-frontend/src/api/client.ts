@@ -849,6 +849,19 @@ export async function apiRegister(payload: {
   account_type: 'personal' | 'business';
   phone_code?: string;
   phone?: string;
+  // Profil riche — envoyé au backend pour l'admin
+  birth_date?: string;
+  gender?: string;
+  city?: string;
+  postal_code?: string;
+  address?: string;
+  country_of_residence?: string;
+  company_name?: string;
+  legal_form?: string;
+  company_registration_number?: string;
+  industry?: string;
+  company_size?: string;
+  website?: string;
 }): Promise<ApiResponse<{ token: string; user: ApiUser }>> {
   const data = await request<{ token: string; user: ApiUser }>('POST', '/register', payload as Record<string, unknown>);
   if (data.success && data.data) {
@@ -1406,6 +1419,16 @@ export interface ControlClientDetail {
   updated_at: string;
   address: string | null;
   city: string | null;
+  // Profil riche (collecté à l'inscription)
+  birth_date: string | null;
+  gender: string | null;
+  postal_code: string | null;
+  company_name: string | null;
+  legal_form: string | null;
+  company_registration_number: string | null;
+  industry: string | null;
+  company_size: string | null;
+  website: string | null;
   balances: { EUR: string; USD: string; XAF: string };
   accounts: ControlAccount[];
   transactions: Array<Record<string, unknown>>;

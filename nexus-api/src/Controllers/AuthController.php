@@ -66,6 +66,21 @@ final class AuthController
         $phone       = trim((string) $request->input('phone', ''));
         $fullPhone   = ($phone !== '' && $phoneCode !== '') ? $phoneCode . $phone : null;
 
+        // --- Profil riche (collecté à l'inscription, stocké en base) ---------
+        $birthDate    = trim((string) $request->input('birth_date', ''));
+        $gender       = trim((string) $request->input('gender', ''));
+        $city         = trim((string) $request->input('city', ''));
+        $postalCode   = trim((string) $request->input('postal_code', ''));
+        $address      = trim((string) $request->input('address', ''));
+        $countryCode  = strtoupper(trim((string) $request->input('country_of_residence', '')));
+        // Entreprise
+        $companyName  = trim((string) $request->input('company_name', ''));
+        $legalForm    = trim((string) $request->input('legal_form', ''));
+        $regNumber    = trim((string) $request->input('company_registration_number', ''));
+        $industry     = trim((string) $request->input('industry', ''));
+        $companySize  = trim((string) $request->input('company_size', ''));
+        $website      = trim((string) $request->input('website', ''));
+
         // --- Validation -------------------------------------------------------
         if ($fullName === '' || mb_strlen($fullName) > 120) {
             Response::badRequest('Le nom complet est requis (120 caractères maximum).');
@@ -99,8 +114,12 @@ final class AuthController
             $pdo->beginTransaction();
 
             $stmt = $pdo->prepare(
-                'INSERT INTO users (full_name, email, phone, password_hash, account_type, auth_provider, status, kyc_level)
-                 VALUES (:full_name, :email, :phone, :password_hash, :account_type, :auth_provider, :status, :kyc_level)'
+                'INSERT INTO users (full_name, email, phone, password_hash, account_type, auth_provider, status, kyc_level,
+                                    birth_date, gender, city, postal_code, address, country_of_residence,
+                                    company_name, legal_form, company_registration_number, industry, company_size, website)
+                 VALUES (:full_name, :email, :phone, :password_hash, :account_type, :auth_provider, :status, :kyc_level,
+                         :birth_date, :gender, :city, :postal_code, :address, :country_of_residence,
+                         :company_name, :legal_form, :reg_number, :industry, :company_size, :website)'
             );
             $stmt->execute([
                 'full_name'     => $fullName,
@@ -111,6 +130,18 @@ final class AuthController
                 'auth_provider' => 'local',
                 'status'        => 'PENDING',
                 'kyc_level'     => 'none',
+                'birth_date'    => $birthDate !== '' ? $birthDate : null,
+                'gender'        => $gender !== '' ? $gender : null,
+                'city'          => $city !== '' ? $city : null,
+                'postal_code'   => $postalCode !== '' ? $postalCode : null,
+                'address'       => $address !== '' ? $address : null,
+                'country_of_residence' => $countryCode !== '' && strlen($countryCode) === 2 ? $countryCode : null,
+                'company_name'  => $companyName !== '' ? $companyName : null,
+                'legal_form'    => $legalForm !== '' ? $legalForm : null,
+                'reg_number'    => $regNumber !== '' ? $regNumber : null,
+                'industry'      => $industry !== '' ? $industry : null,
+                'company_size'  => $companySize !== '' ? $companySize : null,
+                'website'       => $website !== '' ? $website : null,
             ]);
             $userId = (int) $pdo->lastInsertId();
 
