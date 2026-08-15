@@ -66,3 +66,6 @@
 
 # 0.21 — Suppression de la table morte oauth_identities (Google Auth désactivée)
 2026_08_15_drop_oauth_identities.sql
+
+# 0.22 — Image de profil (avatar) utilisateur/entreprise
+2026_08_15_add_user_avatar.sql

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useDashT } from '../../data/dashboard-i18n';
+import Avatar from '../Avatar';
 
 type Mode = 'personal' | 'business';
 
@@ -175,7 +176,7 @@ export default function Sidebar({ mode }: SidebarProps) {
 
         <div className="sidebar-footer">
           <div className="sidebar-user">
-            <div className="nb-user-avatar">{effectiveMode === 'personal' ? '👤' : '🏢'}</div>
+            <Avatar avatar={user?.avatar} accountType={user?.account_type} size={34} className="nb-user-avatar" />
             <div>
               <div className="nb-user-name">{user?.name || 'Utilisateur'}</div>
               <div className="nb-user-verified">● Compte vérifié</div>

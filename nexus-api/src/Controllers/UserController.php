@@ -33,6 +33,8 @@ final class UserController
         $fullName = trim((string) $request->input('full_name', ''));
         $phone = trim((string) $request->input('phone', ''));
         $countryOfResidence = trim((string) $request->input('country_of_residence', ''));
+        // Avatar : soit une URL http(s), soit une data URI image. NULL/'' efface l'avatar.
+        $avatar = $request->input('avatar', null);
 
         // Validation
         if ($fullName !== '' && mb_strlen($fullName) > 120) {
@@ -41,6 +43,17 @@ final class UserController
 
         if ($phone !== '' && strlen($phone) > 20) {
             Response::badRequest('Le numéro de téléphone ne peut pas dépasser 20 caractères.');
+        }
+
+        if ($avatar !== null && $avatar !== '') {
+            $isDataUri = str_starts_with($avatar, 'data:image/') && str_contains($avatar, ';base64,');
+            $isUrl = str_starts_with($avatar, 'https://') || str_starts_with($avatar, 'http://');
+            if (!$isDataUri && !$isUrl) {
+                Response::badRequest('Avatar invalide : attendu une URL http(s) ou une image data URI.');
+            }
+            if (strlen($avatar) > 500000) { // ~500 Ko max
+                Response::badRequest("L'avatar ne peut pas dépasser 500 Ko.");
+            }
         }
 
         $pdo = Database::getConnection();
@@ -69,6 +82,13 @@ final class UserController
                 $updates[] = 'country_of_residence = :country_of_residence';
                 $params[':country_of_residence'] = $countryOfResidence;
                 $changedFields[] = 'country_of_residence';
+            }
+
+            // Avatar : présent dans le payload (même '' pour effacer) → mise à jour.
+            if ($avatar !== null) {
+                $updates[] = 'avatar = :avatar';
+                $params[':avatar'] = $avatar === '' ? null : $avatar;
+                $changedFields[] = 'avatar';
             }
 
             // Validation AVANT l'ouverture de la transaction : Response::badRequest()

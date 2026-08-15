@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { LanguageSwitcher } from '../LanguageSwitcher';
 import NotificationBell from './NotificationBell';
+import Avatar from '../Avatar';
 
 type Mode = 'personal' | 'business';
 
@@ -56,9 +57,7 @@ export default function Topbar({ mode, title, subtitle }: { mode: Mode; title: s
         <LanguageSwitcher variant="dashboard" />
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-          <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(0,200,255,0.12)', border: '1px solid rgba(0,200,255,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>
-            {mode === 'personal' ? '👤' : '🏢'}
-          </div>
+          <Avatar avatar={user?.avatar} accountType={mode} size={30} />
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-bright)' }}>
               {user?.name || 'Utilisateur'}

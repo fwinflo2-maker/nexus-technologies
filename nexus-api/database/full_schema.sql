@@ -424,6 +424,7 @@ CREATE TABLE `users` (
   `country_of_residence` char(2) DEFAULT NULL,
   `kyc_verified_at` datetime DEFAULT NULL,
   `country_of_residence_verified_at` datetime DEFAULT NULL,
+  `avatar` text DEFAULT NULL COMMENT 'Image de profil (URL ou data URI). NULL = fallback emoji.',
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),

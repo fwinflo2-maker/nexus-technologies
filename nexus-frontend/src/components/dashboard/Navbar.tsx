@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useDashT } from '../../data/dashboard-i18n';
+import Avatar from '../Avatar';
 
 type Mode = 'personal' | 'business';
 
@@ -231,7 +232,7 @@ export default function Navbar({ mode, onModeChange }: NavbarProps) {
 
           <div className="nb-drawer-footer">
             <div className="nb-drawer-user">
-              <div className="nb-user-avatar">{effectiveMode === 'personal' ? '👤' : '🏢'}</div>
+              <Avatar avatar={user?.avatar} accountType={effectiveMode} size={30} className="nb-user-avatar" />
               <div>
                 <div className="nb-user-name">{user?.name || 'Utilisateur'}</div>
                 <div className="nb-user-verified">● Compte vérifié</div>

@@ -55,6 +55,7 @@ export interface ApiUser {
   status: string;
   kyc_level: string;
   country_of_residence?: string | null;
+  avatar?: string | null;
   created_at: string;
 }
 
@@ -1132,6 +1133,7 @@ export interface UserProfile {
   auth_provider: 'local';
   status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'CLOSED';
   kyc_level: 'none' | 'basic' | 'standard' | 'advanced';
+  avatar?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -1158,6 +1160,7 @@ export interface UpdateProfilePayload {
   full_name?: string;
   phone?: string;
   country_of_residence?: string;
+  avatar?: string | null;
 }
 
 /** Payload pour PUT /api/users/me/password. */

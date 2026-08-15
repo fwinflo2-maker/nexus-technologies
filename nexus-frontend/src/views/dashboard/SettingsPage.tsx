@@ -20,6 +20,11 @@ export default function SettingsPage() {
     country_of_residence: '',
   });
 
+  // Avatar
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarToSave, setAvatarToSave] = useState<string | null>(null);
+  const [avatarSaving, setAvatarSaving] = useState(false);
+
   // Mot de passe
   const [passwordData, setPasswordData] = useState({
     current_password: '',
@@ -63,6 +68,46 @@ export default function SettingsPage() {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  }
+
+  /** Lit le fichier image choisi et en fait un aperçu + data URI à enregistrer. */
+  function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 500000) {
+      setError('L\'image ne doit pas dépasser 500 Ko.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUri = reader.result as string;
+      setAvatarPreview(dataUri);
+      setAvatarToSave(dataUri);
+      setError(null);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  /** Enregistre l'avatar via l'API réelle (PUT /api/users/me). */
+  async function saveAvatar() {
+    if (avatarToSave === null) return;
+    setAvatarSaving(true);
+    setError(null);
+    try {
+      const resp = await apiUpdateProfile({ avatar: avatarToSave });
+      if (resp.success) {
+        setSuccess('Photo de profil mise à jour.');
+        setAvatarPreview(null);
+        setAvatarToSave(null);
+        await loadProfile();
+      } else {
+        setError(resp.error || 'Erreur lors de l\'enregistrement de la photo.');
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Erreur lors de l\'enregistrement de la photo.');
+    } finally {
+      setAvatarSaving(false);
     }
   }
 
@@ -168,6 +213,52 @@ export default function SettingsPage() {
     return (
       <div className="settings-section animate-up">
         <h3 className="section-title">Profil</h3>
+
+        {/* Photo de profil */}
+        <div className="form-group" style={{ marginBottom: 8 }}>
+          <label className="form-label">Photo de profil</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+            <div
+              style={{
+                width: 72, height: 72, borderRadius: '50%', flexShrink: 0, overflow: 'hidden',
+                background: 'rgba(0,200,255,0.1)', border: '1px solid rgba(0,200,255,0.3)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32,
+              }}
+            >
+              {avatarPreview ? (
+                <img src={avatarPreview} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : profile.avatar ? (
+                <img src={profile.avatar} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                <span>{profile.account_type === 'business' ? '🏢' : '👤'}</span>
+              )}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <label className="btn btn-ghost" style={{ fontSize: 11, cursor: 'pointer', display: 'inline-flex', width: 'fit-content' }}>
+                📷 Choisir une image
+                <input
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={handleAvatarChange}
+                />
+              </label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {(avatarPreview || profile.avatar) && (
+                  <button className="btn btn-ghost" style={{ fontSize: 11 }} onClick={() => { setAvatarPreview(null); setAvatarToSave(''); }}>
+                    🗑 Supprimer
+                  </button>
+                )}
+                {avatarPreview && (
+                  <button className="btn btn-cyan" style={{ fontSize: 11 }} onClick={saveAvatar} disabled={avatarSaving}>
+                    {avatarSaving ? 'Enregistrement…' : '💾 Enregistrer'}
+                  </button>
+                )}
+              </div>
+              <span className="form-hint">JPG, PNG… — affichée dans la barre latérale et l'en-tête.</span>
+            </div>
+          </div>
+        </div>
 
         <div className="form-grid">
         <div className="form-group form-group--full">
