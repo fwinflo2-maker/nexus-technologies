@@ -53,3 +53,6 @@
 
 # 0.17 — Credentials providers = actifs de plateforme (correctif CRITICAL)
 2026_08_14_platform_credentials.sql
+
+# 0.18 — Une ecriture comptable ne peut pas changer d'environnement (FK composite)
+2026_08_15_ledger_environment_fk.sql

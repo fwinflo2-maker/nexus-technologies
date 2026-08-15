@@ -164,6 +164,8 @@ CREATE TABLE `ledger_entries` (
   KEY `idx_ledger_wallet_time` (`wallet_id`,`created_at`),
   KEY `idx_ledger_ref` (`reference_type`,`reference_id`),
   KEY `idx_ledger_environment` (`environment`,`created_at`),
+  KEY `fk_ledger_operation_env` (`operation_id`,`environment`),
+  CONSTRAINT `fk_ledger_operation_env` FOREIGN KEY (`operation_id`, `environment`) REFERENCES `wallet_operations` (`id`, `environment`) ON DELETE CASCADE,
   CONSTRAINT `fk_ledger_wallet` FOREIGN KEY (`wallet_id`) REFERENCES `wallets` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -466,6 +468,7 @@ CREATE TABLE `wallet_operations` (
   `completed_at` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_op_idempotency_env` (`idempotency_key`,`environment`),
+  UNIQUE KEY `uq_op_id_env` (`id`,`environment`),
   KEY `idx_op_user_status` (`user_id`,`status`),
   KEY `idx_op_user_created` (`user_id`,`created_at`),
   KEY `fk_op_source_wallet` (`source_wallet_id`),
