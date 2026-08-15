@@ -63,3 +63,6 @@
 # 0.20 — Le cache FX est isolé par environnement (un taux sandbox ne doit
 # jamais coter de l'argent réel)
 2026_08_15_fx_rates_environment.sql
+
+# 0.21 — Suppression de la table morte oauth_identities (Google Auth désactivée)
+2026_08_15_drop_oauth_identities.sql

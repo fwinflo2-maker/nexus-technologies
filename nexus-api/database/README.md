@@ -117,13 +117,13 @@ Chiffres relevés sur la base réellement installée par le runner de migrations
 
 | Élément | Valeur |
 |---|---|
-| Tables | 21 |
-| Colonnes | 264 |
-| Index | 77 |
-| Contraintes uniques | 36 |
-| Clés étrangères | 24 |
-| Colonnes ENUM | 37 |
-| Migrations | 21 (+ `schema.sql`) |
+| Tables | 20 |
+| Colonnes | 259 |
+| Index | 75 |
+| Contraintes uniques | 35 |
+| Clés étrangères | 23 |
+| Colonnes ENUM | 38 |
+| Migrations | 22 (+ `schema.sql`) |
 
 ## SQL de référence — `database/sql/`
 
@@ -151,13 +151,14 @@ le dépôt sait installer, pas l'état accidentel d'un poste de travail.
 > **démonstration**. Ils ne doivent jamais être chargés en production.
 
 Reproductibilité vérifiée : une base vierge reconstruite depuis
-`sql/nexus_schema.sql` présente les mêmes 264 colonnes que l'installation par
-migrations, et la suite complète (502 tests) passe dessus.
+`sql/nexus_schema.sql` présente les mêmes 259 colonnes que l'installation par
+migrations, et la suite complète (555 tests) passe dessus.
 
-### Table à surveiller
+### Table supprimée — `oauth_identities` (migration 0.21)
 
-`oauth_identities` est créée par `2026_08_10_oauth_phone.sql` mais **n'est
-référencée par aucun code PHP** : les identités Google sont stockées dans
-`users.auth_provider` + `users.provider_id`. Elle est conservée pour ne pas
-détruire de données sur une installation existante, mais devrait être
-supprimée par une migration dédiée après vérification.
+`oauth_identities`, créée par `2026_08_10_oauth_phone.sql`, n'était **référencée
+par aucun code PHP ni test** et n'avait **aucune clé étrangère entrante ni
+aucune donnée**. Les identités Google sont stockées dans `users.auth_provider`
++ `users.provider_id`. Google Auth étant désactivée (commit `9b6dfbe`), la
+table a été **supprimée** par la migration `2026_08_15_drop_oauth_identities.sql`
+— voir `docs/PHASE4-BOUCLE-B.md`.
