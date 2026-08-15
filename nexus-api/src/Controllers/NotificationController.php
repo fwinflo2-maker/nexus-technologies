@@ -216,7 +216,7 @@ final class NotificationController
      * Insère les notifications de démonstration au premier login.
      *
      * Idempotent : si l'utilisateur possède déjà une notification, rien n'est
-     * inséré. Appelé depuis AuthController (connexion, registre, Google).
+     * inséré. Appelé depuis AuthController (connexion, registre).
      */
     public static function seedDemoNotificationsIfEmpty(\PDO $pdo, int $userId): void
     {

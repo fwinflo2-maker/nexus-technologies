@@ -167,7 +167,6 @@ nexus-api/
 | GET     | `/api/health`              | Non     | Vérification DB + status                          |
 | POST    | `/api/register`            | Non     | Inscription (email/mot de passe)                  |
 | POST    | `/api/login`               | Non     | Connexion                                         |
-| POST    | `/api/google`              | Non     | Auth Google OAuth                                 |
 | POST    | `/api/logout`              | Oui     | Déconnexion (révocation token)                    |
 | GET     | `/api/me`                  | Oui     | Profil utilisateur connecté                       |
 | GET     | `/api/dashboard/summary`   | Oui     | Soldes, KPIs, transactions récentes, bannière     |

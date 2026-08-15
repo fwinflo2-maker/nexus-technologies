@@ -51,7 +51,7 @@ export interface ApiUser {
   email: string;
   phone?: string;
   account_type: 'personal' | 'business';
-  auth_provider: 'local' | 'google';
+  auth_provider: 'local';
   status: string;
   kyc_level: string;
   country_of_residence?: string | null;
@@ -866,16 +866,6 @@ export async function apiLogin(identifier: string, password: string): Promise<Ap
   return data;
 }
 
-/** Connexion / inscription via Google OAuth (ID token). */
-export async function apiGoogleAuth(credential: string): Promise<ApiResponse<{ token: string; user: ApiUser }>> {
-  const data = await request<{ token: string; user: ApiUser }>('POST', '/google', { credential });
-  if (data.success && data.data) {
-    setToken(data.data.token);
-    localStorage.setItem('nexus_user', JSON.stringify(data.data.user));
-  }
-  return data;
-}
-
 /** Récupère le profil de l'utilisateur connecté (GET /api/me). */
 export async function apiMe(): Promise<ApiResponse<{ user: ApiUser }>> {
   const data = await request<{ user: ApiUser }>('GET', '/me');
@@ -1139,7 +1129,7 @@ export interface UserProfile {
   email: string;
   phone: string | null;
   account_type: 'personal' | 'business';
-  auth_provider: 'local' | 'google';
+  auth_provider: 'local';
   status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'CLOSED';
   kyc_level: 'none' | 'basic' | 'standard' | 'advanced';
   created_at: string;

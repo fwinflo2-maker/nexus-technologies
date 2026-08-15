@@ -107,7 +107,6 @@ $router->get('/health', static function (Request $request): void {
 // --- Authentification ----------------------------------------------------------
 $router->post('/register', [AuthController::class, 'register']);
 $router->post('/login', [AuthController::class, 'login']);
-$router->post('/google', [AuthController::class, 'google']);
 $router->post('/logout', [AuthController::class, 'logout']);
 $router->get('/me', [AuthController::class, 'me']);
 

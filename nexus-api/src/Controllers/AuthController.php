@@ -15,8 +15,7 @@ use PDOException;
 // Note : AccountController est importé via autoloader, pas besoin de use
 
 /**
- * Authentification : inscription (email/téléphone), connexion, Google OAuth,
- * déconnexion et profil.
+ * Authentification : inscription (email/téléphone), connexion, déconnexion et profil.
  *
  * Toutes les méthodes sont statiques et reçoivent la requête normalisée.
  * Les réponses sont émises via Nexus\Core\Response (jamais de sortie brute).
@@ -275,137 +274,6 @@ final class AuthController
         ]);
     }
 
-    /**
-     * POST /api/google — authentification via Google OAuth.
-     *
-     * Reçoit un ID Token (credential) généré par Google Identity Services.
-     * Vérifie le token auprès de Google, puis crée ou retrouve l'utilisateur.
-     * Un compte est activé automatiquement (statut ACTIVE) car Google a déjà
-     * vérifié l'identité.
-     */
-    public static function google(Request $request): void
-    {
-        $idToken = trim((string) $request->input('credential', ''));
-
-        if ($idToken === '') {
-            Response::badRequest('Le credential Google est requis.');
-        }
-
-        // --- Vérification du token auprès de Google ---------------------------
-        $googleData = self::verifyGoogleToken($idToken);
-
-        if ($googleData === null) {
-            Response::unauthorized('Token Google invalide ou expiré.');
-        }
-
-        $googleEmail = strtolower((string) $googleData['email']);
-        $googleName  = (string) ($googleData['name'] ?? '');
-        $googleSub   = (string) $googleData['sub'];
-        $googlePhoto = (string) ($googleData['picture'] ?? '');
-
-        if (!filter_var($googleEmail, FILTER_VALIDATE_EMAIL)) {
-            Response::badRequest('Adresse email Google invalide.');
-        }
-
-        $pdo = Database::getConnection();
-
-        // --- Recherche d'un utilisateur existant (par email ou provider_id) ---
-        $stmt = $pdo->prepare(
-            'SELECT * FROM users WHERE email = :email OR (auth_provider = :provider AND provider_id = :provider_id) LIMIT 1'
-        );
-        $stmt->execute([
-            'email'       => $googleEmail,
-            'provider'    => 'google',
-            'provider_id' => $googleSub,
-        ]);
-        $user = $stmt->fetch();
-
-        if ($user !== false) {
-            // --- Utilisateur existant → connexion ------------------------------
-            $userId = (int) $user['id'];
-            self::audit($userId, 'auth.google_login', 'users', $userId, [
-                'google_sub' => $googleSub,
-            ], $request);
-        } else {
-            // --- Nouveau compte Google -----------------------------------------
-            try {
-                $pdo->beginTransaction();
-
-                $stmt = $pdo->prepare(
-                    'INSERT INTO users (full_name, email, phone, password_hash, account_type, auth_provider, provider_id, status, kyc_level)
-                     VALUES (:full_name, :email, :phone, :password_hash, :account_type, :auth_provider, :provider_id, :status, :kyc_level)'
-                );
-                $stmt->execute([
-                    'full_name'     => $googleName !== '' ? $googleName : explode('@', $googleEmail)[0],
-                    'email'         => $googleEmail,
-                    'phone'         => null,
-                    'password_hash' => '',
-                    'account_type'  => 'personal',
-                    'auth_provider' => 'google',
-                    'provider_id'   => $googleSub,
-                    'status'        => 'ACTIVE',  // Google a vérifié l'identité
-                    'kyc_level'     => 'none',
-                ]);
-                $userId = (int) $pdo->lastInsertId();
-
-                // Wallets de bienvenue.
-                $walletStmt = $pdo->prepare(
-                    'INSERT INTO wallets (user_id, currency, balance, available_balance)
-                     VALUES (:user_id, :currency, :balance, :available_balance)'
-                );
-                // §29 : jamais de solde de démonstration en production.
-                foreach (\Nexus\Core\DemoMode::seedingAllowed() ? self::WELCOME_WALLETS : [] as $wallet) {
-                    $walletStmt->execute([
-                        'user_id'           => $userId,
-                        'currency'          => $wallet['currency'],
-                        'balance'           => $wallet['amount'],
-                        'available_balance' => $wallet['amount'],
-                    ]);
-                }
-
-                self::seedDemoTransactions($pdo, $userId);
-
-                $pdo->commit();
-            } catch (PDOException $e) {
-                if ($pdo->inTransaction()) {
-                    $pdo->rollBack();
-                }
-                if ($e->getCode() === '23000') {
-                    // Race condition : l'utilisateur a été créé entre-temps.
-                    $stmt = $pdo->prepare('SELECT * FROM users WHERE email = :email LIMIT 1');
-                    $stmt->execute(['email' => $googleEmail]);
-                    $user = $stmt->fetch();
-                    if ($user === false) {
-                        Response::serverError('Erreur lors de la création du compte Google.');
-                    }
-                    $userId = (int) $user['id'];
-                } else {
-                    throw $e;
-                }
-            }
-
-            self::audit($userId, 'auth.google_register', 'users', $userId, [
-                'google_sub' => $googleSub,
-                'google_name' => $googleName,
-            ], $request);
-        }
-
-        $user  = self::loadUser($userId);
-
-        // Notifications de démo au premier login Google (idempotent).
-        NotificationController::seedDemoNotificationsIfEmpty($pdo, $userId);
-
-        // Comptes de démo (sources & destinations) — idempotent.
-        \Nexus\Controllers\AccountController::seedDemoAccountsAtLogin($pdo, $userId);
-
-        $token = Jwt::encode(['sub' => $userId]);
-
-        Response::success([
-            'token' => $token,
-            'user'  => self::publicUser($user),
-        ]);
-    }
-
     /** POST /api/logout — révoque le jeton courant côté serveur. */
     public static function logout(Request $request): void
     {
@@ -439,57 +307,6 @@ final class AuthController
     }
 
     // --- Helpers privés --------------------------------------------------------
-
-    /**
-     * Vérifie un ID Token Google en l'envoyant à l'endpoint tokeninfo.
-     *
-     * @return array{sub: string, email: string, name?: string, picture?: string, aud: string}|null
-     */
-    private static function verifyGoogleToken(string $idToken): ?array
-    {
-        $url = 'https://oauth2.googleapis.com/tokeninfo?id_token=' . urlencode($idToken);
-
-        $context = stream_context_create([
-            'http' => [
-                'timeout' => 5,
-                'method'  => 'GET',
-                'header'  => "Accept: application/json\r\n",
-            ],
-            'ssl' => [
-                'verify_peer' => true,
-                'verify_peer_name' => true,
-            ],
-        ]);
-
-        $response = @file_get_contents($url, false, $context);
-
-        if ($response === false) {
-            return null;
-        }
-
-        $data = json_decode($response, true);
-
-        if (!is_array($data)) {
-            return null;
-        }
-
-        // Vérification que le token a été émis pour notre application.
-        // §30 : si le client ID n'est pas configuré, on REFUSE. Sans ce garde-fou,
-        // une constante vide pourrait « matcher » un aud vide et valider un jeton.
-        if (GOOGLE_CLIENT_ID === '') {
-            return null;
-        }
-        if (($data['aud'] ?? '') !== GOOGLE_CLIENT_ID) {
-            return null;
-        }
-
-        // Vérification de l'expiration (redondant avec Google, mais par précaution).
-        if (isset($data['exp']) && (int) $data['exp'] < time()) {
-            return null;
-        }
-
-        return $data;
-    }
 
     /** Charge un utilisateur complet depuis la base (null si introuvable). */
     private static function loadUser(int $userId): ?array

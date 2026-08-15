@@ -30,14 +30,3 @@ if (APP_ENV === 'development') {
 } elseif ($appKey !== false && $appKey !== '') {
     defined('APP_KEY') || define('APP_KEY', $appKey);
 }
-
-// --- Google OAuth -----------------------------------------------------------
-// Client ID fourni par Google Cloud Console (identifiant public).
-// §30 : aucune valeur en dur. Le client ID provient EXCLUSIVEMENT de
-// l'environnement. Absent, la constante vaut '' et la vérification du jeton
-// Google échoue explicitement plutôt que de valider contre un ID étranger.
-$googleClientId = getenv('GOOGLE_CLIENT_ID');
-defined('GOOGLE_CLIENT_ID') || define(
-    'GOOGLE_CLIENT_ID',
-    ($googleClientId !== false && $googleClientId !== '') ? $googleClientId : ''
-);

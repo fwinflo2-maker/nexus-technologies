@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
-import { apiGoogleAuth, apiMe, apiLogout, type ApiUser } from '../api/client';
+import { apiMe, apiLogout, type ApiUser } from '../api/client';
 
 // ─── Types ───────────────────────────────────────────────────────────────
 
@@ -15,7 +15,6 @@ interface AuthContextType {
   isAuthenticated: boolean;
   /** Appelé après un login/register réussi — revalide la session via /api/me */
   refreshSession: () => Promise<void>;
-  loginWithGoogle: (credential: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
 }
 
@@ -56,16 +55,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refreshSession();
   }, [refreshSession]);
 
-  /** Connexion Google OAuth — le backend crée ou trouve l'utilisateur et renvoie un token */
-  const loginWithGoogle = async (credential: string) => {
-    const resp = await apiGoogleAuth(credential);
-    if (resp.success && resp.data) {
-      setUser(toUser(resp.data.user));
-      return { success: true };
-    }
-    return { success: false, error: resp.error };
-  };
-
   /** Déconnexion — révoque le token côté serveur et nettoie l'état local */
   const logout = async () => {
     await apiLogout();
@@ -79,7 +68,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoaded,
         isAuthenticated: user !== null,
         refreshSession,
-        loginWithGoogle,
         logout,
       }}
     >

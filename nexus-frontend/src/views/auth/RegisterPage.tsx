@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { countries } from '../../data/countries';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
-import { GoogleButton } from '../../components/GoogleButton';
 import './AuthPages.css';
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../../context/I18nContext';
@@ -61,7 +60,7 @@ export function RegisterPage({ onSwitchToLogin, onBackHome }: RegisterPageProps)
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { t } = useI18n();
-  const { loginWithGoogle, refreshSession } = useAuth();
+  const { refreshSession } = useAuth();
 
   const isBusiness = accountType === 'business';
   const steps = isBusiness
@@ -150,19 +149,6 @@ export function RegisterPage({ onSwitchToLogin, onBackHome }: RegisterPageProps)
     // Revalide la session via /api/me pour que le contexte React mette à jour le user
     await refreshSession();
     // Navigation SPA vers le dashboard
-    navigate('/dashboard', { replace: true });
-  }
-
-  async function handleGoogleCredential(credential: string) {
-    setError('');
-    setLoading(true);
-    const result = await loginWithGoogle(credential);
-    setLoading(false);
-    if (!result.success) {
-      setError(result.error ?? t('auth_google_err'));
-      return;
-    }
-    // La session est déjà mise à jour par loginWithGoogle
     navigate('/dashboard', { replace: true });
   }
 
@@ -389,14 +375,6 @@ export function RegisterPage({ onSwitchToLogin, onBackHome }: RegisterPageProps)
             <div className="auth-terms">
               {t('reg_terms_prefix')} <a href="#">{t('reg_terms_terms')}</a> {t('reg_terms_and')} <a href="#">{t('reg_terms_privacy')}</a>
             </div>
-
-            <div className="auth-divider">
-              <span className="auth-divider-line" />
-              <span className="auth-divider-text">{t('auth_google_separator')}</span>
-              <span className="auth-divider-line" />
-            </div>
-
-            <GoogleButton onCredential={handleGoogleCredential} onError={() => setError(t('auth_google_err'))} />
 
             <p className="auth-footer">
               {t('login_no_account')} <button className="auth-link-button" onClick={onSwitchToLogin}>{t('login_submit')}</button>

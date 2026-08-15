@@ -153,10 +153,6 @@ export const translations: Record<LangCode, TranslationDict> = {
     reg_terms_privacy: 'politique de confidentialité.',
     fp_err_email: 'Veuillez entrer une adresse e-mail valide.',
     fp_err_unavailable: "La réinitialisation par e-mail n'est pas encore disponible. Contactez le support pour retrouver l'accès à votre compte.",
-    // Auth - Google OAuth
-    auth_google_btn: 'Continuer avec Google',
-    auth_google_separator: 'ou avec',
-    auth_google_err: 'La connexion Google a échoué. Réessayez.',
     // Dashboard topbar
     dash_balance_pill: 'EUR → XAF Pilote',
     dash_logout: 'Déconnexion',
@@ -357,10 +353,6 @@ export const translations: Record<LangCode, TranslationDict> = {
     reg_terms_privacy: 'privacy policy.',
     fp_err_email: 'Please enter a valid email address.',
     fp_err_unavailable: 'Email password reset is not available yet. Please contact support to regain access to your account.',
-    // Auth - Google OAuth
-    auth_google_btn: 'Continue with Google',
-    auth_google_separator: 'or with',
-    auth_google_err: 'Google sign-in failed. Please try again.',
     dash_balance_pill: 'EUR → XAF Pilot',
     dash_logout: 'Log out',
     // Landing

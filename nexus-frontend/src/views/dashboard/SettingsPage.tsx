@@ -334,12 +334,8 @@ export default function SettingsPage() {
         </div>
 
         <div style={{ marginTop: 32, paddingTop: 32, borderTop: '1px solid var(--border)' }}>
-          <h4 style={{ marginBottom: 16 }}>Authentification Google</h4>
-          {profile?.auth_provider === 'google' ? (
-            <div className="badge badge-success">Connecté avec Google</div>
-          ) : (
-            <div className="badge badge-secondary">Authentification locale</div>
-          )}
+          <h4 style={{ marginBottom: 16 }}>Authentification</h4>
+          <div className="badge badge-secondary">Authentification locale (email / mot de passe)</div>
         </div>
       </div>
     );
