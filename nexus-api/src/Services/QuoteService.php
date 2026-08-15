@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Nexus\Services;
 
+use Nexus\Core\Currency;
 use Nexus\Execution\ExecutionEnvironment;
+use Nexus\Providers\ProviderConfig;
 
 /**
  * QuoteService — exécute le pipeline Capability → Policy → Quote → Routing.
@@ -38,8 +40,17 @@ final class QuoteService
         $providers = CapabilityEngine::findEligible($intent, $environment);
 
         // Policy Engine : conformité avant tout calcul de prix.
-        $sourceToEur = self::rateToEur((string) $intent['sourceCurrency']);
-        $amountRef   = $sourceToEur > 0.0 ? ((float) $intent['amount'] / $sourceToEur) : 0.0;
+        //
+        // Le montant de référence est celui comparé aux PLAFONDS KYC : il doit
+        // provenir du même référentiel FX que le pricing. Il était calculé sur
+        // une table de taux écrite en dur — vérifié en HTTP, faire passer le
+        // taux réel de 1,10 à 5,00 (×4,5) laissait le verdict inchangé.
+        $amountRef = self::amountInReference(
+            (float) $intent['amount'],
+            (string) $intent['sourceCurrency'],
+            $environment
+        );
+
         PolicyEngine::evaluate($user, $intent, $amountRef, $environment);
 
         // Quote Engine : une quote par provider éligible.
@@ -70,13 +81,37 @@ final class QuoteService
     }
 
     /** Taux EUR vers une devise (cohérent avec QuoteEngine). */
-    private static function rateToEur(string $currency): float
-    {
-        $rates = [
-            'EUR' => 1.0, 'USD' => 1.0870, 'GBP' => 0.8550,
-            'XAF' => 655.957, 'XOF' => 655.957,
-            'USDT' => 1.0870, 'USDC' => 1.0870,
-        ];
-        return $rates[strtoupper($currency)] ?? 0.0;
+    /**
+     * Montant exprimé dans la devise de référence (EUR), via le FX réel.
+     *
+     * En production, un taux indisponible fait échouer la cotation : comparer
+     * un plafond réglementaire à un montant estimé sur une constante de
+     * démonstration reviendrait à ne pas le contrôler du tout.
+     */
+    private static function amountInReference(
+        float $amount,
+        string $currency,
+        ?ExecutionEnvironment $environment
+    ): float {
+        $env = $environment
+            ?? ExecutionEnvironment::fromString(ProviderConfig::defaultEnvironment());
+
+        $converted = ReferenceConverter::amountToEur($amount, $currency, $env);
+
+        if ($converted === null) {
+            throw new QuoteRateUnavailable(
+                $currency,
+                Currency::REF,
+                sprintf(
+                    'Aucun taux %s → %s disponible en %s : le plafond réglementaire '
+                    . 'ne peut pas être vérifié.',
+                    strtoupper($currency),
+                    Currency::REF,
+                    $env->value
+                )
+            );
+        }
+
+        return $converted;
     }
 }

@@ -16,6 +16,8 @@ use Nexus\Services\CapabilityEngine;
 use Nexus\Services\FundingSourceEngine;
 use Nexus\Services\IntentParser;
 use Nexus\Services\PolicyEngine;
+use Nexus\Services\ReferenceConverter;
+use Nexus\Services\QuoteRateUnavailable;
 use Nexus\Services\QuoteEngine;
 use Nexus\Services\RoutingEngine;
 
@@ -95,11 +97,31 @@ final class QuoteController
         $providers = CapabilityEngine::findEligible($intent, $context->environment);
 
         // ── 3. Policy Engine : vérification avant quotes ────────
-        // Conversion du montant source en EUR pour comparer aux plafonds
-        // Les taux signifient « 1 EUR = X unités de devise »
-        // Pour convertir VERS EUR : on DIVISE par le taux
-        $sourceToEur = self::rateToEur($intent['sourceCurrency']);
-        $amountRef   = $intent['amount'] / $sourceToEur;
+        // Le montant de référence est celui comparé aux PLAFONDS KYC. Il
+        // provient du FX réel, comme le pricing : une table de taux figée
+        // rendait le contrôle insensible au taux qu'il prétend appliquer.
+        $amountRef = ReferenceConverter::amountToEur(
+            (float) $intent['amount'],
+            (string) $intent['sourceCurrency'],
+            $context->environment
+        );
+
+        if ($amountRef === null) {
+            // Production sans taux réel : on ne peut pas vérifier le plafond,
+            // donc on ne cote pas (§13).
+            Response::error(
+                sprintf(
+                    'Aucun taux %s → %s disponible en %s : le plafond réglementaire '
+                    . 'ne peut pas être vérifié.',
+                    strtoupper((string) $intent['sourceCurrency']),
+                    Currency::REF,
+                    $context->environment->value
+                ),
+                503,
+                QuoteRateUnavailable::ERROR_CODE
+            );
+            return;
+        }
 
         PolicyEngine::evaluate($user, $intent, $amountRef, $context->environment);
 

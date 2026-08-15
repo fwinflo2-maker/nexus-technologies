@@ -9,6 +9,7 @@ use Nexus\Core\Database;
 use Nexus\Core\HttpException;
 use Nexus\Execution\EnvironmentGuard;
 use Nexus\Execution\ExecutionContext;
+use Nexus\Execution\ExecutionEnvironment;
 use Nexus\Providers\ProviderConfig;
 use PDO;
 use RuntimeException;
@@ -101,7 +102,7 @@ final class ExecutionEngine
                 throw new HttpException(422, 'Route introuvable dans la quote.', 'ROUTE_NOT_FOUND');
             }
 
-            $spec  = self::buildSpecFromQuote($quote, $route, $routeId);
+            $spec  = self::buildSpecFromQuote($quote, $route, $routeId, $context);
             $txId  = self::executeTransferInternal($userId, $spec, $pdo, $operationId, $startedAt, $context);
 
             // ── 4. Transition de la quote ─────────────────────────────────
@@ -362,14 +363,38 @@ final class ExecutionEngine
      * @param array<string,mixed> $route
      * @return array<string,mixed>
      */
-    private static function buildSpecFromQuote(array $quote, array $route, string $routeId): array
+    /**
+     * Taux « 1 unité de devise = N EUR », depuis le FX réel.
+     *
+     * Rend 0.0 quand aucun taux n'est disponible : l'appelant traduit ce 0 en
+     * frais nuls plutôt qu'en montant inventé. En production, cela signifie
+     * qu'aucune conversion de frais n'est appliquée faute de taux réel — un
+     * manque visible, jamais une estimation silencieuse.
+     */
+    private static function referenceRate(string $currency, ?ExecutionContext $context): float
     {
+        $environment = $context?->environment
+            ?? ExecutionEnvironment::fromString(ProviderConfig::defaultEnvironment());
+
+        $rate = ReferenceConverter::toEur($currency, $environment);
+
+        return $rate['rate'] ?? 0.0;
+    }
+
+    private static function buildSpecFromQuote(
+        array $quote,
+        array $route,
+        string $routeId,
+        ?ExecutionContext $context = null
+    ): array {
         $sourceCurrency = strtoupper((string) $quote['source_currency']);
         $destCurrency   = strtoupper((string) $quote['dest_currency']);
         $amountSent     = (string) $quote['amount_sent'];
 
+        // Les frais sont libellés en EUR mais DÉBITÉS dans la devise source :
+        // leur conversion touche un montant réellement prélevé au client.
         $feeEur  = (float) ($route['feesNum'] ?? 0);
-        $rateRef = Currency::rateToRef($sourceCurrency);
+        $rateRef = self::referenceRate($sourceCurrency, $context);
         $feeSource = $rateRef > 0.0 ? bcdiv((string) $feeEur, (string) $rateRef, 8) : '0.00000000';
 
         return [
@@ -423,10 +448,31 @@ final class ExecutionEngine
         float $startedAt,
         ?ExecutionContext $context = null
     ): int {
-        $rateRef   = Currency::rateToRef($sourceCurrency);
-        $rateXaf   = Currency::rateToXaf($sourceCurrency);
-        $amountRef = round((float) $amountSent * $rateRef, 2);
-        $amountXaf = round((float) $amountSent * $rateXaf, 2);
+        // `amount_ref` et `amount_xaf` sont PERSISTÉS : ils alimentent le
+        // ledger, les totaux et les rapports. Ils étaient calculés sur les
+        // constantes de démonstration de `Currency`, qui ignorent totalement
+        // FXService — vérifié en injectant 1 EUR = 5 USD : FXService renvoyait
+        // 5,00, la constante restait à 0,92.
+        //
+        // La valorisation utilise le taux du MOMENT de l'exécution : c'est la
+        // valeur de référence de cette transaction, figée avec elle.
+        $fxEnvironment = $context?->environment
+            ?? ExecutionEnvironment::fromString(ProviderConfig::defaultEnvironment());
+
+        $amountRefValue = ReferenceConverter::amountToEur((float) $amountSent, $sourceCurrency, $fxEnvironment);
+        $amountXafValue = ReferenceConverter::amountToXaf((float) $amountSent, $sourceCurrency, $fxEnvironment);
+
+        // Les colonnes sont NOT NULL DEFAULT 0.00 (vérifié en base) : une
+        // référence non calculable vaut donc 0, ce qui la rend absente des
+        // totaux plutôt que faussement crédible. Changer la nullabilité
+        // serait une migration à part entière, hors du périmètre de ce
+        // correctif — et 0 porte déjà la bonne sémantique pour un agrégat.
+        //
+        // Ce cas ne survient qu'en production sans taux réel configuré, où le
+        // devis lui-même est déjà refusé en amont : la transaction n'atteint
+        // normalement jamais ce point.
+        $amountRef = $amountRefValue === null ? 0.0 : round($amountRefValue, 2);
+        $amountXaf = $amountXafValue === null ? 0.0 : round($amountXafValue, 2);
         $fee2      = round((float) $feeSource, 2);
         $execSec   = max(1, (int) round(microtime(true) - $startedAt));
 
