@@ -124,21 +124,64 @@ jobs:
         working-directory: nexus-api
         run: bash scripts/compare_schemas.sh 127.0.0.1 root ''
 
-      - name: Vérifier que database/sql/ est à jour
+      - name: Vérifier que database/sql/ décrit bien le schéma courant
         # Le SQL de référence est GÉNÉRÉ. S'il n'est pas régénéré après une
-        # migration, il décrit un schéma périmé tout en paraissant valide —
-        # c'est exactement ainsi que full_schema.sql avait divergé. On
-        # régénère et on exige qu'il n'y ait aucun écart.
+        # migration, il décrit un schéma périmé tout en restant plausible —
+        # c'est exactement ainsi que full_schema.sql avait divergé.
+        #
+        # On ne compare PAS le texte du fichier : `mysqldump` de MySQL 8 et
+        # celui de MariaDB produisent des dumps différents pour un schéma
+        # identique (`bigint` vs `bigint(20)`, guillemets, COMMENT…). Exiger
+        # l'égalité textuelle rendrait le job dépendant du moteur ayant servi
+        # à générer le fichier, et il échouerait éternellement.
+        #
+        # On compare donc ce qui compte : la STRUCTURE obtenue en installant
+        # d'un côté par migrations, de l'autre par database/sql/nexus_schema.sql.
         working-directory: nexus-api
         run: |
-          bash scripts/export_sql_reference.sh 127.0.0.1 root ''
-          if ! git diff --quiet -- database/sql/; then
-            echo "::error::database/sql/ n'est pas à jour. Régénérez-le avec :"
-            echo "  bash nexus-api/scripts/export_sql_reference.sh"
-            git diff --stat -- database/sql/
+          set -euo pipefail
+
+          mysql -h127.0.0.1 -uroot -e "
+            DROP DATABASE IF EXISTS nexus_from_migrations;
+            DROP DATABASE IF EXISTS nexus_from_sqlref;
+            CREATE DATABASE nexus_from_migrations CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+            CREATE DATABASE nexus_from_sqlref     CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+
+          # Chemin 1 : le runner de migrations (source de vérité).
+          sed 's/CREATE DATABASE[^;]*;//Ig; s/USE `\?nexus`\?[[:space:]]*;//Ig' database/schema.sql \
+            | mysql -h127.0.0.1 -uroot nexus_from_migrations
+          grep -vE '^\s*#|^\s*$' database/migrations.manifest | while read -r m; do
+            sed 's/CREATE DATABASE[^;]*;//Ig; s/USE `\?nexus`\?[[:space:]]*;//Ig' "database/migrations/$m" \
+              | mysql -h127.0.0.1 -uroot nexus_from_migrations
+          done
+
+          # Chemin 2 : le SQL de référence versionné.
+          mysql -h127.0.0.1 -uroot nexus_from_sqlref < database/sql/nexus_schema.sql
+
+          dump_structure() {
+            mysql -h127.0.0.1 -uroot -sN -e "
+              SELECT CONCAT_WS('|', table_name, column_name, column_type,
+                               is_nullable, COALESCE(column_default,'~'))
+              FROM information_schema.columns
+              WHERE table_schema='$1' ORDER BY table_name, column_name;"
+          }
+
+          dump_structure nexus_from_migrations > /tmp/from_migrations.txt
+          dump_structure nexus_from_sqlref     > /tmp/from_sqlref.txt
+
+          COLS=$(wc -l < /tmp/from_migrations.txt)
+          if [ "$COLS" -eq 0 ]; then
+            echo "::error::Aucune colonne installée — vérification sans objet."
             exit 1
           fi
-          echo "database/sql/ est synchronisé avec les migrations."
+
+          if ! diff -u /tmp/from_migrations.txt /tmp/from_sqlref.txt; then
+            echo "::error::database/sql/nexus_schema.sql ne décrit plus le schéma des migrations."
+            echo "Régénérez-le : bash nexus-api/scripts/export_sql_reference.sh"
+            exit 1
+          fi
+
+          echo "database/sql/ décrit fidèlement le schéma courant ($COLS colonnes)."
 
   # ---------------------------------------------------------------------------
   # Frontend React — typecheck, lint, build de production
