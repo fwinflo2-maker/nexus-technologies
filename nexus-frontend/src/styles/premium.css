@@ -46,8 +46,11 @@
   transition: transform .3s cubic-bezier(.22,1,.36,1), border-color .3s ease,
               box-shadow .3s ease, background .3s ease;
 }
+/* Le hover élève la carte SANS la faire chevaucher ses voisines :
+   on translate sur X uniquement si isolée, sinon simple glow+bordure.
+   translateY(-3px) est remplacé par une élévation visuelle via shadow. */
 .nexus-dash .card:hover {
-  transform: translateY(-3px);
+  transform: translateY(-2px);
   border-color: rgba(0,200,255,.28);
   box-shadow: 0 18px 50px rgba(0,0,0,.6), 0 0 34px rgba(0,200,255,.08);
 }
@@ -176,6 +179,161 @@
 
 /* ── Topbar : statut système lumineux discret ── */
 .nexus-dash .status-dot { box-shadow: 0 0 8px rgba(0,207,160,.6); }
+
+/* ============================================================================
+   PARAMÈTRES (Settings) — composants dédiés
+   Classes utilisées par SettingsPage.tsx mais non définies ailleurs.
+   ============================================================================ */
+.nexus-dash .settings-tabs,
+.nexus-dash .tabs {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  background: rgba(255,255,255,.02);
+  border: 1px solid var(--border);
+  border-radius: 14px; padding: 5px;
+  width: fit-content;
+}
+.nexus-dash .tab {
+  border: none; cursor: pointer;
+  background: transparent; color: var(--text-mid);
+  padding: 9px 16px; border-radius: 10px;
+  font-size: 12px; font-weight: 600;
+  transition: all .2s ease;
+}
+.nexus-dash .tab:hover { color: var(--text-bright); background: rgba(255,255,255,.04); }
+.nexus-dash .tab.active {
+  color: var(--deep);
+  background: linear-gradient(135deg, var(--cyan), var(--cyan2));
+  box-shadow: 0 4px 16px rgba(0,200,255,.3);
+}
+.nexus-dash .tab:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+
+.nexus-dash .settings-section {
+  display: grid; gap: 6px;
+}
+.nexus-dash .settings-section .section-title {
+  font-size: 16px; font-weight: 700; color: var(--text-bright);
+  margin: 0 0 10px; padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  letter-spacing: -0.3px;
+}
+.nexus-dash .form-group { display: grid; gap: 6px; padding: 4px 0; }
+.nexus-dash .form-label {
+  font-size: 10px; font-weight: 600; color: var(--text-dim);
+  letter-spacing: 1.5px; text-transform: uppercase;
+}
+.nexus-dash .form-hint { font-size: 11px; color: var(--text-dim); }
+
+.nexus-dash .input-field,
+.nexus-dash select.input-field {
+  width: 100%; box-sizing: border-box;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 11px 14px;
+  color: var(--text-bright);
+  font-size: 13px; font-family: var(--font-sans);
+  transition: border-color .2s ease, box-shadow .2s ease, background .2s ease;
+}
+.nexus-dash .input-field:focus {
+  outline: none;
+  border-color: rgba(0,200,255,.5);
+  box-shadow: 0 0 0 3px rgba(0,200,255,.12);
+  background: rgba(0,200,255,.03);
+}
+.nexus-dash .input-field::placeholder { color: var(--text-dim); }
+.nexus-dash select.input-field option { background: var(--panel); color: var(--text-bright); }
+
+.nexus-dash .static-value {
+  padding: 11px 14px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  color: var(--text-main);
+  font-size: 13px;
+  background: rgba(255,255,255,.015);
+}
+.nexus-dash .form-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.nexus-dash .btn-secondary {
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  color: var(--text-main);
+}
+.nexus-dash .btn-secondary:hover { border-color: var(--border); background: rgba(255,255,255,.05); color: var(--text-bright); }
+
+/* Boutons compacts / danger utilisés dans Settings */
+.nexus-dash .btn-sm { padding: 6px 12px; font-size: 11px; border-radius: 8px; }
+.nexus-dash .btn-danger {
+  background: rgba(255,69,96,.1);
+  border: 1px solid rgba(255,69,96,.3);
+  color: var(--red);
+}
+.nexus-dash .btn-danger:hover { background: rgba(255,69,96,.18); border-color: rgba(255,69,96,.5); transform: translateY(-1px); }
+
+/* Badges */
+.nexus-dash .badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: 100px;
+  font-size: 10px; font-weight: 700;
+  letter-spacing: .5px; border: 1px solid;
+}
+.nexus-dash .badge-success { background: rgba(0,207,160,.1); border-color: rgba(0,207,160,.3); color: var(--green); }
+.nexus-dash .badge-secondary { background: rgba(255,255,255,.05); border-color: var(--border); color: var(--text-mid); }
+.nexus-dash .badge-info { background: rgba(0,200,255,.1); border-color: rgba(0,200,255,.3); color: var(--cyan); }
+.nexus-dash .badge-danger { background: rgba(255,69,96,.1); border-color: rgba(255,69,96,.3); color: var(--red); }
+
+/* Tables */
+.nexus-dash .table-container {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--panel);
+}
+.nexus-dash .data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.nexus-dash .data-table th {
+  text-align: left; padding: 12px 14px;
+  font-size: 10px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase;
+  color: var(--text-dim); border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,.02);
+}
+.nexus-dash .data-table td {
+  padding: 12px 14px; color: var(--text-main);
+  border-bottom: 1px solid var(--border-soft);
+}
+.nexus-dash .data-table tbody tr:last-child td { border-bottom: none; }
+.nexus-dash .data-table tbody tr { transition: background .2s ease; }
+.nexus-dash .data-table tbody tr:hover { background: rgba(0,200,255,.03); }
+
+/* Alertes (succès / erreur) */
+.nexus-dash .alert {
+  border-radius: 12px; padding: 12px 16px; font-size: 13px;
+  border: 1px solid; display: flex; align-items: center; gap: 8px;
+}
+.nexus-dash .alert-success { background: rgba(0,207,160,.08); border-color: rgba(0,207,160,.3); color: var(--green); }
+.nexus-dash .alert-error, .nexus-dash .alert-danger { background: rgba(255,69,96,.08); border-color: rgba(255,69,96,.3); color: var(--red); }
+.nexus-dash .alert-info { background: rgba(0,200,255,.08); border-color: rgba(0,200,255,.3); color: var(--cyan); }
+
+/* Sessions */
+.nexus-dash .session-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px; border: 1px solid var(--border);
+  border-radius: 12px; margin-bottom: 10px;
+  background: var(--panel);
+  transition: border-color .2s ease, background .2s ease;
+}
+.nexus-dash .session-row:hover { border-color: rgba(0,200,255,.3); background: rgba(0,200,255,.02); }
+.nexus-dash .session-row .session-info { flex: 1; min-width: 0; }
+.nexus-dash .session-row .session-device { font-size: 13px; font-weight: 600; color: var(--text-bright); }
+.nexus-dash .session-row .session-meta { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+.nexus-dash .session-badge { flex-shrink: 0; }
+
+/* Préférences toggles */
+.nexus-dash .pref-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 14px; border: 1px solid var(--border);
+  border-radius: 12px; margin-bottom: 10px; background: var(--panel);
+}
+.nexus-dash .pref-row .pref-title { font-size: 13px; font-weight: 600; color: var(--text-bright); }
+.nexus-dash .pref-row .pref-desc { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
 
 /* ============================================================================
    Couche publique (design-system.css) — cohérence des boutons/cards
