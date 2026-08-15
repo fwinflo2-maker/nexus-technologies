@@ -103,10 +103,37 @@ final class ReconciliationController
 
         $pdo = Database::getConnection();
 
-        $stmt = $pdo->prepare("SELECT * FROM transactions WHERE id = :id AND user_id = :uid AND type = 'send' LIMIT 1");
-        $stmt->execute(['id' => $txId, 'uid' => $bid]);
+        // §20 — ISOLATION D'ENVIRONNEMENT SUR L'ÉCRITURE (correctif CRITICAL).
+        //
+        // `index()` filtrait déjà par environnement, mais PAS `upsert()`.
+        // Résultat prouvé en HTTP réel : depuis un contexte sandbox, on
+        // pouvait écrire un écart de rapprochement sur une transaction de
+        // PRODUCTION — HTTP 200. Asymétrie absurde : lire la production était
+        // refusé (403), l'écrire ne l'était pas.
+        //
+        // L'environnement n'est pas stocké sur `reconciliation_items` : il
+        // appartient à la transaction rapprochée, qui est l'unique source de
+        // vérité (`uq_recon_tx` garantit 1 item par transaction). Le dupliquer
+        // dans la table créerait deux vérités possibles — donc un risque de
+        // divergence. On le contraint donc à la jointure.
+        $context = ExecutionContext::fromRequest($request, $actor, $bid);
+
+        // `status = 'completed'` : on ne rapproche pas une transaction encore
+        // en vol. `index()` ne montre que les transactions complétées ; sans
+        // cette condition, `upsert()` créait des items invisibles du rapport,
+        // impossibles à corriger par l'interface.
+        $stmt = $pdo->prepare(
+            "SELECT * FROM transactions
+             WHERE id = :id AND user_id = :uid AND type = 'send'
+               AND status = 'completed' AND environment = :env
+             LIMIT 1"
+        );
+        $stmt->execute(['id' => $txId, 'uid' => $bid, 'env' => $context->environmentValue()]);
         $tx = $stmt->fetch();
         if ($tx === false) {
+            // Même réponse qu'une transaction inexistante : distinguer
+            // « existe mais dans l'autre environnement » offrirait un oracle
+            // d'énumération des transactions de production.
             throw new HttpException(404, 'Transaction introuvable.', 'TRANSACTION_NOT_FOUND');
         }
 
@@ -148,11 +175,26 @@ final class ReconciliationController
         $id    = (int) $request->param('id', '0');
         $notes = trim((string) $request->input('notes', ''));
 
-        $pdo  = Database::getConnection();
+        $pdo = Database::getConnection();
+
+        // Même faille que `upsert()` : résoudre un écart est une décision
+        // comptable. Depuis un contexte sandbox, on pouvait clore un écart
+        // portant sur de l'argent réel. La jointure impose l'environnement de
+        // la transaction rapprochée.
+        $context = ExecutionContext::fromRequest($request, $actor, $bid);
+
         $stmt = $pdo->prepare(
-            "UPDATE reconciliation_items SET status = 'resolved', notes = :notes, resolved_at = NOW() WHERE id = :id AND user_id = :uid"
+            "UPDATE reconciliation_items r
+                JOIN transactions t ON t.id = r.transaction_id
+                SET r.status = 'resolved', r.notes = :notes, r.resolved_at = NOW()
+              WHERE r.id = :id AND r.user_id = :uid AND t.environment = :env"
         );
-        $stmt->execute(['notes' => $notes !== '' ? $notes : null, 'id' => $id, 'uid' => $bid]);
+        $stmt->execute([
+            'notes' => $notes !== '' ? $notes : null,
+            'id'    => $id,
+            'uid'   => $bid,
+            'env'   => $context->environmentValue(),
+        ]);
 
         if ($stmt->rowCount() === 0) {
             throw new HttpException(404, 'Item de rapprochement introuvable.', 'RECON_ITEM_NOT_FOUND');

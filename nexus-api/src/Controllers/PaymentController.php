@@ -72,7 +72,8 @@ final class PaymentController
         $bid     = BusinessService::resolveBusinessUserId($actor, $request->query('business_id'));
         BusinessService::requireRole($bid, (int) $actor['id'], BusinessService::ROLES, 'consulter un paiement');
 
-        $payment = self::find(Database::getConnection(), $bid, (int) $request->param('id', '0'));
+        $context = ExecutionContext::fromRequest($request, $actor, $bid);
+        $payment = self::find(Database::getConnection(), $bid, (int) $request->param('id', '0'), $context->environmentValue());
         Response::success(['payment' => self::format($payment)]);
     }
 
@@ -149,7 +150,7 @@ final class PaymentController
             'env'        => $context->environmentValue(),
         ]);
 
-        $payment = self::find($pdo, $bid, (int) $pdo->lastInsertId());
+        $payment = self::find($pdo, $bid, (int) $pdo->lastInsertId(), $context->environmentValue());
         Response::success([
             'payment' => self::format($payment),
             'routes'  => $quote['routes'],
@@ -171,8 +172,12 @@ final class PaymentController
         $bid     = BusinessService::resolveBusinessUserId($actor, $request->input('business_id'));
         BusinessService::requireRole($bid, (int) $actor['id'], ['owner', 'admin', 'finance_manager'], 'approuver un paiement');
 
-        $pdo     = Database::getConnection();
-        $payment = self::find($pdo, $bid, (int) $request->param('id', '0'));
+        $pdo = Database::getConnection();
+
+        // L'environnement de l'appelant borne la recherche : un paiement de
+        // production est introuvable depuis un contexte sandbox.
+        $context = ExecutionContext::fromRequest($request, $actor, $bid);
+        $payment = self::find($pdo, $bid, (int) $request->param('id', '0'), $context->environmentValue());
 
         if ($payment['status'] !== 'pending_approval') {
             Response::conflict('Seul un paiement en attente d\'approbation peut être approuvé.');
@@ -186,7 +191,7 @@ final class PaymentController
         );
         $stmt->execute(['by' => (int) $actor['id'], 'id' => (int) $payment['id'], 'uid' => $bid]);
 
-        Response::success(['payment' => self::format(self::find($pdo, $bid, (int) $payment['id']))]);
+        Response::success(['payment' => self::format(self::find($pdo, $bid, (int) $payment['id'], $context->environmentValue()))]);
     }
 
     /** POST /api/payments/{id}/reject */
@@ -197,8 +202,12 @@ final class PaymentController
         $bid     = BusinessService::resolveBusinessUserId($actor, $request->input('business_id'));
         BusinessService::requireRole($bid, (int) $actor['id'], ['owner', 'admin', 'finance_manager'], 'rejeter un paiement');
 
-        $pdo     = Database::getConnection();
-        $payment = self::find($pdo, $bid, (int) $request->param('id', '0'));
+        $pdo = Database::getConnection();
+
+        // L'environnement de l'appelant borne la recherche : un paiement de
+        // production est introuvable depuis un contexte sandbox.
+        $context = ExecutionContext::fromRequest($request, $actor, $bid);
+        $payment = self::find($pdo, $bid, (int) $request->param('id', '0'), $context->environmentValue());
 
         if ($payment['status'] !== 'pending_approval') {
             Response::conflict('Seul un paiement en attente d\'approbation peut être rejeté.');
@@ -210,7 +219,7 @@ final class PaymentController
         );
         $stmt->execute(['by' => (int) $actor['id'], 'id' => (int) $payment['id'], 'uid' => $bid]);
 
-        Response::success(['payment' => self::format(self::find($pdo, $bid, (int) $payment['id']))]);
+        Response::success(['payment' => self::format(self::find($pdo, $bid, (int) $payment['id'], $context->environmentValue()))]);
     }
 
     /** POST /api/payments/{id}/execute — saga réelle (hold → capture → ledger). */
@@ -223,8 +232,27 @@ final class PaymentController
 
         $context = ExecutionContext::fromRequest($request, $actor, $bid);
 
-        $pdo     = Database::getConnection();
-        $payment = self::find($pdo, $bid, (int) $request->param('id', '0'));
+        $pdo = Database::getConnection();
+
+        // EXCEPTION ASSUMÉE À LA RECHERCHE SCOPÉE.
+        //
+        // Partout ailleurs, un paiement d'un autre environnement est
+        // « introuvable » (404) : c'est ce qui empêche l'énumération.
+        //
+        // Ici, non. L'exécution est le seul point où l'invariant NEXUS exige
+        // un refus EXPLICITE : « divergence → 409 ENVIRONMENT_MISMATCH, sans
+        // réalignement ». Un 404 muet dirait à l'opérateur « ce paiement
+        // n'existe pas » alors qu'il existe et qu'il vient d'être refusé pour
+        // une raison précise, qui doit être lisible dans les journaux et dans
+        // la réponse.
+        //
+        // Le paiement est donc chargé SANS filtre d'environnement, puis
+        // confronté à EnvironmentGuard juste en dessous. Le compromis
+        // énumération/lisibilité est tranché en faveur de la lisibilité parce
+        // que cet appel exige déjà un rôle financier (owner/admin/
+        // finance_manager) sur le compte concerné : l'appelant connaît déjà
+        // ses propres paiements.
+        $payment = self::findAnyEnvironment($pdo, $bid, (int) $request->param('id', '0'));
 
         if ($payment['status'] !== 'approved') {
             Response::conflict('Seul un paiement approuvé peut être exécuté.');
@@ -293,7 +321,7 @@ final class PaymentController
         );
         $done->execute(['txid' => (int) $tx['id'], 'id' => (int) $payment['id'], 'uid' => $bid]);
 
-        Response::success(['payment' => self::format(self::find($pdo, $bid, (int) $payment['id'])), 'transaction' => $tx]);
+        Response::success(['payment' => self::format(self::find($pdo, $bid, (int) $payment['id'], $context->environmentValue())), 'transaction' => $tx]);
     }
 
     /** POST /api/payments/{id}/cancel */
@@ -311,8 +339,12 @@ final class PaymentController
         $bid     = BusinessService::resolveBusinessUserId($actor, $request->input('business_id'));
         BusinessService::requireRole($bid, (int) $actor['id'], $roles, 'modifier un paiement');
 
-        $pdo     = Database::getConnection();
-        $payment = self::find($pdo, $bid, (int) $request->param('id', '0'));
+        $pdo = Database::getConnection();
+
+        // L'environnement de l'appelant borne la recherche : un paiement de
+        // production est introuvable depuis un contexte sandbox.
+        $context = ExecutionContext::fromRequest($request, $actor, $bid);
+        $payment = self::find($pdo, $bid, (int) $request->param('id', '0'), $context->environmentValue());
 
         if ($payment['status'] !== $from) {
             Response::conflict(sprintf('Transition impossible : statut actuel « %s », attendu « %s ».', $payment['status'], $from));
@@ -329,14 +361,57 @@ final class PaymentController
             Response::conflict('Ce paiement a changé d\'état entre-temps.');
         }
 
-        Response::success(['payment' => self::format(self::find($pdo, $bid, (int) $payment['id']))]);
+        Response::success(['payment' => self::format(self::find($pdo, $bid, (int) $payment['id'], $context->environmentValue()))]);
     }
 
     /** @return array<string,mixed> */
-    private static function find(PDO $pdo, int $bid, int $id): array
+    /**
+     * Charge un paiement DANS L'ENVIRONNEMENT DE L'APPELANT.
+     *
+     * CORRECTIF CRITICAL. `execute()` était protégé par EnvironmentGuard,
+     * mais `submit()`, `approve()`, `reject()` et `cancel()` ne l'étaient pas :
+     * depuis un contexte sandbox, on approuvait un paiement de PRODUCTION.
+     * Prouvé en HTTP réel — un paiement de 5 000 EUR est passé de
+     * `pending_approval` à `approved`, c'est-à-dire le franchissement de la
+     * porte qui précède l'exécution d'argent réel.
+     *
+     * Le paramètre `$environment` est OBLIGATOIRE et non nullable : c'est
+     * volontaire. Un défaut (`?string $env = null`) aurait laissé les appels
+     * existants compiler en silence et la faille se réintroduire au prochain
+     * ajout de méthode. Ici, tout nouvel appelant doit fournir son contexte.
+     *
+     * Le 404 est identique à « paiement inexistant » : distinguer les deux
+     * offrirait un oracle d'énumération des paiements de production.
+     *
+     * @return array<string,mixed>
+     */
+    /**
+     * Charge un paiement SANS filtre d'environnement.
+     *
+     * Réservé à `execute()`, qui doit répondre 409 ENVIRONMENT_MISMATCH — et
+     * non 404 — lorsqu'un paiement existe dans l'autre environnement. Toute
+     * autre méthode doit utiliser `find()`, qui scope par environnement.
+     *
+     * @return array<string,mixed>
+     */
+    private static function findAnyEnvironment(PDO $pdo, int $bid, int $id): array
     {
         $stmt = $pdo->prepare('SELECT * FROM payments WHERE id = :id AND user_id = :uid LIMIT 1');
         $stmt->execute(['id' => $id, 'uid' => $bid]);
+        $row = $stmt->fetch();
+        if ($row === false) {
+            throw new HttpException(404, 'Paiement introuvable.', 'PAYMENT_NOT_FOUND');
+        }
+
+        return $row;
+    }
+
+    private static function find(PDO $pdo, int $bid, int $id, string $environment): array
+    {
+        $stmt = $pdo->prepare(
+            'SELECT * FROM payments WHERE id = :id AND user_id = :uid AND environment = :env LIMIT 1'
+        );
+        $stmt->execute(['id' => $id, 'uid' => $bid, 'env' => $environment]);
         $row = $stmt->fetch();
         if ($row === false) {
             throw new HttpException(404, 'Paiement introuvable.', 'PAYMENT_NOT_FOUND');
