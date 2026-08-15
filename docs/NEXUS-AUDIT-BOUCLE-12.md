@@ -102,6 +102,27 @@ Fichiers exportant à la fois des composants et des constantes/fonctions.
 **L3 — Gros fichiers** : `WalletService.php` (1076 l.), `LedgerService.php`
 (942 l.), `client.ts` (1331 l.), `SendPage.tsx` (947 l.).
 
+## Découvertes en cours de boucle (invisibles à la lecture du code)
+
+Deux défauts trouvés en **observant la base après une inscription réelle**,
+pas en relisant les sources — et qu'aucun des 470 tests ne détectait.
+
+**H3 — `NEXUS_DEMO_SEED=0` n'éteignait rien.** `getenv()` rend la chaîne
+`"0"`, falsy en PHP ; le `?: ''` la transformait en chaîne vide, absente de la
+liste d'arrêt. La valeur d'extinction documentée était donc inopérante.
+*Corrigé, 11 tests ajoutés (DemoMode n'en avait aucun), mutation vérifiée.*
+
+**H4 — Le bonus de bienvenue était écrit en `production`.** La boucle 17 avait
+corrigé `seedDemoTransactions()`, mais le crédit des wallets passe par
+`LedgerService::credit()`, qui sans `ExecutionContext` retombe sur
+`ProviderConfig::defaultEnvironment()`. Constaté en base : six
+`wallet_operations` fictives marquées `production`.
+*Corrigé, vérifié en HTTP avec `PROVIDERS_ENV=production`.*
+
+**M3 — Quatre tests d'atomicité comptaient toute la base.** `COUNT(*)` global
+attendu à 0 : faux rouge dès qu'une ligne étrangère existe, et faux vert si un
+rollback défaillant écrivait sous un autre utilisateur. *Scopés aux fixtures.*
+
 ### BLOCKED (dépendance externe réelle)
 
 - **Intégration réelle des 22 providers** — nécessite des credentials
@@ -112,3 +133,44 @@ Fichiers exportant à la fois des composants et des constantes/fonctions.
   données ou un provider de screening. Voir le traitement de C1 : en
   l'absence de source, le système doit **refuser ou signaler**, jamais
   déclarer un contrôle passé.
+
+## État à la fin de la boucle 12
+
+| | Avant | Après |
+|---|---|---|
+| Tests PHPUnit | 459 (2087 assertions) | **484 (2141 assertions)** |
+| Schéma ↔ migrations | PASS | PASS |
+| Faux succès sur chemin financier | 3 (sanctions, agents, bonus) | **0 détecté** |
+| Service d'agents | ouvert, sans auth | jeton obligatoire, fail-closed |
+| CI | aucune | 4 jobs (API ×2 PHP, schéma, front, agents) |
+
+### Corrigé et vérifié
+
+- **C1** filtrage des sanctions — no-op qui se déclarait conforme
+- **H1** service d'agents sans authentification
+- **H2** verdicts de conformité et devis fabriqués par les agents
+- **H3** `NEXUS_DEMO_SEED=0` inopérant
+- **H4** bonus de bienvenue écrit en production
+- **M3** tests d'atomicité dépendant de l'état global de la base
+
+Chaque correctif a suivi la boucle complète : FIX → TEST → MUTATION → HTTP →
+SQL → SECURITY → RE-AUDIT. Les mutations sont documentées dans les messages
+de commit (nombre de tests tués par mutation).
+
+### Reste ouvert
+
+- **M1** `CapabilityEngine::PERFORMANCE_SCORES` — scores de fiabilité en dur
+  alimentant le classement des routes. À remplacer par des métriques mesurées
+  (table `providers` ou service de métriques) ; en attendant, la valeur est
+  affichée comme une estimation.
+- **M2** 6 avertissements `react-refresh/only-export-components`.
+- **L1–L3** docs dupliquées, captures à la racine, fichiers > 900 lignes.
+
+### Note de méthode
+
+Les deux défauts les plus intéressants de cette boucle (H3, H4) n'étaient pas
+visibles à la lecture : le code *paraissait* correct, avec un garde-fou
+explicite et un commentaire « §29 : jamais en production ». Ils n'ont été
+trouvés qu'en exécutant le vrai parcours et en interrogeant la base derrière.
+Une suite verte prouve l'absence des régressions qu'elle couvre, pas
+l'honnêteté du système.
