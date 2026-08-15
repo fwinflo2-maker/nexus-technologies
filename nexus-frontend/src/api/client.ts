@@ -1304,60 +1304,6 @@ export async function apiControlAccess(): Promise<ApiResponse<InternalAccess>> {
   return request<InternalAccess>('GET', '/control/access');
 }
 
-// --- Super Admin : employés internes + comptes Nexus Connect ----------
-
-export interface AdminEmployee {
-  id: number;
-  user_id: number;
-  full_name: string;
-  email: string;
-  user_status: string;
-  department: string | null;
-  role: string;
-  permissions: Record<string, unknown> | null;
-  status: string;
-  last_login_at: string | null;
-  created_at: string;
-}
-
-export interface ConnectAccount {
-  id: number;
-  user_id: number | null;
-  company_name: string;
-  email: string;
-  status: string;
-  environment: string;
-  api_key_prefix: string | null;
-  webhook_url: string | null;
-  country: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export async function apiAdminEmployees(): Promise<ApiResponse<{ items: AdminEmployee[]; total: number }>> {
-  return request('GET', '/control/employees');
-}
-
-export async function apiAdminCreateEmployee(payload: {
-  full_name: string; email: string; role: string; department?: string; permissions?: unknown;
-}): Promise<ApiResponse<{ id: number; user_id: number; status: string }>> {
-  return request('POST', '/control/employees', payload as Record<string, unknown>);
-}
-
-export async function apiAdminSetEmployeeStatus(id: number, status: string): Promise<ApiResponse<{ id: number; status: string }>> {
-  return request('PATCH', `/control/employees/${id}/status`, { status });
-}
-
-export async function apiAdminConnectAccounts(): Promise<ApiResponse<{ items: ConnectAccount[]; total: number }>> {
-  return request('GET', '/control/connect/accounts');
-}
-
-export async function apiAdminCreateConnectAccount(payload: {
-  company_name: string; email: string; environment: string; country?: string; user_id?: number;
-}): Promise<ApiResponse<{ id: number; status: string }>> {
-  return request('POST', '/control/connect/accounts', payload as Record<string, unknown>);
-}
-
 export async function apiControlProviders(): Promise<ApiResponse<{
   items: ProviderCard[]; total: number; strict_mode: boolean; operations: string[];
 }>> {

@@ -5,7 +5,6 @@ import {
   type InternalAccess, type ControlClient, type ControlOverview,
 } from '../../api/client';
 import { InternalDashboard, IntCard, IntRow, type InternalDashboardMeta } from './InternalDashboard';
-import { AdminEmployeesPage, AdminConnectAccountsPage } from './AdminPages';
 
 /** Registre des dashboards internes (RBAC) — chaque rôle a le sien. */
 export const INTERNAL_DASHBOARDS: Record<string, InternalDashboardMeta> = {
@@ -329,11 +328,7 @@ function BusinessManagementContent({ access }: { access: InternalAccess }) {
 /** Rendu du dashboard interne selon le rôle. */
 export function InternalDashboardView({ dashboard }: { dashboard: string }) {
   const { access } = useAccess();
-  const [tab, setTab] = useState<'overview' | 'employees' | 'connect'>('overview');
   const meta = INTERNAL_DASHBOARDS[dashboard] ?? INTERNAL_DASHBOARDS.executive;
-
-  // Sous-navigation Super Admin (dashboard executive) : Employés + Connect.
-  const showAdminTabs = dashboard === 'executive';
 
   if (!access) {
     return (
@@ -348,31 +343,15 @@ export function InternalDashboardView({ dashboard }: { dashboard: string }) {
 
   return (
     <InternalDashboard meta={meta}>
-      {showAdminTabs && (
-        <div className="account-tabs animate-up" style={{ marginBottom: 20, width: 'fit-content' }}>
-          {([['overview', '👑 Vue d\'ensemble'], ['employees', '👤 Employés'], ['connect', '🔌 Comptes Connect']] as const).map(([id, label]) => (
-            <button key={id} className={`account-tab ${tab === id ? 'active-personal' : ''}`} onClick={() => setTab(id)} style={{ fontSize: 11, fontWeight: 600 }}>
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {tab === 'employees' && <AdminEmployeesPage />}
-      {tab === 'connect' && <AdminConnectAccountsPage />}
-      {tab === 'overview' && (
-        <>
-          {dashboard === 'executive' && <ExecutiveContent access={access} />}
-          {dashboard === 'operations' && <OperationsContent />}
-          {dashboard === 'finance' && <FinanceContent />}
-          {dashboard === 'compliance' && <ComplianceContent access={access} />}
-          {dashboard === 'risk' && <RiskContent />}
-          {dashboard === 'providers' && <ProvidersContent access={access} />}
-          {dashboard === 'support' && <SupportContent access={access} />}
-          {dashboard === 'technical' && <TechnicalContent access={access} />}
-          {dashboard === 'business' && <BusinessManagementContent access={access} />}
-        </>
-      )}
+      {dashboard === 'executive' && <ExecutiveContent access={access} />}
+      {dashboard === 'operations' && <OperationsContent />}
+      {dashboard === 'finance' && <FinanceContent />}
+      {dashboard === 'compliance' && <ComplianceContent access={access} />}
+      {dashboard === 'risk' && <RiskContent />}
+      {dashboard === 'providers' && <ProvidersContent access={access} />}
+      {dashboard === 'support' && <SupportContent access={access} />}
+      {dashboard === 'technical' && <TechnicalContent access={access} />}
+      {dashboard === 'business' && <BusinessManagementContent access={access} />}
     </InternalDashboard>
   );
 }
