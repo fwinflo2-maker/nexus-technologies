@@ -103,10 +103,24 @@ final class RoutingEngine
         $minReceived = min(array_map(fn ($q) => (float) $q['received'], $quotes));
         $maxFees     = max(array_map(fn ($q) => (float) $q['fees'], $quotes));
         $minFees     = min(array_map(fn ($q) => (float) $q['fees'], $quotes));
-        $maxDelay    = max(array_map(fn ($q) => (int) $q['delay_avg'], $quotes));
-        $minDelay    = min(array_map(fn ($q) => (int) $q['delay_avg'], $quotes));
-        $maxRel      = max(array_map(fn ($q) => (float) $q['reliability'], $quotes));
-        $minRel      = min(array_map(fn ($q) => (float) $q['reliability'], $quotes));
+        // Délais : seules les valeurs MESURÉES entrent dans la normalisation.
+        // `(int) null` vaudrait 0, soit « instantané » : un provider jamais
+        // chronométré passerait pour le PLUS RAPIDE de tous (§17).
+        $measuredDelays = array_values(array_filter(
+            array_map(static fn ($q) => $q['delay_avg'] ?? null, $quotes),
+            static fn ($d) => $d !== null
+        ));
+        $maxDelay = $measuredDelays === [] ? 0 : max($measuredDelays);
+        $minDelay = $measuredDelays === [] ? 0 : min($measuredDelays);
+        // Fiabilité : seules les valeurs MESURÉES entrent dans la
+        // normalisation. `(float) null` vaudrait 0.0 et ferait passer un
+        // provider « non mesuré » pour le pire de tous (§17).
+        $measuredRel = array_values(array_filter(
+            array_map(static fn ($q) => $q['reliability'], $quotes),
+            static fn ($r) => $r !== null
+        ));
+        $maxRel = $measuredRel === [] ? 0.0 : max($measuredRel);
+        $minRel = $measuredRel === [] ? 0.0 : min($measuredRel);
 
         // Éviter division par zéro
         $norm = static fn (float $val, float $min, float $max): float =>
@@ -117,8 +131,18 @@ final class RoutingEngine
         foreach ($quotes as $q) {
             $receivedScore = $norm((float) $q['received'], $minReceived, $maxReceived);
             $feesScore     = 1.0 - $norm((float) $q['fees'], $minFees, $maxFees); // inversion : moins cher = mieux
-            $speedScore    = 1.0 - $norm((float) $q['delay_avg'], $minDelay, $maxDelay); // inversion : plus rapide = mieux
-            $reliabilityScore = $norm((float) $q['reliability'], $minRel, $maxRel);
+            // Non mesuré → score NEUTRE, ni bonus ni malus. Classer sur un
+            // délai inconnu reviendrait à inventer un ordre de rapidité.
+            $speedScore = ($q['delay_avg'] ?? null) === null
+                ? 0.5
+                : 1.0 - $norm((float) $q['delay_avg'], (float) $minDelay, (float) $maxDelay); // inversion : plus rapide = mieux
+            // Non mesuré → score NEUTRE, ni bonus ni malus. Départager des
+            // routes sur une fiabilité inconnue reviendrait à inventer un
+            // classement ; à défaut de mesure, la composante n'avantage
+            // personne.
+            $reliabilityScore = $q['reliability'] === null
+                ? 0.5
+                : $norm((float) $q['reliability'], $minRel, $maxRel);
 
             $score = $receivedScore * $weights['received']
                 + $reliabilityScore * $weights['reliability']
@@ -139,6 +163,38 @@ final class RoutingEngine
 
         // ── Badge de l'objectif principal ───────────────────────
         $objBadge = self::OBJECTIVE_BADGES[$objective] ?? self::OBJECTIVE_BADGES['optimized'];
+
+        // « 🛡️ PLUS FIABLE » et « ⚡ PLUS RAPIDE » affirment une performance
+        // OBSERVÉE. Or ces badges étaient décernés sur le seul objectif
+        // demandé : sur un corridor sans historique, `most_reliable` et
+        // `fastest` les collaient à la première route alors qu'aucune mesure
+        // n'existait — constaté en HTTP dans les deux cas, chaque fois APRÈS
+        // la correction du score lui-même. À défaut de mesure, on retombe sur
+        // le badge neutre « RECOMMANDÉE », qui décrit un classement et non une
+        // performance observée.
+        //
+        // Le champ à contrôler diffère selon l'objectif : promettre « le plus
+        // rapide » exige des délais mesurés, pas des fiabilités.
+        $badgeEvidence = [
+            'most_reliable' => 'reliability',
+            'fastest'       => 'delay_avg',
+        ];
+
+        if (isset($badgeEvidence[$objective])) {
+            $field       = $badgeEvidence[$objective];
+            $anyMeasured = false;
+
+            foreach ($best as $candidate) {
+                if (($candidate[$field] ?? null) !== null) {
+                    $anyMeasured = true;
+                    break;
+                }
+            }
+
+            if (!$anyMeasured) {
+                $objBadge = self::OBJECTIVE_BADGES['optimized'];
+            }
+        }
 
         // ── Icônes de méthode ──────────────────────────────────
         $methodIcons = [
@@ -170,13 +226,27 @@ final class RoutingEngine
             $received = (float) $q['received'];
             $fees     = (float) $q['fees'];
 
-            // Fiabilité → label texte + couleur
-            $reliabilityNum = (float) $q['reliability'];
-            $reliabilityText = self::reliabilityLabel($reliabilityNum);
-            $reliabilityColor = self::reliabilityColor($reliabilityNum);
+            // Fiabilité → label texte + couleur, UNIQUEMENT si mesurée.
+            // Auparavant `(float) null` produisait 0.0, donc « Modérée » en
+            // orange : une note inventée pour un provider jamais observé.
+            $reliabilityRaw    = $q['reliability'] ?? null;
+            $reliabilityStatus = (string) ($q['reliability_status'] ?? ProviderReliability::UNAVAILABLE);
+            $reliabilityNum    = $reliabilityRaw === null ? null : (float) $reliabilityRaw;
+            $reliabilityText   = $reliabilityNum === null
+                ? 'Non mesurée'
+                : self::reliabilityLabel($reliabilityNum);
+            $reliabilityColor  = $reliabilityNum === null
+                ? 'var(--text-mid)'
+                : self::reliabilityColor($reliabilityNum);
 
-            $delayAvg = (int) $q['delay_avg'];
-            $delayText = $delayAvg < 1 ? '~1 min' : "~{$delayAvg} min";
+            // Délai affiché : uniquement s'il est mesuré. Auparavant, une
+            // constante de catégorie produisait « ~3 min » y compris sur une
+            // base sans la moindre transaction.
+            $delayAvg    = $q['delay_avg'] ?? null;
+            $delayStatus = (string) ($q['delay_status'] ?? ProviderLatency::UNAVAILABLE);
+            $delayText   = $delayAvg === null
+                ? 'Non mesuré'
+                : ($delayAvg < 1 ? '~1 min' : "~{$delayAvg} min");
 
             $methodTypeKey = $q['method_type'] ?? $methodType;
             $methodIcon = $methodIcons[$methodTypeKey] ?? "🌐 {$methodTypeKey}";
@@ -195,12 +265,29 @@ final class RoutingEngine
                 'feesNum'           => $fees,
                 'delay'             => $delayText,
                 'delayMinutes'      => $delayAvg,
-                'reliability'       => $reliabilityText,
-                'reliabilityNum'    => $reliabilityNum,
-                'reliabilityColor'  => $reliabilityColor,
+                // L'interface doit distinguer « délai mesuré » de « pas
+                // encore d'historique » sans avoir à le deviner.
+                'delayStatus'       => $delayStatus,
+                'delayMeasured'     => $delayAvg !== null,
+                'delayObs'          => (int) ($q['delay_obs'] ?? 0),
+                'reliability'         => $reliabilityText,
+                'reliabilityNum'      => $reliabilityNum,
+                'reliabilityColor'    => $reliabilityColor,
+                // L'interface doit pouvoir distinguer « fiabilité mesurée »
+                // de « pas encore d'historique » sans le deviner.
+                'reliabilityStatus'   => $reliabilityStatus,
+                'reliabilityMeasured' => $reliabilityNum !== null,
+                'reliabilityObs'      => (int) ($q['reliability_obs'] ?? 0),
                 'recommended'       => $isFirst,
                 'spread'            => number_format((float) ($q['spread_pct'] ?? 0), 2) . '%',
                 'rate'              => (float) ($q['effective_rate'] ?? 0),
+                // Provenance des chiffres financiers : le client doit pouvoir
+                // savoir d'où vient le taux qu'on lui annonce, quand il a été
+                // obtenu et jusqu'à quand il vaut (§12).
+                'rateSource'        => $q['rate_source'] ?? null,
+                'rateFetchedAt'     => $q['rate_fetched_at'] ?? null,
+                'rateExpiresAt'     => $q['rate_expires_at'] ?? null,
+                'feeSource'         => $q['fee_source'] ?? null,
             ];
         }
 
@@ -218,10 +305,24 @@ final class RoutingEngine
         if ($receivedDiff > 1000) {
             return ['badge' => '💰 MAX REÇU', 'cls' => 'p-g'];
         }
-        if ((float) $q['reliability'] > (float) $best['reliability']) {
+        // Badge « PLUS FIABLE » : uniquement si les DEUX fiabilités sont
+        // réellement mesurées. Le comparatif s'appuyait sur `(float) null`,
+        // ce qui décernait le badge à partir de scores inventés — c'est
+        // précisément ce que l'audit a constaté en HTTP.
+        if ($q['reliability'] !== null
+            && $best['reliability'] !== null
+            && (float) $q['reliability'] > (float) $best['reliability']
+        ) {
             return ['badge' => '🛡️ PLUS FIABLE', 'cls' => 'p-v'];
         }
-        if ((int) $q['delay_avg'] < (int) $best['delay_avg']) {
+        // « PLUS RAPIDE » affirme un fait : les DEUX délais doivent être
+        // mesurés. Le comparatif s'appuyait sur `(int) null`, ce qui décernait
+        // le badge à partir de constantes — constaté en HTTP sur une base
+        // vide de toute transaction.
+        if (($q['delay_avg'] ?? null) !== null
+            && ($best['delay_avg'] ?? null) !== null
+            && (int) $q['delay_avg'] < (int) $best['delay_avg']
+        ) {
             return ['badge' => '⚡ PLUS RAPIDE', 'cls' => 'p-c'];
         }
         if ((float) $q['fees'] < (float) $best['fees']) {

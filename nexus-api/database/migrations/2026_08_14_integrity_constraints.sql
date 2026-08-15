@@ -19,12 +19,27 @@
 USE nexus;
 
 -- 1) Unicité des écritures comptables ------------------------------------
-ALTER TABLE ledger_entries
-    ADD UNIQUE INDEX IF NOT EXISTS uq_ledger_operation_sequence (operation_id, sequence);
+SET @nx_20 := (SELECT COUNT(*) FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ledger_entries'
+      AND INDEX_NAME = 'uq_ledger_operation_sequence');
+SET @nx_sql_20 := IF(@nx_20 = 0, 'ALTER TABLE ledger_entries ADD UNIQUE INDEX uq_ledger_operation_sequence (operation_id, sequence)', 'DO 0');
+PREPARE nx_stmt_20 FROM @nx_sql_20;
+EXECUTE nx_stmt_20;
+DEALLOCATE PREPARE nx_stmt_20;
 
 -- 2) Séparation stricte sandbox / production -----------------------------
-ALTER TABLE provider_credentials
-    ADD UNIQUE INDEX IF NOT EXISTS uq_provider_creds_env (user_id, provider_slug, environment);
+SET @nx_21 := (SELECT COUNT(*) FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'provider_credentials'
+      AND INDEX_NAME = 'uq_provider_creds_env');
+SET @nx_sql_21 := IF(@nx_21 = 0, 'ALTER TABLE provider_credentials ADD UNIQUE INDEX uq_provider_creds_env (user_id, provider_slug, environment)', 'DO 0');
+PREPARE nx_stmt_21 FROM @nx_sql_21;
+EXECUTE nx_stmt_21;
+DEALLOCATE PREPARE nx_stmt_21;
 
-ALTER TABLE provider_credentials
-    DROP INDEX IF EXISTS uq_provider_creds;
+SET @nx_22 := (SELECT COUNT(*) FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'provider_credentials'
+      AND INDEX_NAME = 'uq_provider_creds');
+SET @nx_sql_22 := IF(@nx_22 > 0, 'ALTER TABLE provider_credentials DROP INDEX uq_provider_creds', 'DO 0');
+PREPARE nx_stmt_22 FROM @nx_sql_22;
+EXECUTE nx_stmt_22;
+DEALLOCATE PREPARE nx_stmt_22;

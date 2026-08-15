@@ -1,7 +1,7 @@
 -- NEXUS — Migration 0.7 : Wallet Core (fondation comptable)
 -- À appliquer sur une base déjà initialisée (schema.sql + migrations 0.3–0.6) :
 --   mysql -u root nexus < database/migrations/2026_08_10_wallet_core.sql
--- Compatible MySQL 8+ et MariaDB 10.4+ (ADD COLUMN IF NOT EXISTS).
+-- Compatible MySQL 8+ et MariaDB : ajouts gardés par information_schema.
 --
 -- Cette migration pose les fondations comptables du Wallet NEXUS :
 --   1. hold_balance sur wallets          → distinction fonds gelés / disponibles
@@ -25,8 +25,13 @@ USE nexus;
 -- Séparation explicite entre fonds disponibles et fonds gelés (holds).
 -- available_balance est conservé comme colonne calculée à l'inscription ;
 -- la cohérence hold + soldes par état est garantie par recalcul ci-dessous.
-ALTER TABLE wallets
-    ADD COLUMN IF NOT EXISTS hold_balance DECIMAL(20,2) NOT NULL DEFAULT 0.00 AFTER settlement_balance;
+SET @nx_18 := (SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'wallets'
+      AND COLUMN_NAME = 'hold_balance');
+SET @nx_sql_18 := IF(@nx_18 = 0, 'ALTER TABLE wallets ADD COLUMN hold_balance DECIMAL(20,2) NOT NULL DEFAULT 0.00 AFTER settlement_balance', 'DO 0');
+PREPARE nx_stmt_18 FROM @nx_sql_18;
+EXECUTE nx_stmt_18;
+DEALLOCATE PREPARE nx_stmt_18;
 
 -- Recalcul rétro-actif : hold = pending + in_transit + settlement,
 -- available = balance - hold.

@@ -6,6 +6,8 @@ namespace Nexus\Services;
 
 use Nexus\Core\Database;
 use Nexus\Core\HttpException;
+use Nexus\Execution\ExecutionEnvironment;
+use Nexus\Providers\ProviderConfig;
 
 /**
  * Policy & Risk Engine — vérifie la conformité avant d'autoriser un transfert.
@@ -13,12 +15,20 @@ use Nexus\Core\HttpException;
  * Étape 5 du pipeline. Contrôles :
  *   1. Statut du compte (PENDING → refus transfert)
  *   2. Plafonds par niveau KYC (LIMITED : 200 EUR/mois, STANDARD : 2000, etc.)
- *   3. Sanctions (liste noire — simulation démo, toujours passée)
+ *   3. Sanctions (déléguées à SanctionsScreening — jamais simulées)
  *   4. Seuils réglementaires (KYC requis au-delà de 1000 EUR)
  *   5. Disponibilité du wallet (fonds suffisants)
  *
  * Retourne un verdict : APPROVED | DECLINED | REVIEW_REQUIRED.
  * Si DECLINED, lève une HttpException avec la raison.
+ *
+ * HONNÊTETÉ DU VERDICT (§37)
+ * ──────────────────────────
+ * Le verdict rend compte de ce qui a RÉELLEMENT été vérifié. Un contrôle qui
+ * n'a pas pu s'exécuter n'est jamais compté comme passé : le détail porte
+ * `sanctions_screened => false` et le message le dit explicitement. La
+ * formule « Tous les contrôles de conformité sont passés » n'est employée
+ * que lorsque c'est vrai.
  */
 final class PolicyEngine
 {
@@ -43,9 +53,6 @@ final class PolicyEngine
         'CLOSED'    => 'Votre compte a été fermé.',
     ];
 
-    /** Liste noire simulation (toujours vide en démo). */
-    private const SANCTION_LIST = [];
-
     private function __construct() {}
 
     /**
@@ -54,13 +61,24 @@ final class PolicyEngine
      * @param array{id: int, status: string, kyc_level: string, account_type: string} $user
      * @param array{amount: float, sourceCurrency: string} $intent
      * @param float $amountRef Montant converti en EUR (pour comparaison aux plafonds).
+     * @param ExecutionEnvironment|null $environment Environnement d'exécution.
+     *        Détermine l'arbitrage d'un filtrage de sanctions indisponible.
+     *        `null` retombe sur l'environnement par défaut du déploiement —
+     *        jamais sur « sandbox » en dur, sans quoi un appelant oublieux
+     *        contournerait le blocage prévu en production.
      *
      * @return array{decision: string, reason: string, details: array<string, mixed>}
      *
      * @throws HttpException 403 si la transaction est refusée.
      */
-    public static function evaluate(array $user, array $intent, float $amountRef): array
-    {
+    public static function evaluate(
+        array $user,
+        array $intent,
+        float $amountRef,
+        ?ExecutionEnvironment $environment = null
+    ): array {
+        $environment ??= ExecutionEnvironment::fromString(ProviderConfig::defaultEnvironment());
+
         $status   = $user['status'];
         $kycLevel = $user['kyc_level'];
         $userId   = (int) $user['id'];
@@ -93,14 +111,39 @@ final class PolicyEngine
             return self::declined($reason, $details);
         }
 
-        // ── 3. Sanctions (simulation) ───────────────────────────
-        foreach (self::SANCTION_LIST as $entry) {
-            if (stripos($intent['destCountry'] ?? '', $entry) !== false) {
+        // ── 3. Sanctions ────────────────────────────────────────
+        // Délégué à SanctionsScreening, qui distingue trois états :
+        // CLEARED (filtré, rien trouvé), HIT (refus) et UNAVAILABLE (aucune
+        // source configurée → le contrôle n'a PAS eu lieu). UNAVAILABLE n'est
+        // jamais assimilé à CLEARED.
+        $screening = SanctionsScreening::screenCountry((string) ($intent['destCountry'] ?? ''));
+        $details['sanctions_status']   = $screening['status'];
+        $details['sanctions_screened'] = $screening['screened'];
+
+        if ($screening['status'] === SanctionsScreening::HIT) {
+            return self::declined(
+                'Transaction bloquée pour raison réglementaire.',
+                array_merge($details, ['sanction' => true])
+            );
+        }
+
+        if ($screening['status'] === SanctionsScreening::UNAVAILABLE) {
+            // Production : refus. Autoriser un mouvement d'argent réel sans
+            // avoir filtré les sanctions serait exactement le faux succès que
+            // la règle d'honnêteté interdit.
+            if (SanctionsScreening::unavailableBlocks($environment)) {
                 return self::declined(
-                    'Transaction bloquée pour raison réglementaire.',
-                    array_merge($details, ['sanction' => true])
+                    'Filtrage des sanctions indisponible : la transaction ne peut pas être '
+                    . 'autorisée en production tant que le contrôle réglementaire n\'est pas configuré.',
+                    array_merge($details, ['sanctions_unavailable' => true])
                 );
             }
+
+            // Sandbox : on laisse passer (aucun argent réel) mais le verdict
+            // porte la mention du contrôle manquant.
+            $decision = 'REVIEW_REQUIRED';
+            $reason   = 'Filtrage des sanctions non configuré : ce contrôle réglementaire '
+                      . 'n\'a pas été effectué (sandbox).';
         }
 
         // ── 4. KYC requis au-delà du seuil ──────────────────────
@@ -121,6 +164,9 @@ final class PolicyEngine
             );
         }
 
+        // Le message par défaut n'est employé que si TOUS les contrôles ont
+        // réellement eu lieu. Sinon `$reason` a déjà été renseigné plus haut
+        // avec la mention du contrôle manquant.
         return [
             'decision' => $decision,
             'reason'   => $reason ?: 'Tous les contrôles de conformité sont passés.',

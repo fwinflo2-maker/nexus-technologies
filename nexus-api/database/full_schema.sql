@@ -17,6 +17,11 @@
 --   * Équivalence avec le runner de migrations vérifiée par
 --     scripts/compare_schemas.sh (tables, colonnes, types, index, clés
 --     étrangères, ENUM, valeurs par défaut, nullabilité).
+--   * PORTABILITÉ : généré depuis MariaDB, ce dump rendait les colonnes JSON
+--     sous leur forme interne MariaDB (longtext + CHECK json_valid). MySQL 8
+--     possède un vrai type JSON : les deux chemins d'installation
+--     divergeaient donc selon le moteur ayant servi à la génération. Le
+--     générateur renormalise ces colonnes en `json`, accepté par les deux.
 -- =============================================================================
 
 SET NAMES utf8mb4;
@@ -38,7 +43,7 @@ CREATE TABLE `audit_logs` (
   `entity_type` varchar(50) DEFAULT NULL,
   `entity_id` bigint(20) unsigned DEFAULT NULL,
   `environment` enum('sandbox','production') DEFAULT NULL COMMENT 'Environnement de la dÃ©cision. NULL si la demande Ã©tait invalide (aucune valeur valide Ã  consigner).',
-  `metadata` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`metadata`)),
+  `metadata` json DEFAULT NULL,
   `ip_address` varchar(45) DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
@@ -78,10 +83,12 @@ CREATE TABLE `fx_rates_cache` (
   `rate` decimal(20,8) NOT NULL,
   `spread_pct` decimal(8,4) NOT NULL DEFAULT 0.0000,
   `source` varchar(50) NOT NULL DEFAULT 'manual',
+  `environment` enum('sandbox','production') NOT NULL DEFAULT 'sandbox' COMMENT 'Environnement du taux. Un taux sandbox ne doit jamais coter de l''argent reel.',
   `fetched_at` datetime NOT NULL DEFAULT current_timestamp(),
   `expires_at` datetime NOT NULL,
   PRIMARY KEY (`id`),
-  KEY `idx_fx_pair` (`base_currency`,`quote_currency`,`fetched_at`)
+  UNIQUE KEY `uq_fx_pair_env_fetched` (`base_currency`,`quote_currency`,`environment`,`fetched_at`),
+  KEY `idx_fx_pair_env` (`base_currency`,`quote_currency`,`environment`,`fetched_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -156,7 +163,7 @@ CREATE TABLE `ledger_entries` (
   `description` varchar(255) DEFAULT NULL,
   `reference_type` varchar(50) DEFAULT NULL,
   `reference_id` varchar(36) DEFAULT NULL,
-  `metadata` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`metadata`)),
+  `metadata` json DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_ledger_operation_sequence` (`operation_id`,`sequence`),
@@ -294,7 +301,7 @@ CREATE TABLE `provider_credentials` (
   `last_error` text DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  `owner_scope` bigint(20) unsigned GENERATED ALWAYS AS (ifnull(`user_id`,0)) STORED,
+  `owner_scope` bigint(20) unsigned GENERATED ALWAYS AS (ifnull(`user_id`,0)) VIRTUAL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_provider_creds_scope` (`owner_scope`,`provider_slug`,`environment`),
   KEY `idx_provider_creds_user` (`user_id`),
@@ -313,7 +320,7 @@ CREATE TABLE `quotes` (
   `receiving_method` varchar(30) NOT NULL DEFAULT 'mobile_money',
   `amount_sent` decimal(20,2) NOT NULL DEFAULT 0.00,
   `objective` varchar(30) NOT NULL DEFAULT 'optimized',
-  `routes_json` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL CHECK (json_valid(`routes_json`)),
+  `routes_json` json NOT NULL,
   `selected_route_id` varchar(10) DEFAULT NULL,
   `status` enum('QUOTED','SELECTED','EXECUTED','EXPIRED','CANCELLED') NOT NULL DEFAULT 'QUOTED',
   `environment` enum('sandbox','production') NOT NULL DEFAULT 'sandbox' COMMENT 'Environnement dans lequel la quote a Ã©tÃ© calculÃ©e. ComparÃ© au contexte lors de l''exÃ©cution.',
@@ -461,7 +468,7 @@ CREATE TABLE `wallet_operations` (
   `fx_rate` decimal(20,8) DEFAULT NULL,
   `fx_source` varchar(50) DEFAULT NULL,
   `description` varchar(255) DEFAULT NULL,
-  `metadata` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`metadata`)),
+  `metadata` json DEFAULT NULL,
   `idempotency_key` varchar(64) NOT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),

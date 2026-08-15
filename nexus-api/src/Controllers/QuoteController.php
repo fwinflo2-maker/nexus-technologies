@@ -92,7 +92,7 @@ final class QuoteController
         $intent['originCountry'] = $originCountry;
 
         // ── 2. Capability Engine : providers éligibles ───────────
-        $providers = CapabilityEngine::findEligible($intent);
+        $providers = CapabilityEngine::findEligible($intent, $context->environment);
 
         // ── 3. Policy Engine : vérification avant quotes ────────
         // Conversion du montant source en EUR pour comparer aux plafonds
@@ -101,14 +101,25 @@ final class QuoteController
         $sourceToEur = self::rateToEur($intent['sourceCurrency']);
         $amountRef   = $intent['amount'] / $sourceToEur;
 
-        PolicyEngine::evaluate($user, $intent, $amountRef);
+        PolicyEngine::evaluate($user, $intent, $amountRef, $context->environment);
 
         // ── 4. Quote Engine : calcul des quotes par provider ────
         $quoteId = self::generateQuoteId();
         $quotes  = [];
 
         foreach ($providers as $provider) {
-            $quotes[] = QuoteEngine::quote($intent, $provider, $quoteId);
+            try {
+                $quotes[] = QuoteEngine::quote($intent, $provider, $quoteId, $context->environment);
+            } catch (\Nexus\Services\QuoteRateUnavailable $e) {
+                // Aucun taux réel pour cette paire : on refuse de coter plutôt
+                // que d'annoncer un montant reçu sans fondement (§12).
+                Response::error(
+                    $e->getMessage(),
+                    503,
+                    \Nexus\Services\QuoteRateUnavailable::ERROR_CODE
+                );
+                return;
+            }
         }
 
         // ── 5. Routing Engine : classement et top 3 ─────────────

@@ -1,7 +1,9 @@
 -- NEXUS — Migration 0.3 : Dashboard (wallets multi-états + table transactions)
 -- À appliquer sur une base déjà initialisée (schema.sql) :
 --   mysql -u root nexus < database/migrations/2026_08_10_dashboard.sql
--- Compatible MySQL 8+ et MariaDB 10.4+ (ADD COLUMN IF NOT EXISTS).
+-- Compatible MySQL 8+ et MariaDB : les ajouts sont gardés par un test
+-- information_schema + PREPARE (`ADD COLUMN IF NOT EXISTS` est une extension
+-- MariaDB que MySQL 8 rejette).
 
 USE nexus;
 
@@ -11,10 +13,29 @@ USE nexus;
 --  - pending_balance   : en attente (créancier) ;
 --  - in_transit_balance : fonds en transit vers/depuis un provider ;
 --  - settlement_balance : en cours de règlement (settlement).
-ALTER TABLE wallets
-    ADD COLUMN IF NOT EXISTS pending_balance     DECIMAL(20,2) NOT NULL DEFAULT 0.00 AFTER available_balance,
-    ADD COLUMN IF NOT EXISTS in_transit_balance  DECIMAL(20,2) NOT NULL DEFAULT 0.00 AFTER pending_balance,
-    ADD COLUMN IF NOT EXISTS settlement_balance  DECIMAL(20,2) NOT NULL DEFAULT 0.00 AFTER in_transit_balance;
+SET @nx_1 := (SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'wallets'
+      AND COLUMN_NAME = 'pending_balance');
+SET @nx_sql_1 := IF(@nx_1 = 0, 'ALTER TABLE wallets ADD COLUMN pending_balance     DECIMAL(20,2) NOT NULL DEFAULT 0.00 AFTER available_balance', 'DO 0');
+PREPARE nx_stmt_1 FROM @nx_sql_1;
+EXECUTE nx_stmt_1;
+DEALLOCATE PREPARE nx_stmt_1;
+
+SET @nx_2 := (SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'wallets'
+      AND COLUMN_NAME = 'in_transit_balance');
+SET @nx_sql_2 := IF(@nx_2 = 0, 'ALTER TABLE wallets ADD COLUMN in_transit_balance  DECIMAL(20,2) NOT NULL DEFAULT 0.00 AFTER pending_balance', 'DO 0');
+PREPARE nx_stmt_2 FROM @nx_sql_2;
+EXECUTE nx_stmt_2;
+DEALLOCATE PREPARE nx_stmt_2;
+
+SET @nx_3 := (SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'wallets'
+      AND COLUMN_NAME = 'settlement_balance');
+SET @nx_sql_3 := IF(@nx_3 = 0, 'ALTER TABLE wallets ADD COLUMN settlement_balance  DECIMAL(20,2) NOT NULL DEFAULT 0.00 AFTER in_transit_balance', 'DO 0');
+PREPARE nx_stmt_3 FROM @nx_sql_3;
+EXECUTE nx_stmt_3;
+DEALLOCATE PREPARE nx_stmt_3;
 
 -- --- Étape 1 bis : devises stables (USDT/USDC = 4 caractères) ------------------
 ALTER TABLE wallets MODIFY currency VARCHAR(5) NOT NULL;

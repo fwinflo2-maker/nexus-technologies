@@ -4,20 +4,33 @@ declare(strict_types=1);
 
 namespace Nexus\Services;
 
+use Nexus\Execution\ExecutionEnvironment;
 use Nexus\Models\FXRate;
 use RuntimeException;
 
 /**
  * Service FX — résolution et conversion de taux (Phase D).
  *
- * Flux de résolution :
- *   FXService → FXRateCache → ManualRateProvider
+ * Flux de résolution, TOUJOURS dans un environnement donné :
+ *   FXService → FXRateCache → ManualRateProvider (sandbox uniquement)
  *
  *   1. `resolve()` tente d'abord une entrée valide (non expirée) de
- *      `fx_rates_cache`.
- *   2. En cas d'absence ou d'expiration, le taux est obtenu auprès du
- *      `ManualRateProvider` (aucun provider externe en Phase D).
- *   3. Si aucune source ne connaît la paire, une RuntimeException est levée.
+ *      `fx_rates_cache`, POUR CET ENVIRONNEMENT ;
+ *   2. en cas d'absence ou d'expiration, le `ManualRateProvider` prend le
+ *      relais — mais en SANDBOX SEULEMENT ;
+ *   3. si aucune source ne connaît la paire, une RuntimeException est levée.
+ *
+ * POURQUOI LE REPLI MANUEL EST INTERDIT EN PRODUCTION
+ * ───────────────────────────────────────────────────
+ * `ManualRateProvider` porte un jeu de taux CODÉS EN DUR, sans horodatage
+ * réel ni provenance externe. Vérifié en HTTP avant correctif : avec un cache
+ * vide, une quote demandée en production obtenait `655.957` / source
+ * « manual ». Un taux écrit dans le code ne peut pas coter de l'argent réel :
+ * en production, l'absence de taux doit produire un REFUS explicite —
+ * visible et corrigeable — plutôt qu'une valeur silencieuse (§12, §13).
+ *
+ * La sandbox, elle, conserve ce repli : elle ne déplace aucun argent réel et
+ * doit rester utilisable sans configuration préalable.
  *
  * Le `spread_pct` est conservé dans le cache mais NE modifie PAS le taux :
  * le taux fourni par le provider est le taux final à appliquer.
@@ -43,16 +56,33 @@ final class FXService
      *
      * @param string $baseCurrency  Devise source (ex. 'EUR')
      * @param string $quoteCurrency Devise destination (ex. 'USD')
+     * @param ExecutionEnvironment $environment Environnement d'exécution :
+     *        un taux sandbox ne doit jamais servir en production.
      *
      * @return FXRate Taux résolu (jamais null).
      *
-     * @throws RuntimeException Si la paire n'existe ni en cache ni dans le provider manuel.
+     * @throws RuntimeException Si la paire n'existe pas dans cet environnement,
+     *         ou si la production ne dispose d'aucun taux réel.
      */
-    public static function resolve(string $baseCurrency, string $quoteCurrency): FXRate
-    {
-        $cached = FXRateCache::lookup($baseCurrency, $quoteCurrency);
+    public static function resolve(
+        string $baseCurrency,
+        string $quoteCurrency,
+        ExecutionEnvironment $environment
+    ): FXRate {
+        $cached = FXRateCache::lookup($baseCurrency, $quoteCurrency, $environment);
         if ($cached !== null) {
             return $cached;
+        }
+
+        // Production : pas de repli sur des taux codés en dur. L'absence de
+        // taux réel doit se voir, pas se combler.
+        if ($environment === ExecutionEnvironment::PRODUCTION) {
+            throw new RuntimeException(sprintf(
+                'Aucun taux de production disponible pour %s/%s. '
+                . 'Un taux de secours ne peut pas coter de l\'argent réel.',
+                strtoupper($baseCurrency),
+                strtoupper($quoteCurrency)
+            ));
         }
 
         return ManualRateProvider::getRate($baseCurrency, $quoteCurrency);

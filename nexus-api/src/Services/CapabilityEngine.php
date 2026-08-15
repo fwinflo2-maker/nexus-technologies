@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Nexus\Services;
 
 use Nexus\Core\HttpException;
+use Nexus\Execution\ExecutionEnvironment;
+use Nexus\Providers\ProviderConfig;
 use Nexus\Providers\ProviderRegistry;
 
 /**
@@ -17,45 +19,28 @@ use Nexus\Providers\ProviderRegistry;
  * Source de vérité : le ProviderCatalog (registre statique des providers)
  * couplé aux données de couverture d'IntentEngine (pays, devise, méthodes).
  *
- * Pour chaque provider éligible, retourne un score de fiabilité simulé
- * (performance_score) et les métadonnées nécessaires au Quote Engine.
+ * Pour chaque provider éligible, retourne sa fiabilité MESURÉE (ou l'état
+ * expliquant pourquoi elle ne l'est pas) et les métadonnées nécessaires au
+ * Quote Engine.
+ *
+ * DÉLAIS : MESURÉS OU DÉCLARÉS INCONNUS (§12, §17)
+ * ────────────────────────────────────────────────
+ * `CATEGORY_DELAYS` fixait le délai par CATÉGORIE : les trois providers
+ * Mobile Money d'un corridor annonçaient donc le même « ~3 min », quels que
+ * soient leurs temps réels. Elle est supprimée au profit de
+ * `ProviderLatency`, qui mesure depuis `transactions.execution_time_seconds`.
+ * Sans mesure, `delay_seconds` vaut `null` et `delay_status` dit pourquoi.
+ *
+ * FIABILITÉ : MESURÉE OU DÉCLARÉE INCONNUE (§12, §17)
+ * ───────────────────────────────────────────────────
+ * Ce moteur portait une constante `PERFORMANCE_SCORES` de 20 valeurs écrites
+ * à la main, présentées au client comme une mesure. Elle est supprimée : la
+ * fiabilité vient désormais de `ProviderReliability`, qui l'agrège depuis les
+ * exécutions réelles. Quand rien n'est mesurable, `reliability` vaut `null`
+ * et `reliability_status` dit pourquoi — jamais un nombre plausible.
  */
 final class CapabilityEngine
 {
-    /**
-     * Score de fiabilité par défaut (si pas de performance historique).
-     * Sur une échelle de 0 à 1.
-     */
-    private const DEFAULT_RELIABILITY = 0.95;
-
-    /**
-     * Mapping provider slug → performance score (simulation démo).
-     * En production, ces valeurs viendraient de la table providers
-     * ou d'un service de métriques.
-     */
-    private const PERFORMANCE_SCORES = [
-        'pawapay'          => 0.97,
-        'thunes'           => 0.93,
-        'orange_money'     => 0.95,
-        'mtn_momo'         => 0.94,
-        'safaricom_mpesa'  => 0.96,
-        'dlocal'           => 0.88,
-        'ebanx'            => 0.86,
-        'onfriq'           => 0.91,
-        'noah'             => 0.85,
-        'yellow_card'      => 0.89,
-        'cashramp'         => 0.82,
-        'xendit'           => 0.87,
-        'nium'             => 0.90,
-        'wise'             => 0.98,
-        'currencycloud'    => 0.96,
-        'swan'             => 0.97,
-        'modulr'           => 0.94,
-        'bvnk'             => 0.93,
-        'bridge'           => 0.91,
-        'stripe'           => 0.99,
-    ];
-
     /**
      * Mapping method_type → catégories de providers éligibles.
      */
@@ -64,18 +49,6 @@ final class CapabilityEngine
         'bank'         => ['banking', 'fx', 'payout_network'],
         'crypto'       => ['crypto', 'onramp'],
         'cash_pickup'  => ['payout_network'],
-    ];
-
-    /**
-     * Temps de transfert moyen par catégorie (secondes, simulation démo).
-     */
-    private const CATEGORY_DELAYS = [
-        'mobile_money'  => [60, 300],    // 1-5 min
-        'banking'       => [180, 600],   // 3-10 min
-        'fx'            => [120, 480],   // 2-8 min
-        'payout_network'=> [60, 900],    // 1-15 min
-        'crypto'        => [30, 180],    // 30s-3 min
-        'onramp'        => [60, 360],    // 1-6 min
     ];
 
     private function __construct() {}
@@ -90,16 +63,25 @@ final class CapabilityEngine
      *     slug: string,
      *     name: string,
      *     category: string,
-     *     reliability: float,
-     *     delay_min: int,
-     *     delay_max: int,
+     *     reliability: float|null,
+     *     reliability_status: string,
+     *     reliability_obs: int,
+     *     delay_seconds: int|null,
+     *     delay_status: string,
+     *     delay_obs: int,
+     *     delay_p90_seconds: int|null,
      *     method_type: string,
      * }>
      *
      * @throws HttpException 400 si aucun provider ne couvre le corridor.
      */
-    public static function findEligible(array $intent): array
+    public static function findEligible(array $intent, ?ExecutionEnvironment $environment = null): array
     {
+        // La fiabilité se mesure PAR environnement : des succès en sandbox ne
+        // disent rien de la production. À défaut de contexte, on suit le
+        // défaut du déploiement plutôt qu'une sandbox en dur.
+        $environment ??= ExecutionEnvironment::fromString(ProviderConfig::defaultEnvironment());
+
         $countryCode  = $intent['destCountry'];
         $methodType   = $intent['receivingMethod'];
         $destCurrency = $intent['destCurrency'];
@@ -133,20 +115,24 @@ final class CapabilityEngine
                 continue;
             }
 
-            // ── Score de fiabilité ───────────────────────────────
-            $reliability = self::PERFORMANCE_SCORES[$slug] ?? self::DEFAULT_RELIABILITY;
+            // ── Fiabilité : mesurée, ou explicitement inconnue ───
+            $reliability = ProviderReliability::forProvider($slug, $environment);
 
-            // ── Délai estimé ─────────────────────────────────────
-            $delays = self::CATEGORY_DELAYS[$provider['category']] ?? [60, 600];
+            // ── Délai : mesuré, ou explicitement inconnu ────────
+            $latency = ProviderLatency::forProvider($slug, $environment);
 
             $eligible[] = [
-                'slug'        => $slug,
-                'name'        => $provider['name'],
-                'category'    => $provider['category'],
-                'reliability' => $reliability,
-                'delay_min'   => $delays[0],
-                'delay_max'   => $delays[1],
-                'method_type' => $methodType,
+                'slug'               => $slug,
+                'name'               => $provider['name'],
+                'category'           => $provider['category'],
+                'reliability'        => $reliability['score'],
+                'reliability_status' => $reliability['status'],
+                'reliability_obs'    => $reliability['observations'],
+                'delay_seconds'      => $latency['seconds'],
+                'delay_status'       => $latency['status'],
+                'delay_obs'          => $latency['observations'],
+                'delay_p90_seconds'  => $latency['p90_seconds'],
+                'method_type'        => $methodType,
             ];
         }
 
@@ -159,10 +145,27 @@ final class CapabilityEngine
             );
         }
 
-        // Tri par fiabilité décroissante
-        usort($eligible, static fn (array $a, array $b): int =>
-            $b['reliability'] <=> $a['reliability']
-        );
+        // Tri : les fiabilités MESURÉES d'abord, décroissantes ; les providers
+        // non mesurés ensuite, à égalité entre eux et ordonnés par nom.
+        //
+        // `null <=> 0.97` vaudrait -1 et reléguerait un provider non mesuré
+        // derrière un provider mauvais : ce serait interpréter « inconnu »
+        // comme « mauvais ». Inconnu n'est pas une note (§17), d'où un tri à
+        // deux niveaux plutôt qu'une comparaison directe.
+        usort($eligible, static function (array $a, array $b): int {
+            $aMeasured = $a['reliability'] !== null;
+            $bMeasured = $b['reliability'] !== null;
+
+            if ($aMeasured !== $bMeasured) {
+                return $aMeasured ? -1 : 1;
+            }
+
+            if ($aMeasured && $b['reliability'] !== $a['reliability']) {
+                return $b['reliability'] <=> $a['reliability'];
+            }
+
+            return strcmp($a['slug'], $b['slug']);
+        });
 
         return $eligible;
     }

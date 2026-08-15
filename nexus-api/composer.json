@@ -20,5 +20,18 @@
         "psr-4": {
             "Nexus\\Tests\\": "tests/"
         }
+    },
+    "scripts": {
+        "lint": "find src public config scripts tests -name '*.php' -print0 | xargs -0 -n1 -P4 php -l > /dev/null",
+        "test": "phpunit --colors=always",
+        "db:test": "php scripts/setup_test_db.php"
+    },
+    "scripts-descriptions": {
+        "lint": "Vérifie la syntaxe PHP (php -l) de tous les fichiers du projet.",
+        "test": "Lance la suite PHPUnit sur la base nexus_test.",
+        "db:test": "Recrée nexus_test depuis schema.sql + le manifeste de migrations."
+    },
+    "config": {
+        "sort-packages": true
     }
 }

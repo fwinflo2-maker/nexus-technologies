@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Nexus\Services;
 
+use Nexus\Execution\ExecutionEnvironment;
+
 /**
  * QuoteService — exécute le pipeline Capability → Policy → Quote → Routing.
  *
@@ -21,24 +23,32 @@ final class QuoteService
      *
      * @param array<string,mixed> $user   Utilisateur authentifié (PolicyEngine).
      * @param array<string,mixed> $intent Intention normalisée par IntentParser.
+     * @param ExecutionEnvironment|null $environment Environnement d'exécution,
+     *        transmis au PolicyEngine : un filtrage de sanctions indisponible
+     *        bloque en production et ne fait que signaler en sandbox.
      *
      * @return list<array<string,mixed>> Routes classées (A, B, C…).
      */
-    public static function computeRoutes(array $user, array $intent): array
-    {
+    public static function computeRoutes(
+        array $user,
+        array $intent,
+        ?ExecutionEnvironment $environment = null
+    ): array {
         // Capability Engine : providers éligibles pour ce corridor.
-        $providers = CapabilityEngine::findEligible($intent);
+        $providers = CapabilityEngine::findEligible($intent, $environment);
 
         // Policy Engine : conformité avant tout calcul de prix.
         $sourceToEur = self::rateToEur((string) $intent['sourceCurrency']);
         $amountRef   = $sourceToEur > 0.0 ? ((float) $intent['amount'] / $sourceToEur) : 0.0;
-        PolicyEngine::evaluate($user, $intent, $amountRef);
+        PolicyEngine::evaluate($user, $intent, $amountRef, $environment);
 
         // Quote Engine : une quote par provider éligible.
         $quoteId = self::generateQuoteId();
         $quotes  = [];
         foreach ($providers as $provider) {
-            $quotes[] = QuoteEngine::quote($intent, $provider, $quoteId);
+            // QuoteRateUnavailable remonte volontairement : un paiement
+            // Business ne doit pas davantage être coté sans taux réel.
+            $quotes[] = QuoteEngine::quote($intent, $provider, $quoteId, $environment);
         }
 
         // Routing Engine : scoring + classement.

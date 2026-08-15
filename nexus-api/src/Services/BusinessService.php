@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Nexus\Services;
 
+use Nexus\Execution\ExecutionEnvironment;
+
 use Nexus\Core\Currency;
 use Nexus\Core\Crypto;
 use Nexus\Core\Database;
@@ -112,8 +114,12 @@ final class BusinessService
      *
      * @return array{intent: array<string,mixed>, routes: list<array<string,mixed>>, best: array<string,mixed>}
      */
-    public static function quotePayment(int $businessUserId, array $beneficiary, array $draft): array
-    {
+    public static function quotePayment(
+        int $businessUserId,
+        array $beneficiary,
+        array $draft,
+        ?ExecutionEnvironment $environment = null
+    ): array {
         $intent = IntentParser::parse([
             'amount'          => (float) ($draft['amount'] ?? 0),
             'sourceCurrency'  => (string) ($draft['source_currency'] ?? ''),
@@ -124,7 +130,7 @@ final class BusinessService
         ]);
 
         $businessUser = self::loadUser($businessUserId);
-        $routes       = QuoteService::computeRoutes($businessUser, $intent);
+        $routes       = QuoteService::computeRoutes($businessUser, $intent, $environment);
 
         return [
             'intent' => $intent,

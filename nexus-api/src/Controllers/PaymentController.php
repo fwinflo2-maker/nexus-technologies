@@ -117,7 +117,7 @@ final class PaymentController
             'objective'       => $objective,
         ];
 
-        $quote = BusinessService::quotePayment($bid, $beneficiary, $draft);
+        $quote = BusinessService::quotePayment($bid, $beneficiary, $draft, $context->environment);
         $best  = $quote['best'];
         $intent = $quote['intent'];
 

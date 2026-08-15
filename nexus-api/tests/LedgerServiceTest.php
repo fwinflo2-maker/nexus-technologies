@@ -152,6 +152,34 @@ final class LedgerServiceTest extends TestCase
     // Tests obligatoires
     // ─────────────────────────────────────────────────────────────────────
 
+
+    /**
+     * Compte les wallet_operations DU test courant.
+     *
+     * Ces assertions comptaient globalement (`SELECT COUNT(*) FROM
+     * wallet_operations`) et exigeaient 0. Toute ligne préexistante dans
+     * nexus_test — laissée par un autre test, un essai manuel ou une
+     * inscription HTTP — les faisait échouer pour une raison étrangère au
+     * rollback qu'elles vérifient. Le comptage est donc borné aux
+     * utilisateurs créés par le test.
+     */
+    private function countOperations(int $userId): int
+    {
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM wallet_operations WHERE user_id = ?');
+        $stmt->execute([$userId]);
+
+        return (int) $stmt->fetchColumn();
+    }
+
+    /** Compte les ledger_entries rattachées aux wallets du test courant. */
+    private function countEntries(int $walletId): int
+    {
+        $stmt = $this->pdo->prepare('SELECT COUNT(*) FROM ledger_entries WHERE wallet_id = ?');
+        $stmt->execute([$walletId]);
+
+        return (int) $stmt->fetchColumn();
+    }
+
     public function test_credit_produit_une_ecriture_credit(): void
     {
         $suffix = $this->uniqueSuffix();
@@ -277,10 +305,10 @@ final class LedgerServiceTest extends TestCase
         }
 
         // Rollback : aucune wallet_operation, aucune ledger_entry, solde inchangé.
-        $count = (int) $this->pdo->query('SELECT COUNT(*) FROM wallet_operations')->fetchColumn();
+        $count = $this->countOperations($userId);
         $this->assertSame(0, $count, 'Aucune wallet_operation ne doit être créée après rollback.');
 
-        $count = (int) $this->pdo->query('SELECT COUNT(*) FROM ledger_entries')->fetchColumn();
+        $count = $this->countEntries($walletId);
         $this->assertSame(0, $count, 'Aucune ledger_entry ne doit être créée après rollback.');
 
         $this->assertSame('50.00', $this->getBalance($walletId), 'Le solde doit être inchangé.');
@@ -449,9 +477,9 @@ final class LedgerServiceTest extends TestCase
         }
 
         // Aucun effet
-        $count = (int) $this->pdo->query('SELECT COUNT(*) FROM wallet_operations')->fetchColumn();
+        $count = $this->countOperations($userId);
         $this->assertSame(0, $count);
-        $count = (int) $this->pdo->query('SELECT COUNT(*) FROM ledger_entries')->fetchColumn();
+        $count = $this->countEntries($walletId);
         $this->assertSame(0, $count);
         $this->assertSame('100.00', $this->getBalance($walletId));
     }
@@ -475,9 +503,9 @@ final class LedgerServiceTest extends TestCase
         }
 
         // Aucune écriture créée
-        $count = (int) $this->pdo->query('SELECT COUNT(*) FROM wallet_operations')->fetchColumn();
+        $count = $this->countOperations($userId);
         $this->assertSame(0, $count);
-        $count = (int) $this->pdo->query('SELECT COUNT(*) FROM ledger_entries')->fetchColumn();
+        $count = $this->countEntries($walletId);
         $this->assertSame(0, $count);
         $this->assertSame('100.00', $this->getBalance($walletId));
     }
@@ -574,11 +602,11 @@ final class LedgerServiceTest extends TestCase
         $this->assertSame($dstBefore, $this->getBalance($destId), 'Solde destination doit être inchangé.');
 
         // 2) Aucune wallet_operation créée
-        $count = (int) $this->pdo->query('SELECT COUNT(*) FROM wallet_operations')->fetchColumn();
+        $count = $this->countOperations($userId);
         $this->assertSame(0, $count, 'Aucune wallet_operation après rollback.');
 
-        // 3) Aucune ledger_entry créée
-        $count = (int) $this->pdo->query('SELECT COUNT(*) FROM ledger_entries')->fetchColumn();
-        $this->assertSame(0, $count, 'Aucune ledger_entry après rollback.');
+        // 3) Aucune ledger_entry créée, sur aucun des deux wallets
+        $this->assertSame(0, $this->countEntries($sourceId), 'Aucune ledger_entry source après rollback.');
+        $this->assertSame(0, $this->countEntries($destId), 'Aucune ledger_entry destination après rollback.');
     }
 }
