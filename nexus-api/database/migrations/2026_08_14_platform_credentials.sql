@@ -77,9 +77,13 @@ SET @has_scope := (
 
 SET @sql := IF(
     @has_scope = 0,
+    -- STORED, et non PERSISTENT : les deux désignent une colonne générée
+    -- matérialisée, mais PERSISTENT est propre à MariaDB et MySQL 8 le
+    -- rejette (erreur 1064). STORED est le mot-clé standard, accepté par les
+    -- deux moteurs.
     'ALTER TABLE provider_credentials
         ADD COLUMN owner_scope BIGINT UNSIGNED
-        AS (IFNULL(user_id, 0)) PERSISTENT',
+        AS (IFNULL(user_id, 0)) STORED',
     'SELECT "owner_scope deja presente" AS info'
 );
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
