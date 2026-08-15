@@ -180,7 +180,20 @@ function AppRoutes() {
 
   return (
     <Routes>
-      {isSuperAdmin && <Route path="/admin" element={<SuperAdminDashboard />} />}
+      {isSuperAdmin && (
+        <Route path="/admin" element={
+          <div className="nexus-dash layout">
+            <div className="dash-ambient-bg" aria-hidden="true" />
+            <GearsBackground />
+            <div className="bg-grid" />
+            <ParticlesBackground density={45} color="#3B82F6" opacity={0.4} className="dash-particles" />
+            <div className="ambient-vignette" aria-hidden="true" />
+            <div className="main-content" style={{ marginLeft: 0 }}>
+              <SuperAdminDashboard />
+            </div>
+          </div>
+        } />
+      )}
       <Route path="*" element={<DashboardLayout />} />
     </Routes>
   );
