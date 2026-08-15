@@ -72,3 +72,6 @@
 
 # 0.23 — Rôles internes Nexus (8 dashboards spécialisés RBAC)
 2026_08_15_internal_roles.sql
+
+# 0.24 — Rôles internes v2 : business_manager, technical_admin + alias
+2026_08_15_internal_roles_v2.sql

@@ -50,11 +50,16 @@ final class PlatformRole
     // ── Rôles internes Nexus (8 dashboards spécialisés) ──────────────
     public const OPERATIONS_MANAGER = 'operations_manager';
     public const FINANCE_TREASURY   = 'finance_treasury';
+    public const TREASURY_MANAGER   = 'treasury_manager';
     public const COMPLIANCE_OFFICER = 'compliance_officer';
     public const RISK_FRAUD         = 'risk_fraud';
+    public const RISK_ANALYST       = 'risk_analyst';
     public const PROVIDER_MANAGER   = 'provider_manager';
     public const CUSTOMER_SUPPORT   = 'customer_support';
     public const SECURITY_TECHNICAL = 'security_technical';
+    public const SECURITY_ADMIN     = 'security_admin';
+    public const TECHNICAL_ADMIN    = 'technical_admin';
+    public const BUSINESS_MANAGER   = 'business_manager';
 
     /** Code d'erreur unique pour un refus de privilège plateforme. */
     public const ERROR_CODE = 'FORBIDDEN_PLATFORM_ROLE';
@@ -70,6 +75,7 @@ final class PlatformRole
         self::SUPERADMIN,
         self::PROVIDER_ENGINEER,
         self::PROVIDER_MANAGER,
+        self::TECHNICAL_ADMIN,
     ];
 
     /**
@@ -82,11 +88,16 @@ final class PlatformRole
         self::SUPERADMIN,
         self::OPERATIONS_MANAGER,
         self::FINANCE_TREASURY,
+        self::TREASURY_MANAGER,
         self::COMPLIANCE_OFFICER,
         self::RISK_FRAUD,
+        self::RISK_ANALYST,
         self::PROVIDER_MANAGER,
         self::CUSTOMER_SUPPORT,
         self::SECURITY_TECHNICAL,
+        self::SECURITY_ADMIN,
+        self::TECHNICAL_ADMIN,
+        self::BUSINESS_MANAGER,
         self::PROVIDER_ENGINEER,
         self::SECURITY_ENGINEER,
         self::BACKEND_ENGINEER,
@@ -113,8 +124,10 @@ final class PlatformRole
         self::SUPERADMIN,
         self::PROVIDER_ENGINEER,
         self::PROVIDER_MANAGER,
+        self::TECHNICAL_ADMIN,
         self::SECURITY_ENGINEER,
         self::SECURITY_TECHNICAL,
+        self::SECURITY_ADMIN,
         self::SRE_OPERATOR,
     ];
 
@@ -134,6 +147,7 @@ final class PlatformRole
         self::SUPERADMIN,
         self::SECURITY_ENGINEER,
         self::SECURITY_TECHNICAL,
+        self::SECURITY_ADMIN,
         self::COMPLIANCE_OPERATOR,
         self::COMPLIANCE_OFFICER,
     ];
@@ -170,6 +184,7 @@ final class PlatformRole
     private const MAINTENANCE_OPERATORS = [
         self::SUPERADMIN,
         self::SRE_OPERATOR,
+        self::TECHNICAL_ADMIN,
         self::OPERATIONS_MANAGER,
     ];
 
@@ -203,11 +218,16 @@ final class PlatformRole
             self::SUPERADMIN,
             self::OPERATIONS_MANAGER,
             self::FINANCE_TREASURY,
+            self::TREASURY_MANAGER,
             self::COMPLIANCE_OFFICER,
             self::RISK_FRAUD,
+            self::RISK_ANALYST,
             self::PROVIDER_MANAGER,
             self::CUSTOMER_SUPPORT,
             self::SECURITY_TECHNICAL,
+            self::SECURITY_ADMIN,
+            self::TECHNICAL_ADMIN,
+            self::BUSINESS_MANAGER,
             // Rôles historiques (rétrocompatibilité)
             self::SUPPORT_OPERATOR,
             self::COMPLIANCE_OPERATOR,
@@ -275,13 +295,14 @@ final class PlatformRole
         return match (self::of($user)) {
             self::SUPERADMIN          => 'executive',
             self::OPERATIONS_MANAGER  => 'operations',
-            self::FINANCE_TREASURY, self::FINANCE_OPERATOR => 'finance',
+            self::FINANCE_TREASURY, self::TREASURY_MANAGER, self::FINANCE_OPERATOR => 'finance',
             self::COMPLIANCE_OFFICER, self::COMPLIANCE_OPERATOR => 'compliance',
-            self::RISK_FRAUD          => 'risk',
+            self::RISK_FRAUD, self::RISK_ANALYST => 'risk',
             self::PROVIDER_MANAGER, self::PROVIDER_ENGINEER => 'providers',
             self::CUSTOMER_SUPPORT, self::SUPPORT_OPERATOR => 'support',
-            self::SECURITY_TECHNICAL, self::SECURITY_ENGINEER, self::SRE_OPERATOR,
-            self::BACKEND_ENGINEER, self::QA_ENGINEER, self::AI_AGENT => 'technical',
+            self::SECURITY_TECHNICAL, self::SECURITY_ADMIN, self::SECURITY_ENGINEER, self::SRE_OPERATOR,
+            self::TECHNICAL_ADMIN, self::BACKEND_ENGINEER, self::QA_ENGINEER, self::AI_AGENT => 'technical',
+            self::BUSINESS_MANAGER    => 'business',
             default                   => null,
         };
     }
@@ -292,13 +313,14 @@ final class PlatformRole
         return match ($role) {
             self::SUPERADMIN          => 'executive',
             self::OPERATIONS_MANAGER  => 'operations',
-            self::FINANCE_TREASURY, self::FINANCE_OPERATOR => 'finance',
+            self::FINANCE_TREASURY, self::TREASURY_MANAGER, self::FINANCE_OPERATOR => 'finance',
             self::COMPLIANCE_OFFICER, self::COMPLIANCE_OPERATOR => 'compliance',
-            self::RISK_FRAUD          => 'risk',
+            self::RISK_FRAUD, self::RISK_ANALYST => 'risk',
             self::PROVIDER_MANAGER, self::PROVIDER_ENGINEER => 'providers',
             self::CUSTOMER_SUPPORT, self::SUPPORT_OPERATOR => 'support',
-            self::SECURITY_TECHNICAL, self::SECURITY_ENGINEER, self::SRE_OPERATOR,
-            self::BACKEND_ENGINEER, self::QA_ENGINEER, self::AI_AGENT => 'technical',
+            self::SECURITY_TECHNICAL, self::SECURITY_ADMIN, self::SECURITY_ENGINEER, self::SRE_OPERATOR,
+            self::TECHNICAL_ADMIN, self::BACKEND_ENGINEER, self::QA_ENGINEER, self::AI_AGENT => 'technical',
+            self::BUSINESS_MANAGER    => 'business',
             default                   => null,
         };
     }

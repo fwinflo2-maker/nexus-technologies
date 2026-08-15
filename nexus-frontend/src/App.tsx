@@ -32,6 +32,7 @@ import AnalyticsPage from './views/business/AnalyticsPage';
 import ControlCenterLayout from './views/control/ControlCenterLayout';
 import InternalLayout from './views/internal/InternalLayout';
 import { InternalDashboardView, roleToDashboard } from './views/internal/InternalDashboards';
+import NexusConnectPage from './views/connect/NexusConnectPage';
 import { useDashT } from './data/dashboard-i18n';
 import './styles/design-system.css';
 import './styles/dashboard-system.css';
@@ -126,6 +127,9 @@ function DashboardLayout() {
             <Route path="/convert" element={<><DashTopbar mode={effectiveMode} title={t('page.convert')} subtitle="" /><ConvertPage /></>} />
             <Route path="/history" element={<><DashTopbar mode={effectiveMode} title={t('page.history')} subtitle="" /><HistoryPage /></>} />
             <Route path="/notifications" element={<><DashTopbar mode={effectiveMode} title={t('page.notifications')} subtitle="" /><NotificationsPage /></>} />
+
+            {/* Nexus Connect — dashboard client API / B2B */}
+            <Route path="/connect" element={<><DashTopbar mode={effectiveMode} title="Nexus Connect" subtitle="" /><NexusConnectPage /></>} />
 
             {/* Routes réservées exclusivement aux comptes Business */}
             <Route path="/treasury" element={<BusinessRoute><DashTopbar mode={effectiveMode} title={t('page.treasury')} subtitle="" /><TreasuryPage /></BusinessRoute>} />

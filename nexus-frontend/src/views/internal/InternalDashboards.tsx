@@ -16,6 +16,7 @@ export const INTERNAL_DASHBOARDS: Record<string, InternalDashboardMeta> = {
   providers:  { id: 'providers',  label: 'Providers',              icon: '🔌', description: 'Thunes, Onafriq, pawaPay… disponibilité, coûts, taux de succès et credentials.' },
   support:    { id: 'support',    label: 'Support / Customer Ops', icon: '🧑‍💻', description: 'Clients, wallets, transactions, tickets, incidents et assistance.' },
   technical:  { id: 'technical',  label: 'Security / Technical',   icon: '🔐', description: 'Connexions, sessions, tokens révoqués, anomalies, audit logs et événements.' },
+  business:   { id: 'business',   label: 'Business Management',    icon: '🏢', description: 'Entreprises clientes : comptes, utilisateurs, activité, volume et croissance.' },
 };
 
 function useAccess() {
@@ -47,11 +48,14 @@ export function roleToDashboard(role: string | undefined | null): string | null 
     customer_support: 'support',
     support_operator: 'support',
     security_technical: 'technical',
+    security_admin: 'technical',
+    technical_admin: 'technical',
     security_engineer: 'technical',
     sre_operator: 'technical',
     backend_engineer: 'technical',
     qa_engineer: 'technical',
     ai_agent: 'technical',
+    business_manager: 'business',
   };
   return (role && map[role]) || null;
 }
@@ -256,6 +260,71 @@ function TechnicalContent({ access }: { access: InternalAccess }) {
   );
 }
 
+function BusinessManagementContent({ access }: { access: InternalAccess }) {
+  const [clients, setClients] = useState<ControlClient[]>([]);
+  useEffect(() => {
+    if (access.surfaces.clients) {
+      void apiControlClients().then((r) => { if (r.success && r.data) setClients(r.data.items as ControlClient[]); });
+    }
+  }, [access]);
+  const biz = clients.filter((c) => c.account_type === 'business');
+  const volume = biz.reduce((s, c) => s + Number(c.balances.EUR) + Number(c.balances.USD), 0);
+  const tx = biz.reduce((s, c) => s + c.transactions, 0);
+  return (
+    <>
+      <div className="g4">
+        <IntCard title="Entreprises" icon="🏢" tone="c">
+          <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--white)', fontFamily: 'var(--font-mono)' }}>
+            {access.surfaces.clients ? biz.length : '—'}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>Comptes entreprises clientes</div>
+        </IntCard>
+        <IntCard title="Volume (EUR)" icon="💰" tone="g">
+          <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--gold)', fontFamily: 'var(--font-mono)' }}>
+            {access.surfaces.clients ? volume.toLocaleString('fr-FR') + ' €' : '—'}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>Soldes totaux des entreprises</div>
+        </IntCard>
+        <IntCard title="Transactions" icon="🔄" tone="gr">
+          <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--green)', fontFamily: 'var(--font-mono)' }}>
+            {access.surfaces.clients ? tx : '—'}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>Opérations des entreprises</div>
+        </IntCard>
+        <IntCard title="Croissance" icon="📈" tone="v">
+          <IntRow k="Entreprises actives" v={biz.filter((c) => c.status === 'ACTIVE').length} />
+          <IntRow k="En attente" v={biz.filter((c) => c.status === 'PENDING').length} />
+        </IntCard>
+      </div>
+      <div className="card card-hi-c" style={{ marginTop: 16, padding: 18 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-bright)', marginBottom: 12 }}>Entreprises clientes</div>
+        {!access.surfaces.clients ? (
+          <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>Accès restreint pour ce rôle.</div>
+        ) : biz.length === 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>Aucune entreprise enregistrée.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {biz.map((c) => (
+              <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '8px 0', borderBottom: '1px solid var(--border-soft)', fontSize: 12.5 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                  {c.avatar ? <img src={c.avatar} alt="" style={{ width: 26, height: 26, borderRadius: '50%', objectFit: 'cover' }} /> : <span>🏢</span>}
+                  <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <span style={{ fontWeight: 600, color: 'var(--text-bright)' }}>{c.full_name}</span>
+                    <span style={{ color: 'var(--text-dim)', marginLeft: 8 }}>{c.email}</span>
+                  </div>
+                </div>
+                <div style={{ color: 'var(--text-mid)', whiteSpace: 'nowrap' }}>
+                  {Number(c.balances.EUR).toLocaleString('fr-FR')} € · {c.transactions} tx · {c.status}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
 /** Rendu du dashboard interne selon le rôle. */
 export function InternalDashboardView({ dashboard }: { dashboard: string }) {
   const { access } = useAccess();
@@ -278,6 +347,7 @@ export function InternalDashboardView({ dashboard }: { dashboard: string }) {
           {dashboard === 'providers' && <ProvidersContent access={access} />}
           {dashboard === 'support' && <SupportContent access={access} />}
           {dashboard === 'technical' && <TechnicalContent access={access} />}
+          {dashboard === 'business' && <BusinessManagementContent access={access} />}
         </>
       )}
     </InternalDashboard>

@@ -400,7 +400,7 @@ CREATE TABLE `users` (
   `phone` varchar(20) DEFAULT NULL,
   `password_hash` varchar(255) NOT NULL DEFAULT '',
   `account_type` enum('personal','business') NOT NULL DEFAULT 'personal',
-  `platform_role` enum('user','superadmin','operations_manager','finance_treasury','compliance_officer','risk_fraud','provider_manager','customer_support','security_technical','support_operator','compliance_operator','finance_operator','security_engineer','provider_engineer','backend_engineer','qa_engineer','sre_operator','ai_agent') NOT NULL DEFAULT 'user' COMMENT 'RÃ´le d''exploitation de la plateforme. Distinct de account_type (type de client).',
+  `platform_role` enum('user','superadmin','operations_manager','finance_treasury','treasury_manager','compliance_officer','risk_fraud','risk_analyst','provider_manager','customer_support','security_technical','security_admin','technical_admin','business_manager','support_operator','compliance_operator','finance_operator','security_engineer','provider_engineer','backend_engineer','qa_engineer','sre_operator','ai_agent') NOT NULL DEFAULT 'user' COMMENT 'RÃ´le d''exploitation de la plateforme. Distinct de account_type (type de client).',
   `auth_provider` enum('local','google') NOT NULL DEFAULT 'local',
   `provider_id` varchar(191) DEFAULT NULL,
   `status` enum('PENDING','ACTIVE','SUSPENDED','CLOSED') NOT NULL DEFAULT 'PENDING',
