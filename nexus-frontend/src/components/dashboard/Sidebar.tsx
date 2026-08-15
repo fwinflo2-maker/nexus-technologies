@@ -7,7 +7,6 @@ type Mode = 'personal' | 'business';
 
 interface SidebarProps {
   mode: Mode;
-  onModeChange: (m: Mode) => void;
 }
 
 const navPersonal = [
@@ -42,7 +41,7 @@ const navCommon = [
  * Sur mobile, elle se replie en tiroir ouvert par le bouton « ☰ »
  * (clavier accessible : Echap pour fermer, focus sur le premier lien).
  */
-export default function Sidebar({ mode, onModeChange }: SidebarProps) {
+export default function Sidebar({ mode }: SidebarProps) {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const t = useDashT();
@@ -93,15 +92,7 @@ export default function Sidebar({ mode, onModeChange }: SidebarProps) {
     navigate('/login', { replace: true });
   };
 
-  const handleModeChange = (m: Mode) => {
-    // Un compte personal n'a pas le droit d'accéder au mode Business.
-    if (isPersonalOnly && m === 'business') {
-      return;
-    }
-    onModeChange(m);
-    closeMenu();
-    navigate('/dashboard');
-  };
+
 
   return (
     <>
@@ -140,29 +131,14 @@ export default function Sidebar({ mode, onModeChange }: SidebarProps) {
           </div>
         </div>
 
-        {/* Mode du compte */}
+        {/* Mode du compte — fixe selon le type de compte (pas de bascule P/B) */}
         <div className="sidebar-mode">
-          {isPersonalOnly ? (
-            <div className="pill p-c" style={{ width: '100%', justifyContent: 'center', padding: '6px 0', fontSize: 9 }}>
-              COMPTE PERSONNEL
-            </div>
-          ) : (
-            <>
-              <div className="account-tabs">
-                <button
-                  className={`account-tab ${effectiveMode === 'personal' ? 'active-personal' : ''}`}
-                  onClick={() => handleModeChange('personal')}
-                >P</button>
-                <button
-                  className={`account-tab ${effectiveMode === 'business' ? 'active-business' : ''}`}
-                  onClick={() => handleModeChange('business')}
-                >B</button>
-              </div>
-              <div style={{ fontSize: 9, color: 'var(--text-dim)', textAlign: 'center', marginTop: 5, letterSpacing: '0.1em' }}>
-                {effectiveMode === 'personal' ? 'PERSONNEL' : 'BUSINESS'}
-              </div>
-            </>
-          )}
+          <div
+            className={`pill ${isPersonalOnly ? 'p-c' : 'p-g'}`}
+            style={{ width: '100%', justifyContent: 'center', padding: '6px 0', fontSize: 9 }}
+          >
+            {isPersonalOnly ? 'COMPTE PERSONNEL' : 'COMPTE BUSINESS'}
+          </div>
         </div>
 
         <nav className="sidebar-nav" aria-label="Navigation principale">

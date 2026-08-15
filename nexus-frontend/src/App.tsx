@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { I18nProvider } from './context/I18nContext';
@@ -88,13 +87,13 @@ function PublicRouter() {
 }
 
 function DashboardLayout() {
-  const [mode, setMode] = useState<Mode>('personal');
   const { user } = useAuth();
   const t = useDashT();
 
-  // Un compte personal est TOUJOURS en mode personal. Il n'a aucun accès aux fonctions Business.
+  // Le mode est FIXÉ par le type de compte : un compte personal est toujours
+  // personal, un compte business toujours business. Pas de bascule P/B.
   const isPersonalAccount = user?.account_type === 'personal';
-  const effectiveMode: Mode = isPersonalAccount ? 'personal' : (user?.account_type === 'business' ? mode : 'personal');
+  const effectiveMode: Mode = isPersonalAccount ? 'personal' : 'business';
 
   return (
     <div className="nexus-dash layout">
@@ -107,7 +106,7 @@ function DashboardLayout() {
       </div>
 
       <NotificationsProvider>
-        <Sidebar mode={effectiveMode} onModeChange={setMode} />
+        <Sidebar mode={effectiveMode} />
 
         <div className="main-content">
           <Routes>

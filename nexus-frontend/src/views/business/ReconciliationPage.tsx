@@ -58,7 +58,7 @@ export default function ReconciliationPage() {
 
       <div className="card" style={{ padding: 14, marginBottom: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {['', 'pending', 'matched', 'discrepancy', 'resolved'].map(s => (
-          <button key={s || 'all'} className={`pill ${filter === s ? 'p-c' : 'p'}`} style={{ cursor: 'pointer', fontSize: 12 }} onClick={() => setFilter(s)}>
+          <button key={s || 'all'} className={`pill-btn ${filter === s ? 'pill-btn-active' : ''}`} onClick={() => setFilter(s)}>
             {s === '' ? t('common.all') : labelForStatus(s)}
           </button>
         ))}

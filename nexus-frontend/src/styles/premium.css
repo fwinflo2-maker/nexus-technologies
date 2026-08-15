@@ -309,6 +309,24 @@
 .nexus-dash .data-table tbody tr { transition: background .2s ease; }
 .nexus-dash .data-table tbody tr:hover { background: rgba(0,200,255,.03); }
 
+/* Boutons de filtre en pastille (Historique / Rapprochement) — adaptés au fond */
+.nexus-dash button.pill-btn,
+.nexus-dash .pill-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 14px; border-radius: 100px;
+  font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+  background: var(--panel2); border: 1px solid var(--border); color: var(--text-mid);
+  cursor: pointer;
+  transition: all .2s ease;
+}
+.nexus-dash .pill-btn:hover { border-color: rgba(0,200,255,.35); color: var(--text-bright); background: rgba(0,200,255,.05); }
+.nexus-dash .pill-btn.active,
+.nexus-dash .pill-btn.pill-btn-active {
+  background: rgba(0,200,255,.12); border-color: rgba(0,200,255,.45); color: var(--cyan);
+  box-shadow: 0 0 14px rgba(0,200,255,.15);
+}
+.nexus-dash .pill-btn:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+
 /* Filtres (selects) de l'Historique — cohérents avec le design system */
 .nexus-dash select.filter-select {
   appearance: none; -webkit-appearance: none;
