@@ -134,6 +134,8 @@ export default function ConvertPage() {
       </motion.div>
 
       <div className="g2" style={{ alignItems: 'start', gap: 24 }}>
+        {/* ── Colonne gauche : formulaire de conversion ── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
         {/* Devises */}
         <motion.div className="card" style={{ padding: 20 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
           <div className="page-label" style={{ marginBottom: 12 }}>Devises</div>
@@ -286,10 +288,10 @@ export default function ConvertPage() {
             {convertDone}
           </div>
         )}
-      </div>
+        </div>
 
-      {/* ── Colonne latérale : aperçu du portefeuille (occupe le vide) ── */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* ── Colonne droite : aperçu du portefeuille (occupe le vide) ── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
         {/* Solde total */}
         <motion.div className="card card-hi-c" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
           <div className="page-label" style={{ marginBottom: 10 }}>Patrimoine</div>
@@ -367,6 +369,7 @@ export default function ConvertPage() {
             chemin de conversion. Le taux affiché est <strong style={{ color: 'var(--text-bright)' }}>garanti</strong> pendant sa période de validité.
           </p>
         </motion.div>
+        </div>
       </div>
     </div>
   );
