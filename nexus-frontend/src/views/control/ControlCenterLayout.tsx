@@ -12,6 +12,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useI18n } from '../../context/I18nContext';
 import { useCtrlT } from '../../data/control-i18n';
 import { C, Note } from './ui';
+import { ParticlesBackground } from '../../components/ParticlesBackground';
 import ControlOverviewPage from './ControlOverviewPage';
 import ProviderNetworkPage from './ProviderNetworkPage';
 import ProviderDetailPage from './ProviderDetailPage';
@@ -43,13 +44,24 @@ export default function ControlCenterLayout() {
   }
 
   return (
-    <div
-      dir={isRtl ? 'rtl' : 'ltr'}
+    <div dir={isRtl ? 'rtl' : 'ltr'} style={{ minHeight: '100vh', position: 'relative', background: C.bg }}>
+      {/* Fond bleu animé + particules (même ambiance que les dashboards) */}
+      <div className="dash-ambient-bg" aria-hidden="true" style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0 }} />
+      <div className="ambient" aria-hidden="true" style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0, overflow: 'hidden' }}>
+        <div className="orb" style={{ width: 520, height: 520, top: '-12%', left: '2%', background: 'radial-gradient(circle, rgba(0,140,255,0.14), transparent 70%)' }} />
+        <div className="orb" style={{ width: 420, height: 420, bottom: '2%', right: '6%', background: 'radial-gradient(circle, rgba(0,200,255,0.10), transparent 70%)' }} />
+        <div className="orb" style={{ width: 300, height: 300, top: '42%', left: '48%', background: 'radial-gradient(circle, rgba(120,120,255,0.06), transparent 70%)' }} />
+      </div>
+      <ParticlesBackground density={55} color="#00C8FF" opacity={0.5} className="dash-particles" />
+      <div className="ambient-vignette" aria-hidden="true" style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0 }} />
+
+      <div
       style={{
+        position: 'relative',
+        zIndex: 1,
         display: 'grid',
         gridTemplateColumns: 'minmax(180px, 218px) 1fr',
         minHeight: '100vh',
-        background: C.bg,
         color: C.text,
         fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
       }}
@@ -106,6 +118,7 @@ export default function ControlCenterLayout() {
           <Route path="*" element={<Navigate to="/control" replace />} />
         </Routes>
       </main>
+      </div>
     </div>
   );
 }
