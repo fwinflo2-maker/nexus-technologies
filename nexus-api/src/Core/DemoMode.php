@@ -49,7 +49,17 @@ final class DemoMode
             return false;
         }
 
-        $flag = strtolower(trim((string) (getenv('NEXUS_DEMO_SEED') ?: '')));
+        // ATTENTION au `?:` ici : `getenv()` rend la CHAÎNE "0", qui est
+        // falsy en PHP. `getenv('NEXUS_DEMO_SEED') ?: ''` transformait donc
+        // "0" en chaîne vide, laquelle n'appartient pas à la liste ci-dessous
+        // — et `NEXUS_DEMO_SEED=0`, la valeur d'arrêt documentée dans
+        // .env.example, n'éteignait rien. Le seeding continuait alors que
+        // l'exploitant l'avait explicitement désactivé.
+        // Seul `false` (variable absente) doit être traité comme « non
+        // renseigné » : d'où la comparaison stricte.
+        $raw  = getenv('NEXUS_DEMO_SEED');
+        $flag = $raw === false ? '' : strtolower(trim($raw));
+
         if (in_array($flag, ['0', 'false', 'no', 'off'], true)) {
             return false;
         }

@@ -126,6 +126,13 @@ final class AuthController
                 $w = \Nexus\Services\WalletService::ensureWallet($userId, $currency);
 
                 // 2. Crédit initial via LedgerService
+                // L'environnement est fourni EXPLICITEMENT (= sandbox).
+                // Sans contexte, LedgerService::credit() retombe sur
+                // ProviderConfig::defaultEnvironment() : sur un déploiement
+                // dont PROVIDERS_ENV vaut « production », un bonus fictif de
+                // 2500 EUR était écrit au ledger en ARGENT RÉEL. La boucle 17
+                // avait corrigé seedDemoTransactions(), mais ce chemin-ci
+                // passe par le ledger et avait été manqué.
                 \Nexus\Services\LedgerService::credit(
                     $userId,
                     $w['id'],
@@ -134,7 +141,12 @@ final class AuthController
                     'welcome_bonus',
                     'welcome_bonus:register:' . $userId . ':' . $currency,
                     'Bonus de bienvenue à l\'inscription',
-                    ['source' => 'registration_seed']
+                    ['source' => 'registration_seed'],
+                    \Nexus\Execution\ExecutionContext::explicit(
+                        actorUserId: $userId,
+                        environment: \Nexus\Execution\ExecutionEnvironment::SANDBOX,
+                        accountType: $accountType
+                    )
                 );
             }
 
