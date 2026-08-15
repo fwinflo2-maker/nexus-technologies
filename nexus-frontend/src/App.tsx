@@ -29,9 +29,6 @@ import ApprovalsPage from './views/business/ApprovalsPage';
 import TeamPage from './views/business/TeamPage';
 import ReconciliationPage from './views/business/ReconciliationPage';
 import AnalyticsPage from './views/business/AnalyticsPage';
-import ControlCenterLayout from './views/control/ControlCenterLayout';
-import InternalLayout from './views/internal/InternalLayout';
-import { InternalDashboardView, roleToDashboard } from './views/internal/InternalDashboards';
 import { useDashT } from './data/dashboard-i18n';
 import './styles/design-system.css';
 import './styles/dashboard-system.css';
@@ -176,21 +173,9 @@ function AppRoutes() {
 
   if (!user) return <PublicRouter />;
 
-  // Rôle interne → dashboard interne RBAC.
-  const internalDashboard = roleToDashboard(user.platform_role);
-
+  // Tous les comptes connectés utilisent le dashboard client.
   return (
     <Routes>
-      <Route path="/control/*" element={<ControlCenterLayout />} />
-      {internalDashboard ? (
-        <>
-          <Route path="/internal" element={<InternalLayout><InternalDashboardView dashboard={internalDashboard} /></InternalLayout>} />
-          <Route path="/internal/*" element={<InternalLayout><InternalDashboardView dashboard={internalDashboard} /></InternalLayout>} />
-          {/* Les employés internes atterrissent sur leur dashboard interne */}
-          <Route path="/dashboard" element={<Navigate to="/internal" replace />} />
-          <Route path="/" element={<Navigate to="/internal" replace />} />
-        </>
-      ) : null}
       <Route path="*" element={<DashboardLayout />} />
     </Routes>
   );
