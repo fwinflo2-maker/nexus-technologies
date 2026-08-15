@@ -48,20 +48,27 @@ final class UserController
         try {
             $updates = [];
             $params = [];
+            // Noms des champs réellement modifiés, pour l'audit. `$updates`
+            // contient des fragments SQL : en faire `array_keys()` produisait
+            // `[0,1,2]`, c'est-à-dire une trace inexploitable.
+            $changedFields = [];
 
             if ($fullName !== '') {
                 $updates[] = 'full_name = :full_name';
                 $params[':full_name'] = $fullName;
+                $changedFields[] = 'full_name';
             }
 
             if ($phone !== '') {
                 $updates[] = 'phone = :phone';
                 $params[':phone'] = $phone;
+                $changedFields[] = 'phone';
             }
 
             if ($countryOfResidence !== '') {
                 $updates[] = 'country_of_residence = :country_of_residence';
                 $params[':country_of_residence'] = $countryOfResidence;
+                $changedFields[] = 'country_of_residence';
             }
 
             // Validation AVANT l'ouverture de la transaction : Response::badRequest()
@@ -82,7 +89,7 @@ final class UserController
             $pdo->commit();
 
             // Audit log
-            self::audit($userId, 'profile_updated', null, null, ['fields' => array_keys($updates)], $request);
+            self::audit($userId, 'profile_updated', null, null, ['fields' => $changedFields], $request);
 
             Response::success(['updated' => true]);
         } catch (\PDOException $e) {
