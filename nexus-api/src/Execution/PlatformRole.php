@@ -81,6 +81,43 @@ final class PlatformRole
     ];
 
     /**
+     * Rôles autorisés à consulter l'INVENTAIRE des credentials providers.
+     *
+     * Distinct de `operations` (correctif boucle 16). Savoir QUELS providers
+     * sont configurés, dans quel environnement et depuis quand est un plan
+     * de l'infrastructure de paiement : cela révèle les corridors actifs et
+     * les dépendances externes de Nexus. Utile pour intégrer ou diagnostiquer
+     * un provider — sans rapport avec le métier d'un opérateur de support ou
+     * d'un testeur.
+     *
+     * La VALEUR d'un secret n'est de toute façon jamais exposée, à personne.
+     */
+    private const CREDENTIAL_INVENTORY_VIEWERS = [
+        self::SUPERADMIN,
+        self::PROVIDER_ENGINEER,
+        self::SECURITY_ENGINEER,
+        self::SRE_OPERATOR,
+    ];
+
+    /**
+     * Rôles autorisés à lire le JOURNAL D'AUDIT GLOBAL.
+     *
+     * Le journal contient les actions de tous les comptes et de tout le
+     * personnel : c'est une surface de surveillance. La lire n'est le métier
+     * ni du support, ni de la QA, ni d'un ingénieur backend — mais c'est
+     * exactement celui de la sécurité et de la conformité.
+     *
+     * Un opérateur qui peut lire le journal peut aussi y observer le travail
+     * de ses collègues : restreindre cette lecture protège le personnel
+     * autant que les clients.
+     */
+    private const AUDIT_VIEWERS = [
+        self::SUPERADMIN,
+        self::SECURITY_ENGINEER,
+        self::COMPLIANCE_OPERATOR,
+    ];
+
+    /**
      * Rôles autorisés aux opérations de maintenance qui ÉCRIVENT
      * (déblocage d'un état, rejeu contrôlé).
      */
@@ -152,6 +189,18 @@ final class PlatformRole
         return in_array(self::of($user), self::MAINTENANCE_OPERATORS, true);
     }
 
+    /** Peut consulter l'inventaire des credentials providers. */
+    public static function canViewCredentialInventory(?array $user): bool
+    {
+        return in_array(self::of($user), self::CREDENTIAL_INVENTORY_VIEWERS, true);
+    }
+
+    /** Peut lire le journal d'audit global. */
+    public static function canViewAudit(?array $user): bool
+    {
+        return in_array(self::of($user), self::AUDIT_VIEWERS, true);
+    }
+
     /**
      * Exige un privilège, sinon 403.
      *
@@ -168,6 +217,8 @@ final class PlatformRole
         $granted = match ($capability) {
             'credentials'  => self::canAdministerCredentials($user),
             'operations'   => self::canViewOperations($user),
+            'credential_inventory' => self::canViewCredentialInventory($user),
+            'audit_read'   => self::canViewAudit($user),
             'maintenance'  => self::canRunMaintenance($user),
             'superadmin'   => self::isSuperadmin($user),
             default        => false,   // capacité inconnue : refus.

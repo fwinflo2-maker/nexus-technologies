@@ -46,12 +46,16 @@ final class ControlCenterController
      *
      * Refus en 403, jamais 400 : c'est une question d'autorisation.
      */
-    private static function authorize(Request $request): array
+    private static function authorize(Request $request, string $capability = 'operations'): array
     {
         $request = AuthMiddleware::handle($request);
         $user    = $request->attribute('user');
 
-        PlatformRole::require($user, 'operations');
+        // La capacité est un PARAMÈTRE : toutes les surfaces du Control Center
+        // ne se valent pas. La lecture générale reste `operations`, mais
+        // l'inventaire des credentials et le journal d'audit exigent des
+        // capacités plus étroites (boucle 16).
+        PlatformRole::require($user, $capability);
 
         return $user;
     }
@@ -180,7 +184,11 @@ final class ControlCenterController
     /** GET /api/control/audit — journal d'audit (§26). */
     public static function audit(Request $request): void
     {
-        self::authorize($request);
+        // Le journal couvre TOUS les comptes et TOUT le personnel : c'est une
+        // surface de surveillance, réservée à la sécurité et à la conformité.
+        // Il était lisible par les 9 rôles porteurs de `operations`, dont le
+        // support et la QA.
+        self::authorize($request, 'audit_read');
         $pdo = Database::getConnection();
 
         $stmt = $pdo->query(
@@ -210,7 +218,12 @@ final class ControlCenterController
      */
     public static function credentials(Request $request): void
     {
-        $user = self::authorize($request);
+        // Capacité DÉDIÉE (boucle 16). Savoir quels providers sont
+        // configurés, dans quel environnement et depuis quand, c'est un plan
+        // de l'infrastructure de paiement : corridors actifs et dépendances
+        // externes de Nexus. Ce n'est le métier ni du support ni de la QA,
+        // qui y avaient pourtant accès via la capacité `operations`.
+        $user = self::authorize($request, 'credential_inventory');
         $pdo  = Database::getConnection();
         $uid  = (int) $user['id'];
 

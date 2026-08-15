@@ -127,13 +127,35 @@ final class CredentialSurfaceTest extends TestCase
         $this->assertSame(PlatformRole::ERROR_CODE, $res['code']);
     }
 
-    public function test_an_operations_role_can_list_provider_credentials(): void
+    /**
+     * RÈGLE RESSERRÉE EN BOUCLE 16.
+     *
+     * Ce test exigeait auparavant qu'un `support_operator` puisse lister
+     * l'inventaire, au motif que c'était « une information d'exploitation ».
+     * C'était trop large : l'inventaire dit quels providers sont actifs et
+     * dans quel environnement, c'est-à-dire les corridors et les dépendances
+     * externes de Nexus. Ce n'est pas le métier du support.
+     *
+     * La capacité est désormais `credential_inventory`, portée par
+     * superadmin, provider_engineer, security_engineer et sre_operator.
+     */
+    public function test_a_support_operator_can_no_longer_list_provider_credentials(): void
     {
         $this->actor('personal', PlatformRole::SUPPORT_OPERATOR);
 
         $res = $this->call('list');
 
-        $this->assertSame(200, $res['status'], 'Le personnel d\'exploitation doit pouvoir consulter l\'inventaire.');
+        $this->assertSame(403, $res['status'], 'Le support n\'a pas à connaître le plan de l\'infrastructure.');
+        $this->assertSame(PlatformRole::ERROR_CODE, $res['code']);
+    }
+
+    public function test_a_provider_engineer_can_list_provider_credentials(): void
+    {
+        $this->actor('personal', PlatformRole::PROVIDER_ENGINEER);
+
+        $res = $this->call('list');
+
+        $this->assertSame(200, $res['status'], 'Intégrer un provider suppose de voir ce qui est configuré.');
     }
 
     // ══ 2. TESTER UNE CREDENTIAL EST UNE ÉCRITURE ═════════════════════════

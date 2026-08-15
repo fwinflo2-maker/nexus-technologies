@@ -85,8 +85,13 @@ final class ProviderCredentialController
         // L'inventaire des credentials est une information d'exploitation :
         // savoir QUELS providers sont configurés, et dans quel environnement,
         // renseigne sur l'infrastructure de Nexus. Il était accessible à tout
-        // compte authentifié.
-        PlatformRole::require($request->attribute('user'), 'operations');
+        // compte authentifié (boucle 10), puis aux 9 rôles porteurs de
+        // `operations` (boucle 16) — dont le support et la QA.
+        //
+        // Capacité dédiée, alignée sur GET /control/credentials qui expose le
+        // même inventaire : deux portes vers la même donnée doivent exiger la
+        // même clé, sinon la plus permissive annule l'autre.
+        PlatformRole::require($request->attribute('user'), 'credential_inventory');
 
         $pdo = Database::getConnection();
         $stmt = $pdo->query(
