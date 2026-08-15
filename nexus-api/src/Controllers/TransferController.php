@@ -69,7 +69,8 @@ final class TransferController
     public static function index(Request $request): void
     {
         $request = AuthMiddleware::handle($request);
-        $userId  = (int) $request->attribute('user')['id'];
+        $user    = $request->attribute('user');
+        $userId  = (int) $user['id'];
 
         $page     = max(1, (int) $request->query('page', 1));
         $perPage  = min(100, max(1, (int) $request->query('per_page', 25)));
@@ -77,8 +78,12 @@ final class TransferController
         $status   = (string) $request->query('status', '');
         $currency = strtoupper((string) $request->query('currency', ''));
 
-        $where  = ['user_id = :uid'];
-        $params = ['uid' => $userId];
+        // §20 — l'historique est scopé par environnement : un transfert de
+        // test ne doit pas apparaître dans l'historique d'argent réel.
+        $context = ExecutionContext::fromRequest($request, $user);
+
+        $where  = ['user_id = :uid', 'environment = :env'];
+        $params = ['uid' => $userId, 'env' => $context->environmentValue()];
 
         if ($type !== '' && in_array($type, self::ALLOWED_TYPES, true)) {
             $where[]         = 'type = :type';
@@ -130,16 +135,24 @@ final class TransferController
     public static function show(Request $request): void
     {
         $request = AuthMiddleware::handle($request);
-        $userId  = (int) $request->attribute('user')['id'];
+        $user    = $request->attribute('user');
+        $userId  = (int) $user['id'];
         $id      = (int) $request->param('id', '0');
 
         if ($id <= 0) {
             Response::badRequest('Identifiant de transaction invalide.');
         }
 
+        // Une transaction de l'autre environnement est « introuvable » : le
+        // détail d'un mouvement d'argent réel ne s'ouvre pas depuis une vue
+        // de test.
+        $context = ExecutionContext::fromRequest($request, $user);
+
         $pdo  = Database::getConnection();
-        $stmt = $pdo->prepare('SELECT * FROM transactions WHERE id = :id AND user_id = :uid LIMIT 1');
-        $stmt->execute(['id' => $id, 'uid' => $userId]);
+        $stmt = $pdo->prepare(
+            'SELECT * FROM transactions WHERE id = :id AND user_id = :uid AND environment = :env LIMIT 1'
+        );
+        $stmt->execute(['id' => $id, 'uid' => $userId, 'env' => $context->environmentValue()]);
         $row = $stmt->fetch();
 
         if ($row === false) {

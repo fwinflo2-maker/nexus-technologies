@@ -39,9 +39,15 @@ final class PaymentController
         $perPage = min(100, max(1, (int) $request->query('per_page', 25)));
         $status  = (string) $request->query('status', '');
 
-        $pdo    = Database::getConnection();
-        $where  = 'user_id = :uid';
-        $params = ['uid' => $bid];
+        $pdo = Database::getConnection();
+
+        // §20 — la liste ne mélange pas les environnements : afficher un
+        // paiement d'argent réel dans une vue de test (ou l'inverse) fausse
+        // la lecture comptable de l'opérateur.
+        $context = ExecutionContext::fromRequest($request, $actor, $bid);
+
+        $where  = 'user_id = :uid AND environment = :env';
+        $params = ['uid' => $bid, 'env' => $context->environmentValue()];
         if ($status !== '' && in_array($status, self::STATUSES, true)) {
             $where .= ' AND status = :status';
             $params['status'] = $status;

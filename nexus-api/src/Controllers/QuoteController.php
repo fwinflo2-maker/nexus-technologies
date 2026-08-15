@@ -157,8 +157,10 @@ final class QuoteController
     public static function get(Request $request): void
     {
         $request = AuthMiddleware::handle($request);
-        $userId  = (int) $request->attribute('user')['id'];
+        $user    = $request->attribute('user');
+        $userId  = (int) $user['id'];
         $quoteId = (string) $request->param('id', '');
+        $context = ExecutionContext::fromRequest($request, $user);
 
         if ($quoteId === '') {
             Response::badRequest('Identifiant de quote requis.');
@@ -170,10 +172,13 @@ final class QuoteController
                     amount_sent, objective, routes_json, selected_route_id, status,
                     expires_at, created_at
              FROM quotes
-             WHERE id = :id AND user_id = :uid
+             WHERE id = :id AND user_id = :uid AND environment = :env
              LIMIT 1'
         );
-        $stmt->execute(['id' => $quoteId, 'uid' => $userId]);
+        // Une quote porte l'environnement de sa création : la relire depuis
+        // l'autre environnement reviendrait à réutiliser un prix de test pour
+        // un mouvement réel.
+        $stmt->execute(['id' => $quoteId, 'uid' => $userId, 'env' => $context->environmentValue()]);
         $row = $stmt->fetch();
 
         if ($row === false) {
