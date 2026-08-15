@@ -49,41 +49,133 @@ const emptyBusiness: BusinessData = {
 const legalForms = ['SARL', 'SA', 'SAS', 'SASU', 'EURL', 'Entreprise individuelle', 'Coopérative', 'ONL', 'GIE', 'Autre'];
 
 // Formes juridiques par pays (code ISO-2) — pour l'inscription entreprise.
-// La liste s'adapte au pays sélectionné ; par défaut, liste générique.
+// Vérifiées par sources publiques (droit OHADA, registres nationaux, guides
+// officiels de création d'entreprise). Pour les pays absents → liste générique.
+// Afrique francophone = droit OHADA (17 États) : formes communes harmonisées.
+const OHADA_FORMS = [
+  'Établissement',
+  'Entreprise individuelle',
+  'SARL',
+  'SARLU',
+  'SA',
+  'SAS',
+  'SASU',
+  'SNC',
+  'SCS',
+  'GIE',
+  'Société en participation',
+  'Société coopérative',
+];
+
 const LEGAL_FORMS_BY_COUNTRY: Record<string, string[]> = {
-  FR: ['SARL', 'SAS', 'SASU', 'SA', 'EURL', 'SNC', 'SCI', 'Entreprise individuelle', 'Micro-entreprise', 'Société civile'],
-  CG: ['SARL', 'SA', 'EURL', 'SAS', 'Entreprise individuelle', 'Association', 'Société en nom collectif'],
-  CM: ['SARL', 'SA', 'EURL', 'SUARL', 'SNC', 'Société coopérative', 'Entreprise individuelle'],
-  GA: ['SARL', 'SA', 'EURL', 'SAS', 'SNC', 'Entreprise individuelle', 'Société en participation'],
-  SN: ['SARL', 'SA', 'SUARL', 'SNC', 'GIE', 'Société coopérative', 'Entreprise individuelle'],
-  CI: ['SARL', 'SA', 'EURL', 'SAS', 'SNC', 'GIE', 'Société coopérative', 'Entreprise individuelle'],
-  TG: ['SARL', 'SA', 'EURL', 'SAS', 'SNC', 'Société coopérative', 'Entreprise individuelle'],
-  BJ: ['SARL', 'SA', 'EURL', 'SAS', 'SNC', 'Société coopérative', 'Entreprise individuelle'],
-  BF: ['SARL', 'SA', 'EURL', 'SAS', 'SNC', 'Société coopérative', 'Entreprise individuelle'],
-  ML: ['SARL', 'SA', 'EURL', 'SAS', 'SNC', 'GIE', 'Société coopérative', 'Entreprise individuelle'],
-  NE: ['SARL', 'SA', 'EURL', 'SAS', 'SNC', 'Société coopérative', 'Entreprise individuelle'],
-  CD: ['SARL', 'SA', 'EURL', 'SAS', 'SNC', 'Société coopérative', 'Entreprise individuelle'],
-  MA: ['SARL', 'SA', 'SAS', 'SNC', 'Société en participation', 'Entreprise individuelle'],
-  DZ: ['SARL', 'SPA', 'EURL', 'SNC', 'Société en participation', 'Entreprise individuelle'],
-  TN: ['SARL', 'SA', 'SUARL', 'SNC', 'Société en participation', 'Entreprise individuelle'],
-  US: ['LLC', 'Corporation (Inc.)', 'S-Corp', 'C-Corp', 'LLP', 'Sole Proprietorship', 'Nonprofit'],
-  GB: ['Limited (Ltd)', 'Public Limited Company (PLC)', 'LLP', 'Sole Trader', 'Community Interest Company'],
-  DE: ['GmbH', 'AG', 'UG (haftungsbeschränkt)', 'GbR', 'OHG', 'KG', 'Einzelunternehmen'],
+  // ── France ──
+  FR: ['SARL', 'SAS', 'SASU', 'SA', 'EURL', 'SNC', 'SCS', 'SCI', 'Entreprise individuelle', 'Micro-entreprise', 'Société civile'],
+
+  // ── Afrique francophone — droit OHADA (17 États membres) ──
+  // Congo-Brazzaville, RDC, Cameroun, Gabon, Sénégal, Côte d'Ivoire, etc.
+  CG: OHADA_FORMS,
+  CD: OHADA_FORMS,
+  CM: OHADA_FORMS,
+  GA: OHADA_FORMS,
+  SN: OHADA_FORMS,
+  CI: OHADA_FORMS,
+  TG: OHADA_FORMS,
+  BJ: OHADA_FORMS,
+  BF: OHADA_FORMS,
+  ML: OHADA_FORMS,
+  NE: OHADA_FORMS,
+  TD: OHADA_FORMS,
+  CF: OHADA_FORMS,
+  GQ: OHADA_FORMS,
+  GN: OHADA_FORMS,
+  GW: OHADA_FORMS,
+  KM: OHADA_FORMS,
+
+  // ── Maghreb (droit local, pas OHADA) ──
+  MA: ['Entreprise individuelle', 'Auto-entrepreneur', 'SARL', 'SARL AU', 'SAS', 'SA', 'SNC', 'SCS', 'SCA', 'Société en participation', 'GIE', 'Société coopérative'],
+  DZ: ['Entreprise individuelle', 'EURL', 'SARL', 'SPA', 'SAS', 'SNC', 'SCS', 'GIE', 'Société en participation'],
+  TN: ['Entreprise individuelle', 'SARL', 'SA', 'SUARL', 'SNC', 'SCS', 'Société coopérative'],
+
+  // ── États-Unis ──
+  US: ['LLC', 'Corporation (Inc.)', 'S-Corp', 'C-Corp', 'LLP', 'General Partnership', 'Sole Proprietorship', 'Nonprofit (501c3)'],
+
+  // ── Royaume-Uni ──
+  GB: ['Private Limited (Ltd)', 'Public Limited (PLC)', 'LLP', 'Sole Trader', 'Partnership', 'Community Interest Company'],
+
+  // ── Europe de l'Ouest ──
+  DE: ['GmbH', 'UG (haftungsbeschränkt)', 'AG', 'Einzelunternehmen', 'GbR', 'OHG', 'KG'],
   BE: ['SPRL', 'SA', 'SCRL', 'SNC', 'SCS', 'Société simple'],
   CH: ['GmbH', 'AG', 'Einzelunternehmen', 'Kollektivgesellschaft', 'Kommanditgesellschaft'],
   ES: ['Sociedad Limitada (SL)', 'Sociedad Anónima (SA)', 'Sociedad Civil', 'Comunidad de Bienes', 'Autónomo'],
-  IT: ['Società a Responsabilità Limitata (SRL)', 'Società per Azioni (SPA)', 'SNC', 'SAS', 'Ditta Individuale'],
+  IT: ['SRL', 'SPA', 'SNC', 'SAS', 'Ditta Individuale'],
   PT: ['Sociedade por Quotas (Lda)', 'Sociedade Anónima (SA)', 'Empresário em Nome Individual'],
-  NL: ['Besloten Vennootschap (BV)', 'Naamloze Vennootschap (NV)', 'VOF', 'Eenmanszaak', 'Coöperatie'],
-  CA: ['Corporation (Inc.)', 'Limited (Ltd)', 'Sole Proprietorship', 'Partnership'],
-  BR: ['Sociedade Limitada (LTDA)', 'Sociedade Anônima (SA)', 'Empresa Individual (EI)', 'Microempreendedor Individual (MEI)'],
+  NL: ['BV', 'NV', 'VOF', 'Eenmanszaak', 'Coöperatie'],
+  LU: ['SARL', 'SA', 'SCS', 'Sole Proprietorship'],
+  IE: ['Private Limited (Ltd)', 'Public Limited (PLC)', 'LLP', 'Sole Trader', 'Partnership'],
+  AT: ['GmbH', 'AG', 'OG', 'KG', 'Einzelunternehmen'],
+  SE: ['Aktiebolag (AB)', 'Handelsbolag', 'Kommanditbolag', 'Enskild firma', 'Ekonomisk förening'],
+  DK: ['Anpartsselskab (ApS)', 'Aktieselskab (A/S)', 'Enkeltmandsvirksomhed', 'Interessentskab', 'Kommanditselskab'],
+  FI: ['Osakeyhtiö (Oy)', 'Avoin yhtiö (Ay)', 'Kommandiittiyhtiö (Ky)', 'Toiminimi'],
+  NO: ['Aksjeselskap (AS)', 'Allmennaksjeselskap (ASA)', 'Enkeltpersonforetak', 'Ansvarlig selskap (ANS)'],
+  PL: ['Spółka z o.o.', 'S.A.', 'Spółka komandytowa', 'Spółka jawna', 'Jednoosobowa działalność'],
+  GR: ['Α.Ε. (AE)', 'Ε.Π.Ε. (EPE)', 'Μονοπρόσωπη ΙΚΕ', 'Ο.Ε. (OE)', 'Ατομική Επιχείρηση'],
+
+  // ── Amériques / autres ──
+  CA: ['Corporation (Inc.)', 'Limited (Ltd)', 'Sole Proprietorship', 'Partnership', 'General Partnership', 'Cooperative'],
+  BR: ['Sociedade Limitada (LTDA)', 'Sociedade Anônima (SA)', 'Empresa Individual (EI)', 'MEI', 'Sociedade Simples'],
+  MX: ['Sociedad Anónima (SA)', 'Sociedad de Responsabilidad Limitada (SRL)', 'Persona Física con Actividad Empresarial', 'Sociedad Civil'],
+  AR: ['Sociedad de Responsabilidad Limitada (SRL)', 'Sociedad Anónima (SA)', 'Monotributo', 'Sociedad Simple'],
+  CO: ['Sociedad por Acciones Simplificada (SAS)', 'Sociedad Limitada (LTDA)', 'Sociedad Anónima (SA)', 'Persona Natural'],
+  CL: ['Sociedad por Acciones (SpA)', 'Sociedad de Responsabilidad Limitada (Ltda)', 'Sociedad Anónima (SA)', 'Empresa Individual de Responsabilidad Limitada (EIRL)'],
+
+  // ── Afrique anglophone ──
+  NG: ['Private Limited (Ltd)', 'Public Limited (PLC)', 'Business Name', 'Limited Liability Partnership (LLP)'],
+  KE: ['Private Limited (Ltd)', 'Public Limited (PLC)', 'Sole Proprietorship', 'Partnership', 'Limited Liability Partnership (LLP)'],
+  GH: ['Private Limited (Ltd)', 'Public Limited (PLC)', 'Sole Proprietorship', 'Partnership', 'Company Limited by Guarantee'],
+  ZA: ['Private Company (Pty) Ltd', 'Public Company (Ltd)', 'Sole Proprietor', 'Partnership', 'Non-Profit Company (NPC)'],
+  TZ: ['Private Limited (Ltd)', 'Public Limited (PLC)', 'Sole Proprietorship', 'Partnership'],
+  UG: ['Private Limited (Ltd)', 'Public Limited (PLC)', 'Sole Proprietorship', 'Partnership'],
+  ET: ['Private Limited Company (PLC)', 'Share Company (SC)', 'Sole Proprietorship'],
+  EG: ['LLC', 'Joint Stock Company (JSC)', 'Sole Proprietorship', 'Partnership'],
+
+  // ── Asie ──
   IN: ['Private Limited (Pvt Ltd)', 'Public Limited (Ltd)', 'LLP', 'Sole Proprietorship', 'Partnership'],
   CN: ['有限责任公司 (LLC)', '股份有限公司 (Co., Ltd)', '合伙企业 (Partnership)', '个体工商户 (Sole Proprietor)'],
   JP: ['株式会社 (Kabushiki Kaisha)', '合同会社 (Godo Gaisha)', '合名会社 (Gomei Gaisha)', '個人事業主 (Sole Proprietor)'],
-  NG: ['Limited Liability Company (Ltd)', 'Public Limited Company (PLC)', 'Business Name', 'Partnership'],
-  KE: ['Limited Company (Ltd)', 'Sole Proprietorship', 'Partnership', 'Company Limited by Guarantee'],
-  GH: ['Limited Company (Ltd)', 'Sole Proprietorship', 'Partnership', 'Company Limited by Guarantee'],
-  ZA: ['Private Company (Pty) Ltd', 'Public Company (Ltd)', 'Sole Proprietorship', 'Partnership', 'Close Corporation (CC)'],
+  SG: ['Private Limited (Pte Ltd)', 'Sole Proprietorship', 'Partnership', 'Limited Liability Partnership (LLP)'],
+  MY: ['Sendirian Berhad (Sdn Bhd)', 'Berhad (Bhd)', 'Sole Proprietorship', 'Partnership'],
+  TH: ['Limited Company', 'Public Limited Company', 'Sole Proprietorship', 'Partnership'],
+  VN: ['Công ty TNHH (LLC)', 'Công ty Cổ phần (JSC)', 'Doanh nghiệp tư nhân (Sole Proprietor)'],
+  PH: ['Corporation', 'Partnership', 'Sole Proprietorship'],
+  ID: ['Perseroan Terbatas (PT)', 'Commanditaire Vennootschap (CV)', 'Firma', 'Usaha Dagang (UD)'],
+  PK: ['Private Limited (Pvt Ltd)', 'Public Limited (Ltd)', 'Sole Proprietorship', 'Partnership'],
+  BD: ['Private Limited (Pvt Ltd)', 'Public Limited (Ltd)', 'Sole Proprietorship', 'Partnership'],
+
+  // ── Moyen-Orient ──
+  AE: ['LLC', 'Free Zone Company (FZ-LLC)', 'Sole Establishment', 'Public Joint Stock Company (PJSC)'],
+  SA: ['Limited Liability Company (LLC)', 'Joint Stock Company (JSC)', 'Sole Establishment', 'Partnership'],
+  QA: ['Limited Liability Company (LLC)', 'Joint Stock Company (QSC)', 'Sole Establishment'],
+  KW: ['Limited Liability Company (WLL)', 'Joint Stock Company (KSC)', 'Sole Proprietorship'],
+  TR: ['Anonim Şirket (A.Ş.)', 'Limited Şirket (Ltd. Şti.)', 'Şahıs Şirketi', 'Komandit Şirket'],
+  IL: ['Private Limited Company (Ltd)', 'Partnership', 'Sole Proprietorship'],
+
+  // ── Australie / Océanie ──
+  AU: ['Proprietary Limited (Pty Ltd)', 'Public Limited (Ltd)', 'Sole Trader', 'Partnership', 'Trust'],
+  NZ: ['Limited (Ltd)', 'Sole Trader', 'Partnership', 'Limited Partnership'],
+
+  // ── Europe de l'Est ──
+  RU: ['ООО (OOO)', 'АО (AO)', 'ИП (IP)', 'Полное товарищество'],
+  UA: ['ТОВ (LLC)', 'ПрАТ (PJSC)', 'ФОП (Sole Proprietor)'],
+  RO: ['Societate cu Răspundere Limitată (SRL)', 'Societate pe Acțiuni (SA)', 'Persoană Fizică Autorizată (PFA)'],
+  HU: ['Korlátolt Felelősségű Társaság (Kft)', 'Részvénytársaság (Zrt)', 'Egyéni vállalkozó'],
+  CZ: ['Společnost s ručením omezeným (s.r.o.)', 'Akciová společnost (a.s.)', 'Živnostník (Sole Proprietor)'],
+  SK: ['Spoločnosť s ručením obmedzeným (s.r.o.)', 'Akciová spoločnosť (a.s.)', 'Živnostník (Sole Proprietor)'],
+  BG: ['ЕООД (EOOD)', 'ООД (OOD)', 'АД (AD)', 'Едноличен търговец (ET)'],
+  HR: ['Društvo s ograničenom odgovornošću (d.o.o.)', 'Dioničko društvo (d.d.)', 'Obrt (Sole Proprietor)'],
+  RS: ['Društvo s ograničenom odgovornošću (d.o.o.)', 'Akcionarsko društvo (a.d.)', 'Preduzetnik (Sole Proprietor)'],
+  LT: ['Uždaroji akcinė bendrovė (UAB)', 'Akcinė bendrovė (AB)', 'Individuali įmonė (IĮ)'],
+  EE: ['Osaühing (OÜ)', 'Aktsiaselts (AS)', 'Füüsilisest isikust ettevõtja (FIE)'],
+  LV: ['Sabiedrība ar ierobežotu atbildību (SIA)', 'Akciju sabiedrība (AS)', 'Individuālais komersants'],
 };
 
 /** Résout le code ISO du pays depuis son nom, puis retourne les formes juridiques adaptées. */
