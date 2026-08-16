@@ -1,6 +1,7 @@
 import { useAuth } from '../../context/AuthContext';
 import { Link } from 'react-router-dom';
 import Avatar from '../../components/Avatar';
+import { ParticlesBackground } from '../../components/ParticlesBackground';
 
 /** Items de navigation du Super Admin (sidebar). */
 export const ADMIN_NAV = [
@@ -37,7 +38,8 @@ export default function AdminLayout({
 
   return (
     <div className="nexus-dash layout" style={{ minHeight: '100vh' }}>
-      {/* Fond */}
+      {/* Fond animé avec particules */}
+      <ParticlesBackground density={35} color="#3B82F6" opacity={0.25} />
       <div className="dash-ambient-bg" aria-hidden="true" />
       <div className="bg-grid" />
       <div className="ambient-vignette" aria-hidden="true" />

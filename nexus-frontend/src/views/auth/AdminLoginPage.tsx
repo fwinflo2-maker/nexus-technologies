@@ -41,8 +41,9 @@ export default function AdminLoginPage() {
 
   return (
     <div className="admin-login-page">
-      <ParticlesBackground density={40} color="#3B82F6" opacity={0.35} />
-
+      {/* Animation de particules en background */}
+      <ParticlesBackground density={50} color="#60A5FA" opacity={0.4} />
+      
       {/* Halos ambiants */}
       <div className="al-orb al-orb-1" aria-hidden="true" />
       <div className="al-orb al-orb-2" aria-hidden="true" />
