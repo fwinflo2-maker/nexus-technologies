@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { countries } from '../../data/countries';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import './AuthPages.css';
@@ -7,6 +8,12 @@ import { useI18n } from '../../context/I18nContext';
 import { useAuth } from '../../context/AuthContext';
 import { apiRegister } from '../../api/client';
 import { ParticlesBackground } from '../../components/ParticlesBackground';
+import { EASE } from '../../components/anim/Premium';
+
+const authEnter = {
+  hidden: { opacity: 0, y: 24, scale: 0.99 },
+  visible: (i: number = 0) => ({ opacity: 1, y: 0, scale: 1, transition: { duration: 0.5, ease: EASE, delay: i * 0.06 } }),
+};
 
 interface RegisterPageProps {
   onSwitchToLogin: () => void;
@@ -327,52 +334,67 @@ export function RegisterPage({ onSwitchToLogin, onBackHome }: RegisterPageProps)
         <div className="auth-card-inner">
           {/* Formulaire */}
           <div className="auth-form-side">
-            <div className="auth-topbar">
+            <motion.div variants={authEnter} initial="hidden" animate="visible" custom={0} className="auth-topbar">
               <button className="auth-back" onClick={onBackHome}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
                 {t('auth_back')}
               </button>
               <LanguageSwitcher />
-            </div>
+            </motion.div>
 
-            <h1 className="auth-title">{t('reg_title')}</h1>
-            <p className="auth-subtitle">{t('reg_subtitle')}</p>
+            <motion.h1 variants={authEnter} initial="hidden" animate="visible" custom={1} className="auth-title">{t('reg_title')}</motion.h1>
+            <motion.p variants={authEnter} initial="hidden" animate="visible" custom={2} className="auth-subtitle">{t('reg_subtitle')}</motion.p>
 
-            <div className="account-type-selector">
-              <button type="button" className={`account-type ${accountType === 'personal' ? 'selected' : ''}`} onClick={() => switchType('personal')}>
+            <motion.div variants={authEnter} initial="hidden" animate="visible" custom={3} className="account-type-selector">
+              <motion.button type="button" className={`account-type ${accountType === 'personal' ? 'selected' : ''}`} onClick={() => switchType('personal')}
+                whileHover={{ y: -3 }} whileTap={{ scale: 0.97 }} transition={{ type: 'spring', stiffness: 300, damping: 17 }}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                 <div className="account-type-text">
                   <span className="account-type-title">{t('reg_personal')}</span>
                   <span className="account-type-desc">{t('reg_personal_sub')}</span>
                 </div>
-              </button>
-              <button type="button" className={`account-type ${accountType === 'business' ? 'selected' : ''}`} onClick={() => switchType('business')}>
+              </motion.button>
+              <motion.button type="button" className={`account-type ${accountType === 'business' ? 'selected' : ''}`} onClick={() => switchType('business')}
+                whileHover={{ y: -3 }} whileTap={{ scale: 0.97 }} transition={{ type: 'spring', stiffness: 300, damping: 17 }}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
                 <div className="account-type-text">
                   <span className="account-type-title">{t('reg_business')}</span>
                   <span className="account-type-desc">{t('reg_business_sub')}</span>
                 </div>
-              </button>
-            </div>
+              </motion.button>
+            </motion.div>
 
             {/* Stepper */}
-            <div className="stepper">
+            <motion.div variants={authEnter} initial="hidden" animate="visible" custom={4} className="stepper">
               {steps.map((label, i) => {
                 const n = i + 1;
                 const active = n === step;
                 const done = n < step;
                 return (
-                  <div key={label} className={`stepper-item ${active ? 'active' : ''} ${done ? 'done' : ''}`}>
-                    <div className="stepper-dot">
+                  <motion.div
+                    key={label} className={`stepper-item ${active ? 'active' : ''} ${done ? 'done' : ''}`}
+                    animate={{ opacity: active ? 1 : done ? 0.6 : 0.5, scale: active ? 1.04 : 1 }}
+                    transition={{ type: 'spring', stiffness: 260, damping: 18 }}
+                  >
+                    <motion.div
+                      className="stepper-dot"
+                      layout
+                      animate={{ scale: active ? 1.18 : 1, transition: { type: 'spring', stiffness: 300, damping: 15 } }}
+                    >
                       {done ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M20 6L9 17l-5-5"/></svg> : n}
-                    </div>
+                    </motion.div>
                     <span className="stepper-label">{label}</span>
-                  </div>
+                  </motion.div>
                 );
               })}
-            </div>
+            </motion.div>
 
-            <form className="auth-form" onSubmit={handleSubmit} noValidate>
+            <motion.form variants={authEnter} initial="hidden" animate="visible" custom={5} className="auth-form" onSubmit={handleSubmit} noValidate>
+              <AnimatePresence mode="wait">
+              <motion.div key={`${accountType}-${step}`}
+                initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}
+                transition={{ duration: 0.28, ease: EASE }}
+                style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {isBusiness && step === 1 && (
                 <>
                   <div>
@@ -509,71 +531,77 @@ export function RegisterPage({ onSwitchToLogin, onBackHome }: RegisterPageProps)
                 </div>
               )}
 
+              </motion.div>
+              </AnimatePresence>
               {error && <div className="auth-error">{error}</div>}
 
               <div className="wizard-actions">
                 {step > 1 && (
-                  <button type="button" className="btn btn-ghost" onClick={back}>
+                  <motion.button type="button" className="btn btn-ghost" onClick={back}
+                    whileHover={{ x: -3 }} whileTap={{ scale: 0.96 }} transition={{ type: 'spring', stiffness: 300, damping: 17 }}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
                     {t('reg_previous')}
-                  </button>
+                  </motion.button>
                 )}
                 {step < totalSteps ? (
-                  <button type="button" className="btn btn-primary" onClick={handleNext} style={{ flex: 1 }}>
+                  <motion.button type="button" className="btn btn-primary" onClick={handleNext} style={{ flex: 1 }}
+                    whileHover={{ scale: 1.02, y: -1 }} whileTap={{ scale: 0.97 }} transition={{ type: 'spring', stiffness: 300, damping: 17 }}>
                     {t('reg_continue')}
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-                  </button>
+                  </motion.button>
                 ) : (
-                  <button type="submit" className="btn btn-glow btn-block btn-lg" disabled={loading}>
+                  <motion.button type="submit" className="btn btn-glow btn-block btn-lg" disabled={loading}
+                    whileHover={{ scale: 1.02, y: -1 }} whileTap={{ scale: 0.97 }} transition={{ type: 'spring', stiffness: 300, damping: 17 }}>
                     {loading ? <><span className="spinner" /> {t('reg_sending')}</> : t(isBusiness ? 'reg_submit_business' : 'reg_submit_personal')}
-                  </button>
+                  </motion.button>
                 )}
               </div>
-            </form>
+            </motion.form>
 
-            <div className="auth-terms">
+            <motion.div variants={authEnter} initial="hidden" animate="visible" custom={6} className="auth-terms">
               {t('reg_terms_prefix')} <a href="#">{t('reg_terms_terms')}</a> {t('reg_terms_and')} <a href="#">{t('reg_terms_privacy')}</a>
-            </div>
+            </motion.div>
 
-            <p className="auth-footer">
+            <motion.p variants={authEnter} initial="hidden" animate="visible" custom={7} className="auth-footer">
               {t('login_no_account')} <button className="auth-link-button" onClick={onSwitchToLogin}>{t('login_submit')}</button>
-            </p>
+            </motion.p>
           </div>
 
           {/* Panneau latéral */}
           <aside className="auth-panel-side">
-            <div className="trust-panel-badge">
+            <motion.div variants={authEnter} initial="hidden" animate="visible" custom={1} className="trust-panel-badge">
               <span className="pulse-dot success" />
               {t(isBusiness ? 'reg_panel_badge_biz' : 'reg_panel_badge')}
-            </div>
-            <h3 className="trust-panel-title">
+            </motion.div>
+            <motion.h3 variants={authEnter} initial="hidden" animate="visible" custom={2} className="trust-panel-title">
               <span style={{ color: 'var(--text-heading)' }}>{t(isBusiness ? 'reg_panel_biz_title_1' : 'reg_panel_title_1')}</span>
               <br />
               <span className="gradient-text">{t(isBusiness ? 'reg_panel_biz_title_2' : 'reg_panel_title_2')}</span>
-            </h3>
-            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+            </motion.h3>
+            <motion.p variants={authEnter} initial="hidden" animate="visible" custom={3} style={{ fontSize: '0.875rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
               {isBusiness ? t('reg_panel_text_biz') : t('reg_panel_text')}
-            </p>
-            <div className="trust-panel-items" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginTop: '1rem' }}>
-              <div className="trust-panel-item">
-                <div className="trust-panel-icon">
+            </motion.p>
+            <motion.div className="trust-panel-items" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginTop: '1rem' }}
+              initial="hidden" animate="visible" variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.12 } } }}>
+              <motion.div className="trust-panel-item" variants={authEnter} custom={1} whileHover={{ x: 6, transition: { type: 'spring', stiffness: 260, damping: 20 } }}>
+                <motion.div className="trust-panel-icon" whileHover={{ scale: 1.12 }} transition={{ type: 'spring', stiffness: 300, damping: 15 }}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                </div>
+                </motion.div>
                 <div>
                   <h4>{t('reg_trust_1_title')}</h4>
                   <p>{t('reg_trust_1_text')}</p>
                 </div>
-              </div>
-              <div className="trust-panel-item">
-                <div className="trust-panel-icon">
+              </motion.div>
+              <motion.div className="trust-panel-item" variants={authEnter} custom={2} whileHover={{ x: 6, transition: { type: 'spring', stiffness: 260, damping: 20 } }}>
+                <motion.div className="trust-panel-icon" whileHover={{ scale: 1.12 }} transition={{ type: 'spring', stiffness: 300, damping: 15 }}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/></svg>
-                </div>
+                </motion.div>
                 <div>
                   <h4>{t(isBusiness ? 'reg_trust_2_title_biz' : 'reg_trust_2_title')}</h4>
                   <p>{t(isBusiness ? 'reg_trust_2_text_biz' : 'reg_trust_2_text')}</p>
                 </div>
-              </div>
-            </div>
+              </motion.div>
+            </motion.div>
           </aside>
         </div>
 

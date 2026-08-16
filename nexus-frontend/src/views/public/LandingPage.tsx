@@ -1,9 +1,17 @@
 import { type ReactNode } from 'react';
+import { motion } from 'framer-motion';
 import { useI18n } from '../../context/I18nContext';
 import { TorusField } from '../../components/TorusField';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { ParticlesBackground } from '../../components/ParticlesBackground';
+import { EASE, AnimatedNumber } from '../../components/anim/Premium';
 import './LandingPage.css';
+
+const stagger = { hidden: {}, visible: { transition: { staggerChildren: 0.12 } } };
+const cardVariant = {
+  hidden: { opacity: 0, y: 26, scale: 0.98 },
+  visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.55, ease: EASE } },
+};
 
 interface LandingPageProps {
   onLogin: () => void;
@@ -60,37 +68,55 @@ export function LandingPage({ onLogin, onRegister }: LandingPageProps) {
         <div className="hero-orb hero-orb-side" aria-hidden="true" />
         <div className="hero-torus" aria-hidden="true"><TorusField /></div>
 
-        <div className="container hero-content">
-          <div className="eyebrow animate-fade-up"><span className="pulse-dot success" /> {t('landing_badge')}</div>
-          <h1 className="hero-title animate-fade-up delay-100">
+        <motion.div
+          className="container hero-content"
+          initial="hidden"
+          animate="visible"
+          variants={stagger}
+        >
+          <motion.div variants={cardVariant} className="eyebrow"><span className="pulse-dot success" /> {t('landing_badge')}</motion.div>
+          <motion.h1 variants={cardVariant} className="hero-title">
             {t('landing_hero_title')}
-          </h1>
-          <p className="hero-lead animate-fade-up delay-200">
+          </motion.h1>
+          <motion.p variants={cardVariant} className="hero-lead">
             {t('landing_hero_subtitle')}
-          </p>
-          <div className="hero-actions animate-fade-up delay-300">
-            <button className="btn btn-glow btn-lg" onClick={onRegister}>
+          </motion.p>
+          <motion.div variants={cardVariant} className="hero-actions">
+            <motion.button
+              className="btn btn-glow btn-lg" onClick={onRegister}
+              whileHover={{ scale: 1.05, y: -2 }}
+              whileTap={{ scale: 0.97 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 17 }}
+            >
               {t('landing_cta_main')}
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-            </button>
-            <a href="#comment-ca-marche" className="btn btn-ghost btn-lg">{t('landing_cta_link')} <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: 4 }}><path d="M6 9l6 6 6-6"/></svg></a>
-          </div>
-          <div className="trust-row animate-fade-up delay-400">
+            </motion.button>
+            <motion.a
+              href="#comment-ca-marche" className="btn btn-ghost btn-lg"
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.97 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 17 }}
+            >{t('landing_cta_link')} <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: 4 }}><path d="M6 9l6 6 6-6"/></svg></motion.a>
+          </motion.div>
+          <motion.div variants={cardVariant} className="trust-row">
             <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg> {t('landing_trust_1')}</span>
             <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> {t('landing_trust_2')}</span>
             <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> {t('landing_trust_3')}</span>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       </section>
 
       {/* ── Stats ─────────────────────────────────────────────── */}
-      <section className="container stats-section" aria-label="Chiffres clés">
-        <div className="stats-card glass-card">
-          <div className="stat-item"><strong>180+</strong><span>{t('landing_stat_1')}</span></div>
-          <div className="stat-item"><strong>50+</strong><span>{t('landing_stat_2')}</span></div>
-          <div className="stat-item"><strong>99.2%</strong><span>{t('landing_stat_3')}</span></div>
-        </div>
-      </section>
+      <motion.section
+        className="container stats-section" aria-label="Chiffres clés"
+        initial="hidden" whileInView="visible" viewport={{ once: true, margin: '-60px' }} variants={stagger}
+      >
+        <motion.div className="stats-card glass-card" variants={cardVariant}>
+          <div className="stat-item"><strong><AnimatedNumber value={180} suffix="+" /></strong><span>{t('landing_stat_1')}</span></div>
+          <div className="stat-item"><strong><AnimatedNumber value={50} suffix="+" /></strong><span>{t('landing_stat_2')}</span></div>
+          <div className="stat-item"><strong><AnimatedNumber value={99.2} decimals={1} suffix="%" /></strong><span>{t('landing_stat_3')}</span></div>
+        </motion.div>
+      </motion.section>
 
       {/* ── Comment ça marche ─────────────────────────────────── */}
       <section id="comment-ca-marche" className="section-block container">
@@ -99,9 +125,13 @@ export function LandingPage({ onLogin, onRegister }: LandingPageProps) {
           <h2>{t('landing_steps_title')}</h2>
           <p>{t('landing_steps_subtitle')}</p>
         </div>
-        <div className="steps-grid stagger">
+        <motion.div
+          className="steps-grid stagger"
+          initial="hidden" whileInView="visible" viewport={{ once: true, margin: '-60px' }} variants={stagger}
+        >
           {steps.map((step, index) => (
-            <div className="step-card glass-card animate-fade-up" key={step.num}>
+            <motion.div className="step-card glass-card" key={step.num} variants={cardVariant}
+              whileHover={{ y: -6, scale: 1.02, transition: { type: 'spring', stiffness: 250, damping: 18 } }}>
               <div className="step-top">
                 <span className="step-number">{step.num}</span>
                 <div className="step-icon">{svgIcons[step.icon]}</div>
@@ -111,9 +141,9 @@ export function LandingPage({ onLogin, onRegister }: LandingPageProps) {
               </span>}
               <h3>{step.title}</h3>
               <p>{step.text}</p>
-            </div>
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
       </section>
 
       {/* ── Fonctionnalités ───────────────────────────────────── */}
@@ -122,15 +152,23 @@ export function LandingPage({ onLogin, onRegister }: LandingPageProps) {
           <span className="section-kicker">{t('landing_features_label')}</span>
           <h2>{t('landing_features_title')}</h2>
         </div>
-        <div className="benefits-grid stagger">
+        <motion.div
+          className="benefits-grid stagger"
+          initial="hidden" whileInView="visible" viewport={{ once: true, margin: '-60px' }} variants={stagger}
+        >
           {benefits.map((b) => (
-            <article className="benefit-card animate-fade-up" key={b.title}>
-              <div className="benefit-icon">{svgIcons[b.icon]}</div>
+            <motion.article className="benefit-card" key={b.title} variants={cardVariant}
+              whileHover={{ y: -6, scale: 1.02, transition: { type: 'spring', stiffness: 250, damping: 18 } }}>
+              <motion.div className="benefit-icon"
+                whileHover={{ rotate: 8, scale: 1.1 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 15 }}>
+                {svgIcons[b.icon]}
+              </motion.div>
               <h3>{b.title}</h3>
               <p>{b.text}</p>
-            </article>
+            </motion.article>
           ))}
-        </div>
+        </motion.div>
       </section>
 
       {/* ── Architecture ──────────────────────────────────────── */}
@@ -142,14 +180,20 @@ export function LandingPage({ onLogin, onRegister }: LandingPageProps) {
             <p>{t('landing_arch_subtitle')}</p>
           </div>
 
-          <div className="arch-grid animate-fade-up">
+          <motion.div
+            className="arch-grid"
+            initial="hidden" whileInView="visible" viewport={{ once: true, margin: '-60px' }} variants={stagger}
+          >
             {/* Card centrale — Pipeline */}
-            <div className="arch-card arch-card-center">
+            <motion.div className="arch-card arch-card-center" variants={cardVariant}
+              whileHover={{ y: -5, transition: { type: 'spring', stiffness: 250, damping: 18 } }}>
               <div>
                 <h3>{t('landing_arch1_title')}</h3>
                 <p>{t('landing_arch1_text')}</p>
               </div>
-              <div className="arch-flow">
+              <motion.div className="arch-flow"
+                animate={{ opacity: [0.4, 1, 0.4] }}
+                transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}>
                 <div className="arch-flow-node">Intent</div>
                 <span className="arch-flow-arrow">→</span>
                 <div className="arch-flow-node">Routing</div>
@@ -157,11 +201,12 @@ export function LandingPage({ onLogin, onRegister }: LandingPageProps) {
                 <div className="arch-flow-node">Execution</div>
                 <span className="arch-flow-arrow">→</span>
                 <div className="arch-flow-node">Ledger</div>
-              </div>
-            </div>
+              </motion.div>
+            </motion.div>
 
             {/* Card 1 — Routing */}
-            <div className="arch-card">
+            <motion.div className="arch-card" variants={cardVariant}
+              whileHover={{ y: -5, transition: { type: 'spring', stiffness: 250, damping: 18 } }}>
               <div className="arch-card-icon">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="6" cy="19" r="3"/><circle cx="18" cy="5" r="3"/><path d="M12 19h4.5a3.5 3.5 0 0 0 0-7h-9a3.5 3.5 0 0 1 0-7H12"/></svg>
               </div>
@@ -172,10 +217,11 @@ export function LandingPage({ onLogin, onRegister }: LandingPageProps) {
                 <span className="arch-tag">Scoring</span>
                 <span className="arch-tag">Optimisé</span>
               </div>
-            </div>
+            </motion.div>
 
             {/* Card 2 — Conformité */}
-            <div className="arch-card">
+            <motion.div className="arch-card" variants={cardVariant}
+              whileHover={{ y: -5, transition: { type: 'spring', stiffness: 250, damping: 18 } }}>
               <div className="arch-card-icon">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
               </div>
@@ -186,10 +232,11 @@ export function LandingPage({ onLogin, onRegister }: LandingPageProps) {
                 <span className="arch-tag">AML</span>
                 <span className="arch-tag">Sanctions</span>
               </div>
-            </div>
+            </motion.div>
 
             {/* Card 3 — Providers */}
-            <div className="arch-card">
+            <motion.div className="arch-card" variants={cardVariant}
+              whileHover={{ y: -5, transition: { type: 'spring', stiffness: 250, damping: 18 } }}>
               <div className="arch-card-icon">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/></svg>
               </div>
@@ -201,10 +248,11 @@ export function LandingPage({ onLogin, onRegister }: LandingPageProps) {
                 <span className="arch-tag">FX</span>
                 <span className="arch-tag">MoMo</span>
               </div>
-            </div>
+            </motion.div>
 
             {/* Card 4 — Exécution */}
-            <div className="arch-card">
+            <motion.div className="arch-card" variants={cardVariant}
+              whileHover={{ y: -5, transition: { type: 'spring', stiffness: 250, damping: 18 } }}>
               <div className="arch-card-icon">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
               </div>
@@ -215,10 +263,11 @@ export function LandingPage({ onLogin, onRegister }: LandingPageProps) {
                 <span className="arch-tag">Ledger</span>
                 <span className="arch-tag">Settlement</span>
               </div>
-            </div>
+            </motion.div>
 
             {/* Card 5 — Intelligence */}
-            <div className="arch-card">
+            <motion.div className="arch-card" variants={cardVariant}
+              whileHover={{ y: -5, transition: { type: 'spring', stiffness: 250, damping: 18 } }}>
               <div className="arch-card-icon">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2a10 10 0 1 0 10 10H12V2z"/><path d="M20.66 8A10 10 0 0 0 14 2v6h6.66z"/></svg>
               </div>
@@ -229,10 +278,11 @@ export function LandingPage({ onLogin, onRegister }: LandingPageProps) {
                 <span className="arch-tag">Deterministe</span>
                 <span className="arch-tag">Audit</span>
               </div>
-            </div>
+            </motion.div>
 
             {/* Card 6 — Ledger */}
-            <div className="arch-card">
+            <motion.div className="arch-card" variants={cardVariant}
+              whileHover={{ y: -5, transition: { type: 'spring', stiffness: 250, damping: 18 } }}>
               <div className="arch-card-icon">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
               </div>
@@ -243,25 +293,33 @@ export function LandingPage({ onLogin, onRegister }: LandingPageProps) {
                 <span className="arch-tag">Escalade</span>
                 <span className="arch-tag">Preuves</span>
               </div>
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
         </div>
       </section>
 
       {/* ── CTA final ────────────────────────────────────────── */}
-      <section className="container final-cta">
-        <div className="glass-card final-cta-card">
+      <motion.section
+        className="container final-cta"
+        initial="hidden" whileInView="visible" viewport={{ once: true, margin: '-60px' }} variants={stagger}
+      >
+        <motion.div className="glass-card final-cta-card" variants={cardVariant}>
           <div>
             <span className="section-kicker">{t('landing_cta_section_title')}</span>
             <h2>{t('landing_cta_section_heading')}</h2>
             <p>{t('landing_cta_section_text')}</p>
           </div>
-          <button className="btn btn-glow btn-lg" onClick={onRegister}>
+          <motion.button
+            className="btn btn-glow btn-lg" onClick={onRegister}
+            whileHover={{ scale: 1.05, y: -2 }}
+            whileTap={{ scale: 0.97 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 17 }}
+          >
             {t('landing_cta_button')}
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-          </button>
-        </div>
-      </section>
+          </motion.button>
+        </motion.div>
+      </motion.section>
 
       {/* ── Footer ────────────────────────────────────────────── */}
       <footer className="site-footer">

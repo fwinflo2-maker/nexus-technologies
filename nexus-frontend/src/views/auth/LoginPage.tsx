@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import { countries } from '../../data/countries';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import './AuthPages.css';
@@ -7,6 +8,12 @@ import { useI18n } from '../../context/I18nContext';
 import { useAuth } from '../../context/AuthContext';
 import { apiLogin } from '../../api/client';
 import { ParticlesBackground } from '../../components/ParticlesBackground';
+import { EASE } from '../../components/anim/Premium';
+
+const authEnter = {
+  hidden: { opacity: 0, y: 26, scale: 0.99 },
+  visible: (i: number = 0) => ({ opacity: 1, y: 0, scale: 1, transition: { duration: 0.5, ease: EASE, delay: i * 0.07 } }),
+};
 
 interface LoginPageProps {
   onSwitchToRegister: () => void;
@@ -77,18 +84,18 @@ export function LoginPage({ onSwitchToRegister, onBackHome }: LoginPageProps) {
         <div className="auth-card-inner">
           {/* Formulaire */}
           <div className="auth-form-side">
-            <div className="auth-topbar">
+            <motion.div variants={authEnter} initial="hidden" animate="visible" custom={0} className="auth-topbar">
               <button className="auth-back" onClick={onBackHome}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
                 {t('auth_back')}
               </button>
               <LanguageSwitcher />
-            </div>
+            </motion.div>
 
-            <h1 className="auth-title">{t('login_title')}</h1>
-            <p className="auth-subtitle">{t('login_subtitle')}</p>
+            <motion.h1 variants={authEnter} initial="hidden" animate="visible" custom={1} className="auth-title">{t('login_title')}</motion.h1>
+            <motion.p variants={authEnter} initial="hidden" animate="visible" custom={2} className="auth-subtitle">{t('login_subtitle')}</motion.p>
 
-            <div className="identifier-toggle" role="tablist" aria-label={t('login_method_label')}>
+            <motion.div variants={authEnter} initial="hidden" animate="visible" custom={3} className="identifier-toggle" role="tablist" aria-label={t('login_method_label')}>
               <button type="button" className={method === 'email' ? 'active' : ''} onClick={() => setMethod('email')}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>
                 {t('login_email')}
@@ -97,25 +104,27 @@ export function LoginPage({ onSwitchToRegister, onBackHome }: LoginPageProps) {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
                 {t('login_phone')}
               </button>
-            </div>
+            </motion.div>
 
-            <form className="auth-form" onSubmit={handleSubmit} noValidate>
-              {method === 'email' ? (
-                <div>
-                  <label htmlFor="email" className="form-label">{t('login_email_label')}</label>
-                  <input id="email" type="email" className="form-control" placeholder={t('login_email_placeholder')} value={email} onChange={(e) => setEmail(e.target.value)} autoFocus autoComplete="email" />
-                </div>
-              ) : (
-                <div>
-                  <label htmlFor="phone" className="form-label">{t('login_phone_label')}</label>
-                  <div className="phone-prefix">
-                    <select className="form-control phone-code" value={phoneCode} onChange={(e) => setPhoneCode(e.target.value)} aria-label={t('login_phone_code_label')}>
-                      {countries.map(c => <option key={c.code} value={c.dial}>{c.dial} {c.code}</option>)}
-                    </select>
-                    <input id="phone" type="tel" className="form-control phone-number" placeholder={t('login_phone_placeholder')} value={phone} onChange={(e) => setPhone(e.target.value)} autoFocus autoComplete="tel" />
-                  </div>
-                </div>
-              )}
+            <motion.form variants={authEnter} initial="hidden" animate="visible" custom={4} className="auth-form" onSubmit={handleSubmit} noValidate>
+              <AnimatePresence mode="wait">
+                {method === 'email' ? (
+                  <motion.div key="email" initial={{ opacity: 0, x: -14 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 14 }} transition={{ duration: 0.25, ease: EASE }}>
+                    <label htmlFor="email" className="form-label">{t('login_email_label')}</label>
+                    <input id="email" type="email" className="form-control" placeholder={t('login_email_placeholder')} value={email} onChange={(e) => setEmail(e.target.value)} autoFocus autoComplete="email" />
+                  </motion.div>
+                ) : (
+                  <motion.div key="phone" initial={{ opacity: 0, x: -14 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 14 }} transition={{ duration: 0.25, ease: EASE }}>
+                    <label htmlFor="phone" className="form-label">{t('login_phone_label')}</label>
+                    <div className="phone-prefix">
+                      <select className="form-control phone-code" value={phoneCode} onChange={(e) => setPhoneCode(e.target.value)} aria-label={t('login_phone_code_label')}>
+                        {countries.map(c => <option key={c.code} value={c.dial}>{c.dial} {c.code}</option>)}
+                      </select>
+                      <input id="phone" type="tel" className="form-control phone-number" placeholder={t('login_phone_placeholder')} value={phone} onChange={(e) => setPhone(e.target.value)} autoFocus autoComplete="tel" />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -143,38 +152,47 @@ export function LoginPage({ onSwitchToRegister, onBackHome }: LoginPageProps) {
 
               {error && <div className="auth-error">{error}</div>}
 
-              <button type="submit" className="btn btn-glow btn-lg" disabled={loading} style={{ flex: 1 }}>
+              <motion.button
+                type="submit" className="btn btn-glow btn-lg" disabled={loading} style={{ flex: 1 }}
+                whileHover={{ scale: 1.02, y: -1 }} whileTap={{ scale: 0.98 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 17 }}
+              >
                 {loading ? <><span className="spinner" /> {t('login_sending')}</> : t('login_submit')}
-              </button>
-            </form>
+              </motion.button>
+            </motion.form>
 
-            <p className="auth-footer">
+            <motion.p variants={authEnter} initial="hidden" animate="visible" custom={5} className="auth-footer">
               {t('login_no_account')} <button className="auth-link-button" onClick={onSwitchToRegister}>{t('login_create')}</button>
-            </p>
+            </motion.p>
           </div>
 
           {/* Panneau de confiance */}
           <aside className="auth-panel-side">
-            <div className="trust-panel-badge">
+            <motion.div variants={authEnter} initial="hidden" animate="visible" custom={1} className="trust-panel-badge">
               <span className="pulse-dot success" />
               {t('login_panel_badge')}
-            </div>
-            <h3 className="trust-panel-title">
+            </motion.div>
+            <motion.h3 variants={authEnter} initial="hidden" animate="visible" custom={2} className="trust-panel-title">
               <span style={{ color: 'var(--text-heading)' }}>{t('login_panel_title_1')}</span>
               <br />
               <span className="gradient-text">{t('login_panel_title_2')}</span>
-            </h3>
-            <div className="trust-panel-items" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            </motion.h3>
+            <motion.div className="trust-panel-items" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}
+              initial="hidden" animate="visible" variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.12 } } }}>
               {trustArguments.map(a => (
-                <div className="trust-panel-item" key={a.title}>
-                  <div className="trust-panel-icon">{a.icon}</div>
+                <motion.div
+                  className="trust-panel-item" key={a.title}
+                  variants={authEnter} custom={1}
+                  whileHover={{ x: 6, transition: { type: 'spring', stiffness: 260, damping: 20 } }}
+                >
+                  <motion.div className="trust-panel-icon" whileHover={{ scale: 1.12 }} transition={{ type: 'spring', stiffness: 300, damping: 15 }}>{a.icon}</motion.div>
                   <div>
                     <h4>{a.title}</h4>
                     <p>{a.text}</p>
                   </div>
-                </div>
+                </motion.div>
               ))}
-            </div>
+            </motion.div>
           </aside>
         </div>
 

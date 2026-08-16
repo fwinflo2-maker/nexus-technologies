@@ -3,6 +3,19 @@
    Complète framer-motion avec des effets CSS 3D / glow / shine.
    ════════════════════════════════════════════════════════════════════════ */
 
+/* Grille de KPIs réactive */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+/* Toute carte premium positionne son halo sous le contenu */
+.premium-hover-wrap .premium-hover,
+.premium-hover-wrap::before { z-index: 0; }
+.premium-hover-wrap > *:not(.premium-hover) { position: relative; z-index: 1; }
+
 /* ── Hover card : lueur orbitale + bord lumineux ─────────────────────── */
 .premium-hover {
   position: absolute;
