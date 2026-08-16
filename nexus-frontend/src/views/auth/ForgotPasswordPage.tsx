@@ -1,10 +1,18 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import './AuthPages.css';
 import { useI18n } from '../../context/I18nContext';
 import { ParticlesBackground } from '../../components/ParticlesBackground';
 import { apiForgotPassword, apiResetPassword } from '../../api/client';
+import { EASE } from '../../components/anim/Premium';
+
+/** Variante d'entrée en cascade, identique à Login/Register. */
+const authEnter = {
+  hidden: { opacity: 0, y: 26, scale: 0.99 },
+  visible: (i: number = 0) => ({ opacity: 1, y: 0, scale: 1, transition: { duration: 0.5, ease: EASE, delay: i * 0.07 } }),
+};
 
 /**
  * Mot de passe oublié — flow RÉEL connecté au backend.
@@ -98,104 +106,120 @@ export default function ForgotPasswordPage() {
         <div className="auth-glow" aria-hidden="true" />
         <div className="auth-card-inner">
           <div className="auth-form-side">
-            <div className="auth-topbar">
+            <motion.div variants={authEnter} initial="hidden" animate="visible" custom={0} className="auth-topbar">
               <button className="auth-back" onClick={() => navigate('/login')}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
                 {t('fp_back_login')}
               </button>
               <LanguageSwitcher />
-            </div>
+            </motion.div>
 
-            {step === 'email' && (
-              <>
-                <h1 className="auth-title">{t('fp_title')}</h1>
-                <p className="auth-subtitle">{t('fp_subtitle')}</p>
-                <form className="auth-form" onSubmit={handleRequest} noValidate>
-                  <div>
-                    <label htmlFor="reset-email" className="form-label">{t('fp_email_label')}</label>
-                    <input
-                      id="reset-email" type="email" className="form-control"
-                      placeholder={t('fp_email_placeholder')} value={email}
-                      onChange={(e) => setEmail(e.target.value)} autoFocus autoComplete="email"
-                    />
-                  </div>
-                  {error && <div className="auth-error">{error}</div>}
-                  <button type="submit" className="btn btn-glow btn-block btn-lg" disabled={sending}>
-                    {sending ? <><span className="spinner" /> {t('fp_sending')}</> : t('fp_submit')}
-                  </button>
-                </form>
-              </>
-            )}
+            {/* Transitions fluides entre les étapes (email → nouveau mdp → done) */}
+            <AnimatePresence mode="wait">
+              {step === 'email' && (
+                <motion.div key="email"
+                  initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}
+                  transition={{ duration: 0.28, ease: EASE }}>
+                  <motion.h1 variants={authEnter} initial="hidden" animate="visible" custom={1} className="auth-title">{t('fp_title')}</motion.h1>
+                  <motion.p variants={authEnter} initial="hidden" animate="visible" custom={2} className="auth-subtitle">{t('fp_subtitle')}</motion.p>
+                  <motion.form variants={authEnter} initial="hidden" animate="visible" custom={3} className="auth-form" onSubmit={handleRequest} noValidate>
+                    <div>
+                      <label htmlFor="reset-email" className="form-label">{t('fp_email_label')}</label>
+                      <input
+                        id="reset-email" type="email" className="form-control"
+                        placeholder={t('fp_email_placeholder')} value={email}
+                        onChange={(e) => setEmail(e.target.value)} autoFocus autoComplete="email"
+                      />
+                    </div>
+                    {error && <div className="auth-error">{error}</div>}
+                    <motion.button type="submit" className="btn btn-glow btn-block btn-lg" disabled={sending}
+                      whileHover={{ scale: 1.02, y: -1 }} whileTap={{ scale: 0.98 }}
+                      transition={{ type: 'spring', stiffness: 300, damping: 17 }}>
+                      {sending ? <><span className="spinner" /> {t('fp_sending')}</> : t('fp_submit')}
+                    </motion.button>
+                  </motion.form>
+                </motion.div>
+              )}
 
-            {step === 'newpass' && (
-              <>
-                <h1 className="auth-title">Définir un nouveau mot de passe</h1>
-                <p className="auth-subtitle">
-                  Compte vérifié. Choisissez un nouveau mot de passe pour <b>{email}</b>.
-                </p>
-                <form className="auth-form" onSubmit={handleReset} noValidate>
-                  <div>
-                    <label htmlFor="np1" className="form-label">Nouveau mot de passe</label>
-                    <input id="np1" type="password" className="form-control" placeholder="Min. 8 caractères"
-                      value={newPassword} onChange={(e) => setNewPassword(e.target.value)} autoComplete="new-password" />
-                  </div>
-                  <div>
-                    <label htmlFor="np2" className="form-label">Confirmer le mot de passe</label>
-                    <input id="np2" type="password" className="form-control" placeholder="Confirmer"
-                      value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" />
-                  </div>
-                  {error && <div className="auth-error">{error}</div>}
-                  <button type="submit" className="btn btn-glow btn-block btn-lg" disabled={sending}>
-                    {sending ? <><span className="spinner" /> Réinitialisation…</> : 'Réinitialiser le mot de passe'}
-                  </button>
-                </form>
-              </>
-            )}
+              {step === 'newpass' && (
+                <motion.div key="newpass"
+                  initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}
+                  transition={{ duration: 0.28, ease: EASE }}>
+                  <motion.h1 variants={authEnter} initial="hidden" animate="visible" custom={1} className="auth-title">Définir un nouveau mot de passe</motion.h1>
+                  <motion.p variants={authEnter} initial="hidden" animate="visible" custom={2} className="auth-subtitle">
+                    Compte vérifié. Choisissez un nouveau mot de passe pour <b>{email}</b>.
+                  </motion.p>
+                  <motion.form variants={authEnter} initial="hidden" animate="visible" custom={3} className="auth-form" onSubmit={handleReset} noValidate>
+                    <div>
+                      <label htmlFor="np1" className="form-label">Nouveau mot de passe</label>
+                      <input id="np1" type="password" className="form-control" placeholder="Min. 8 caractères"
+                        value={newPassword} onChange={(e) => setNewPassword(e.target.value)} autoComplete="new-password" />
+                    </div>
+                    <div>
+                      <label htmlFor="np2" className="form-label">Confirmer le mot de passe</label>
+                      <input id="np2" type="password" className="form-control" placeholder="Confirmer"
+                        value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" />
+                    </div>
+                    {error && <div className="auth-error">{error}</div>}
+                    <motion.button type="submit" className="btn btn-glow btn-block btn-lg" disabled={sending}
+                      whileHover={{ scale: 1.02, y: -1 }} whileTap={{ scale: 0.98 }}
+                      transition={{ type: 'spring', stiffness: 300, damping: 17 }}>
+                      {sending ? <><span className="spinner" /> Réinitialisation…</> : 'Réinitialiser le mot de passe'}
+                    </motion.button>
+                  </motion.form>
+                </motion.div>
+              )}
 
-            {step === 'done' && (
-              <>
-                <h1 className="auth-title">{t('fp_sent_title')}</h1>
-                <p className="auth-subtitle">{t('fp_sent_text')}</p>
-                <button className="btn btn-glow btn-block btn-lg" onClick={() => navigate('/login')}>
-                  Retour à la connexion
-                </button>
-              </>
-            )}
+              {step === 'done' && (
+                <motion.div key="done"
+                  initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
+                  transition={{ duration: 0.4, ease: EASE }}>
+                  <motion.h1 variants={authEnter} initial="hidden" animate="visible" custom={1} className="auth-title">{t('fp_sent_title')}</motion.h1>
+                  <motion.p variants={authEnter} initial="hidden" animate="visible" custom={2} className="auth-subtitle">{t('fp_sent_text')}</motion.p>
+                  <motion.button className="btn btn-glow btn-block btn-lg" onClick={() => navigate('/login')}
+                    whileHover={{ scale: 1.02, y: -1 }} whileTap={{ scale: 0.98 }}
+                    transition={{ type: 'spring', stiffness: 300, damping: 17 }}>
+                    Retour à la connexion
+                  </motion.button>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           <aside className="auth-panel-side">
-            <div className="trust-panel-badge">
+            <motion.div variants={authEnter} initial="hidden" animate="visible" custom={1} className="trust-panel-badge">
               <span className="pulse-dot success" />
               {t('fp_panel_badge')}
-            </div>
-            <h3 className="trust-panel-title">
+            </motion.div>
+            <motion.h3 variants={authEnter} initial="hidden" animate="visible" custom={2} className="trust-panel-title">
               <span style={{ color: 'var(--text-heading)' }}>{t('fp_panel_title_1')}</span>
               <br />
               <span className="gradient-text">{t('fp_panel_title_2')}</span>
-            </h3>
-            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+            </motion.h3>
+            <motion.p variants={authEnter} initial="hidden" animate="visible" custom={3} style={{ fontSize: '0.875rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
               {t('fp_panel_text')}
-            </p>
-            <div className="trust-panel-items" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginTop: '1rem' }}>
-              <div className="trust-panel-item">
-                <div className="trust-panel-icon">
+            </motion.p>
+            <motion.div className="trust-panel-items" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginTop: '1rem' }}
+              initial="hidden" animate="visible" variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.12 } } }}>
+              <motion.div className="trust-panel-item" variants={authEnter} custom={1} whileHover={{ x: 6, transition: { type: 'spring', stiffness: 260, damping: 20 } }}>
+                <motion.div className="trust-panel-icon" whileHover={{ scale: 1.12 }} transition={{ type: 'spring', stiffness: 300, damping: 15 }}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                </div>
+                </motion.div>
                 <div>
                   <h4>{t('fp_trust_1_title')}</h4>
                   <p>{t('fp_trust_1_text')}</p>
                 </div>
-              </div>
-              <div className="trust-panel-item">
-                <div className="trust-panel-icon">
+              </motion.div>
+              <motion.div className="trust-panel-item" variants={authEnter} custom={2} whileHover={{ x: 6, transition: { type: 'spring', stiffness: 260, damping: 20 } }}>
+                <motion.div className="trust-panel-icon" whileHover={{ scale: 1.12 }} transition={{ type: 'spring', stiffness: 300, damping: 15 }}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-                </div>
+                </motion.div>
                 <div>
                   <h4>{t('fp_trust_2_title')}</h4>
                   <p>{t('fp_trust_2_text')}</p>
                 </div>
-              </div>
-            </div>
+              </motion.div>
+            </motion.div>
           </aside>
         </div>
 
