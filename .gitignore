@@ -1,48 +1,40 @@
-# ==============================================================================
-# NEXUS — fichiers non versionnés
-# ==============================================================================
-# Règle : tout ce qui est reconstructible (dépendances, builds, caches) ou
-# secret (.env) reste hors de Git. Les lockfiles, eux, SONT versionnés : ils
-# garantissent que tout le monde installe exactement les mêmes versions.
+```
+# Database dumps
+*.sql
 
-# --- Dépendances (reconstructibles : composer install / npm ci) ---------------
-vendor/
-node_modules/
-
-# --- Secrets ------------------------------------------------------------------
+# Environment files
 .env
-.env.*
-!.env.example
+.env.local
+*.env.*
 
-# --- PHP ----------------------------------------------------------------------
-*.php~
-*.php.bak
-.php_cs.cache
-.php-cs-fixer.cache
-.phpunit.result.cache
-.phpunit.cache/
-
-# --- Frontend / build ---------------------------------------------------------
+# Dependencies
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.egg-info/
 dist/
 build/
-.vite/
-*.min.js
-*.min.css
-*.tsbuildinfo
+target/
+.gradle/
 
-# --- Journaux -----------------------------------------------------------------
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-
-# --- IDE ----------------------------------------------------------------------
+# IDE and editor files
 .vscode/
 .idea/
 *.swp
 *.swo
+*.tmp
 
-# --- OS -----------------------------------------------------------------------
+# Logs and cache
+*.log
+*.tmp
+coverage/
+htmlcov/
+.coverage
+.mypy_cache/
+.pytest_cache/
+
+# OS generated files
 .DS_Store
 Thumbs.db
+```
