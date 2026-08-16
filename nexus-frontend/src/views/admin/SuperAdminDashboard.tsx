@@ -13,6 +13,8 @@ import AdminSecurity from './AdminSecurity';
 import AdminSupport from './AdminSupport';
 import { VolumeAreaChart, TransactionsStackChart, AssetDonut, StatusDonut, ProviderTopChart, AuditBarChart } from './CockpitCharts';
 import { Row, Panel, fmtMoney } from './adminUi';
+import { motion } from 'framer-motion';
+import { HoverCard, AnimatedNumber, SectionTransition, RevealGroup, AnimatedTitle, LivePulse } from '../../components/anim/Premium';
 
 interface AdminOverview {
   accounts: { total: number; personal: number; business: number; active: number; pending: number; suspended: number; connect: number };
@@ -32,19 +34,24 @@ interface AdminOverview {
   generated_at: string;
 }
 
-function money(n: number): string { return n.toLocaleString('fr-FR'); }
+
 function Num({ v, suffix = '', c, size = 26 }: { v: number; suffix?: string; c?: string; size?: number }) {
-  return <div style={{ fontSize: size, fontWeight: 800, color: c || 'var(--text-bright)', fontFamily: 'var(--font-mono)' }}>{money(v)}{suffix}</div>;
-}
-function Card({ title, icon, children }: { title: string; icon?: string; children: React.ReactNode }) {
   return (
-    <div className="card" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        {icon && <span style={{ fontSize: 15 }}>{icon}</span>}
-        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-bright)', letterSpacing: 0.3 }}>{title}</span>
-      </div>
-      {children}
+    <div style={{ fontSize: size, fontWeight: 800, color: c || 'var(--text-bright)', fontFamily: 'var(--font-mono)' }}>
+      <AnimatedNumber value={v} suffix={suffix} />
     </div>
+  );
+}
+function Card({ title, icon, children, index = 0, glow }: { title: string; icon?: string; children: React.ReactNode; index?: number; glow?: string }) {
+  return (
+    <HoverCard className="card" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8, position: 'relative', overflow: 'hidden' }} glow={glow} index={index}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative', zIndex: 1 }}>
+        <span style={{ fontSize: 15 }}>{icon}</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-bright)', letterSpacing: 0.3 }}>{title}</span>
+        <LivePulse color={glow || 'var(--green)'} />
+      </div>
+      <div style={{ position: 'relative', zIndex: 1 }}>{children}</div>
+    </HoverCard>
   );
 }
 
@@ -76,18 +83,19 @@ export default function SuperAdminDashboard() {
       {state === 'error' && <div className="card card-hi-g" style={{ padding: 40, textAlign: 'center' }}>Impossible de charger les données.</div>}
 
       {state === 'ready' && ov && (
+        <SectionTransition id={section}>
         <div className="page">
           {/* ═══ VUE D'ENSEMBLE — cockpit ═══ */}
           {section === 'overview' && (
             <>
-              <Header title="Vue d'ensemble" desc="Cockpit temps réel de Nexus Technologies — activité, liquidité et santé de la plateforme." />
+              <Header section="overview" title={<AnimatedTitle text="Vue d'ensemble" />} desc="Cockpit temps réel de Nexus Technologies — activité, liquidité et santé de la plateforme." />
 
-              <div className="g4">
+              <RevealGroup className="g4" stagger={0.09}>
                 <Card title="Total comptes" icon="👥"><Num v={ov.accounts.total} /><div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{ov.accounts.active} actifs · {ov.accounts.pending} en attente</div></Card>
                 <Card title="Personnel / Business" icon="🏢"><Num v={ov.accounts.personal + ov.accounts.business} /><div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{ov.accounts.personal} personnel · {ov.accounts.business} business</div></Card>
                 <Card title="Connect (B2B)" icon="🔌"><Num v={ov.accounts.connect} /><div style={{ fontSize: 11, color: 'var(--text-dim)' }}>comptes API connectés</div></Card>
-                <Card title="Volume traité" icon="💰"><Num v={ov.transactions.volume_xaf} suffix=" FCFA" c="var(--cyan)" size={22} /><div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{ov.transactions.total} transactions · {ov.wallets} wallets</div></Card>
-              </div>
+                <Card title="Volume traité" icon="💰" glow="var(--cyan)"><Num v={ov.transactions.volume_xaf} suffix=" FCFA" c="var(--cyan)" size={22} /><div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{ov.transactions.total} transactions · {ov.wallets} wallets</div></Card>
+              </RevealGroup>
 
               <div className="g2" style={{ marginTop: 16, alignItems: 'stretch' }}>
                 <VolumeAreaChart data={ov.series.volume_eur} />
@@ -120,10 +128,10 @@ export default function SuperAdminDashboard() {
                 {ov.recent_activity.length === 0 ? (
                   <div style={{ fontSize: 12, color: 'var(--text-dim)', padding: 12 }}>Aucune activité enregistrée.</div>
                 ) : ov.recent_activity.map((a, i) => (
-                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '8px 10px', borderBottom: '1px solid var(--border-soft)', fontSize: 12.5 }}>
+                  <motion.div key={i} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '8px 10px', borderBottom: '1px solid var(--border-soft)', fontSize: 12.5 }}>
                     <span style={{ color: 'var(--text-mid)', fontFamily: 'var(--font-mono)' }}>{a.action}</span>
                     <span style={{ color: 'var(--text-bright)', fontWeight: 600 }}>{a.count}</span>
-                  </div>
+                  </motion.div>
                 ))}
               </div>
             </>
@@ -247,16 +255,17 @@ export default function SuperAdminDashboard() {
             </>
           )}
         </div>
+        </SectionTransition>
       )}
     </AdminLayout>
   );
 }
 
-function Header({ title, desc }: { title: string; desc: string }) {
+function Header({ title, desc, section }: { title: React.ReactNode; desc: string; section?: string }) {
   return (
     <div style={{ marginBottom: 22 }}>
-      <div className="page-label">SUPER ADMIN · {title.toUpperCase()}</div>
-      <div className="page-title">{title}</div>
+      <div className="page-label">SUPER ADMIN · {(section || (typeof title === 'string' ? title : '')).toUpperCase()}</div>
+      <div className="page-title" style={{ fontSize: 26 }}>{title}</div>
       <p style={{ marginTop: 6, fontSize: 13, color: 'var(--text-mid)', maxWidth: 760 }}>{desc}</p>
     </div>
   );

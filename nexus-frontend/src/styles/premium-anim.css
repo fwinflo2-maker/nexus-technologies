@@ -1,0 +1,107 @@
+/* ════════════════════════════════════════════════════════════════════════
+   PREMIUM ANIMATIONS — couche visuelle ultra haut de gamme
+   Complète framer-motion avec des effets CSS 3D / glow / shine.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── Hover card : lueur orbitale + bord lumineux ─────────────────────── */
+.premium-hover {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  background:
+    radial-gradient(120px 120px at 15% 0%, color-mix(in srgb, var(--glow, #3B82F6) 22%, transparent), transparent 60%),
+    radial-gradient(140px 140px at 90% 110%, color-mix(in srgb, var(--glow, #3B82F6) 16%, transparent), transparent 60%);
+}
+.premium-hover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid transparent;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--glow, #3B82F6) 40%, transparent), transparent 40%) border-box;
+  -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+.premium-hover.is-hover { opacity: 1; }
+.premium-hover.is-hover::after { opacity: 1; }
+
+/* ── Pulsation "live" ─────────────────────────────────────────────────── */
+.live-pulse { position: relative; display: inline-flex; width: 10px; height: 10px; }
+.live-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--pulse, var(--green));
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--pulse, var(--green)) 60%, transparent);
+  animation: live-pulse-ring 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@keyframes live-pulse-ring {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--pulse, var(--green)) 55%, transparent); }
+  70% { box-shadow: 0 0 0 9px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* ── Reflet / shine qui balaie la carte au hover ──────────────────────── */
+.shine-sweep { position: relative; overflow: hidden; }
+.shine-sweep::before {
+  content: '';
+  position: absolute;
+  top: 0; left: -120%;
+  width: 60%; height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,0.08), transparent);
+  transform: skewX(-20deg);
+  transition: left 0.7s ease;
+  z-index: 1;
+  pointer-events: none;
+}
+.shine-sweep:hover::before { left: 160%; }
+
+/* ── Fond animé du cockpit : gradient aurora très subtil ──────────────── */
+.aurora-bg {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+  background:
+    radial-gradient(600px 400px at 12% 8%, rgba(59,130,246,0.10), transparent 60%),
+    radial-gradient(500px 380px at 88% 12%, rgba(37,99,235,0.08), transparent 60%),
+    radial-gradient(700px 500px at 50% 100%, rgba(59,130,246,0.06), transparent 60%);
+  animation: aurora-drift 22s ease-in-out infinite alternate;
+}
+@keyframes aurora-drift {
+  0% { transform: translate(0,0) scale(1); }
+  100% { transform: translate(-30px, 18px) scale(1.05); }
+}
+
+/* ── Halo derrière les KPIs principaux ────────────────────────────────── */
+.kpi-halo { position: relative; }
+.kpi-halo::after {
+  content: '';
+  position: absolute;
+  width: 60px; height: 60px; right: -14px; top: -14px; border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--glow, #3B82F6) 22%, transparent), transparent 65%);
+  filter: blur(2px);
+  animation: kpi-breathe 4s ease-in-out infinite;
+}
+@keyframes kpi-breathe {
+  0%, 100% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.25); opacity: 1; }
+}
+
+/* ── Entrée des graphiques : fondu + léger zoom ───────────────────────── */
+.chart-enter { animation: chart-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) both; }
+@keyframes chart-in {
+  0% { opacity: 0; transform: translateY(12px) scale(0.985); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ── Transition douce entre sections (main) ───────────────────────────── */
+.section-motion { will-change: opacity, transform; }
+
+/* ── Réduction de mouvement (accessibilité) ───────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .premium-hover, .premium-hover::after, .aurora-bg, .kpi-halo::after,
+  .live-dot, .shine-sweep::before { animation: none !important; transition: none !important; }
+}

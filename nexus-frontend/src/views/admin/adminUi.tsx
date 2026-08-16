@@ -1,4 +1,6 @@
 import React from 'react';
+import { motion } from 'framer-motion';
+import { fadeUp, EASE } from '../../components/anim/Premium';
 
 export const fmtNum = (n: number) => n.toLocaleString('fr-FR');
 export const fmtMoney = (n: number, cur = '') => `${fmtNum(Math.round(n))}${cur ? ' ' + cur : ''}`;
@@ -33,21 +35,35 @@ export function Badge({ status, label }: { status: string; label?: string }) {
   );
 }
 
-export function Stat({ label, value, sub, tone }: { label: string; value: React.ReactNode; sub?: string; tone?: string }) {
+export function Stat({ label, value, sub, tone, index = 0 }: { label: string; value: React.ReactNode; sub?: string; tone?: string; index?: number }) {
   return (
-    <div className="card" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 2 }}>
+    <motion.div
+      className="card premium-hover-wrap shine-sweep"
+      variants={fadeUp}
+      initial="hidden"
+      animate="show"
+      transition={{ delay: index * 0.06 }}
+      style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 2, position: 'relative' }}
+    >
       <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-dim)', letterSpacing: 0.4, textTransform: 'uppercase' }}>{label}</span>
       <span style={{ fontSize: 22, fontWeight: 800, color: tone || 'var(--text-bright)', fontFamily: 'var(--font-mono)' }}>{value}</span>
       {sub && <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>{sub}</span>}
-    </div>
+    </motion.div>
   );
 }
 
-export function Panel({ title, icon, right, children, pad = 14 }: {
-  title: string; icon?: string; right?: React.ReactNode; children: React.ReactNode; pad?: number;
+export function Panel({ title, icon, right, children, pad = 14, index = 0 }: {
+  title: string; icon?: string; right?: React.ReactNode; children: React.ReactNode; pad?: number; index?: number;
 }) {
   return (
-    <div className="card" style={{ padding: pad, display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <motion.div
+      className="card shine-sweep"
+      variants={fadeUp}
+      initial="hidden"
+      animate="show"
+      transition={{ delay: index * 0.06 }}
+      style={{ padding: pad, display: 'flex', flexDirection: 'column', gap: 10, position: 'relative' }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {icon && <span style={{ fontSize: 14 }}>{icon}</span>}
@@ -56,7 +72,7 @@ export function Panel({ title, icon, right, children, pad = 14 }: {
         {right}
       </div>
       {children}
-    </div>
+    </motion.div>
   );
 }
 
@@ -74,11 +90,17 @@ export function Table({ head, rows, empty = 'Aucune donnée.' }: {
         </thead>
         <tbody>
           {rows.map((r, i) => (
-            <tr key={i} style={{ borderBottom: '1px solid var(--border-soft)' }}>
+            <motion.tr
+              key={i}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: Math.min(i * 0.02, 0.5), duration: 0.35, ease: EASE }}
+              style={{ borderBottom: '1px solid var(--border-soft)' }}
+            >
               {r.map((c, j) => (
                 <td key={`${i}-${j}`} style={{ padding: '9px 10px', color: 'var(--text-main)', verticalAlign: 'top' }}>{c}</td>
               ))}
-            </tr>
+            </motion.tr>
           ))}
         </tbody>
       </table>

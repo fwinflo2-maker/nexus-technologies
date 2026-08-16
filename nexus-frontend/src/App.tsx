@@ -34,6 +34,7 @@ import { useDashT } from './data/dashboard-i18n';
 import './styles/design-system.css';
 import './styles/dashboard-system.css';
 import './styles/premium.css';
+import './styles/premium-anim.css';
 import './styles/revolut.css';
 
 type Mode = 'personal' | 'business';
