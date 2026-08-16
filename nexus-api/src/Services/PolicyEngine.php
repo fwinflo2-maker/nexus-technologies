@@ -123,6 +123,22 @@ final class PolicyEngine
             ];
         }
 
+        // ── 1ter. KYB obligatoire pour les comptes Business ────
+        // Une entreprise doit être vérifiée (Sumsub subject_type=company)
+        // avant d'effectuer des paiements. Seul `kyb_status=verified` autorise
+        // les opérations ; aucun autre statut n'est toléré (§37).
+        if (($user['account_type'] ?? 'personal') === 'business'
+            && ($user['kyb_status'] ?? 'none') !== 'verified') {
+            return self::declined(
+                'Votre entreprise doit être vérifiée (KYB) avant d\'effectuer des paiements. '
+                . 'Complétez la vérification d\'entreprise (Sumsub) dans votre espace.',
+                [
+                    'kyb_required' => true,
+                    'kyb_status'   => $user['kyb_status'] ?? 'none',
+                ]
+            );
+        }
+
         // ── 2. Plafonds KYC ─────────────────────────────────────
         $monthlyLimit = self::KYC_LIMITS[$kycLevel] ?? self::KYC_LIMITS['basic'];
         $monthlyTotal = self::getMonthlyTotal($userId, $intent['sourceCurrency']);

@@ -51,6 +51,8 @@ export interface ApiUser {
   auth_provider: 'local';
   status: string;
   kyc_level: string;
+  kyb_status?: string;
+  kyb_verified_at?: string | null;
   country_of_residence?: string | null;
   avatar?: string | null;
   created_at: string;
@@ -61,6 +63,28 @@ export interface ApiResponse<T = unknown> {
   data?: T;
   error?: string;
   code?: string;
+}
+
+/** Réponse GET /api/kyc/status — jamais de secret ni de document. */
+export interface KycStatusData {
+  status: string;
+  required_action: string;
+  verification_type: 'individual' | 'company';
+  provider: string;
+  environment: string;
+  updated_at?: string | null;
+  reason?: string | null;
+  configured: boolean;
+  kyb_status?: string;
+  kyb_verified_at?: string | null;
+}
+
+/** Réponse POST /api/kyc/session — token SDK court à destination du WebSDK. */
+export interface KycSessionData {
+  token: string;
+  expires_in: number;
+  environment: string;
+  provider: string;
 }
 
 export interface DashboardWallet {
@@ -891,6 +915,16 @@ export async function apiLogout(): Promise<void> {
   await request('POST', '/logout');
   setToken(null);
   safeStorage.remove('local', 'nexus_user');
+}
+
+/** Statut de vérification KYC/KYB (GET /api/kyc/status) — données réelles, jamais simulées. */
+export async function apiKycStatus(): Promise<ApiResponse<KycStatusData>> {
+  return request<KycStatusData>('GET', '/kyc/status');
+}
+
+/** Démarre/reprend une session de vérification (POST /api/kyc/session). */
+export async function apiKycSession(): Promise<ApiResponse<KycSessionData>> {
+  return request<KycSessionData>('POST', '/kyc/session');
 }
 
 /** Résumé complet du dashboard (GET /api/dashboard/summary). */

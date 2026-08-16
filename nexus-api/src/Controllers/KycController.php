@@ -56,6 +56,14 @@ final class KycController
             self::subjectTypeFor($user)
         );
 
+        // Projection du flag KYB distinct pour les comptes Business : c'est
+        // `users.kyb_status` (et non le statut du dossier) que le Policy Engine
+        // consulte pour bloquer/débloquer les paiements.
+        if (($user['account_type'] ?? 'personal') === 'business') {
+            $status['kyb_status'] = $user['kyb_status'] ?? 'none';
+            $status['kyb_verified_at'] = $user['kyb_verified_at'] ?? null;
+        }
+
         // §32 : statut, action attendue, type — jamais de secret ni de document.
         Response::success($status + ['configured' => $provider->isConfigured()]);
     }

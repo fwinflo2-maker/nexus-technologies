@@ -99,8 +99,9 @@ final class KycService
             'aid'    => $event->applicantId,
         ]);
 
-        // 3) Projection sur users.kyc_level — UNIQUEMENT si réellement vérifié.
-        //    Aucun autre statut ne doit élever le niveau KYC (§37).
+        // 3) Projection sur users — UNIQUEMENT si réellement vérifié.
+        //    KYB (subject_type=company) → users.kyb_status ; KYC (individu) →
+        //    users.kyc_level. Aucun autre statut ne doit élever ces niveaux (§37).
         if ($event->status->isVerified()) {
             self::promoteUserKycLevel($pdo, $event);
         } elseif ($event->status->isFinalRejection()) {
@@ -176,38 +177,85 @@ final class KycService
     }
 
     /**
-     * Élève le niveau KYC de l'utilisateur après vérification confirmée.
+     * Élève le niveau de l'utilisateur après vérification confirmée.
+     *
+     * La projection dépend de la nature du sujet :
+     *   - company → `users.kyb_status` (KYB Business, indépendant du KYC) ;
+     *   - individual → `users.kyc_level` (KYC personne physique).
      *
      * Le niveau reste une PROJECTION : la source de vérité est
      * `kyc_verifications.status`, alimentée par un webhook signé.
      */
     private static function promoteUserKycLevel(PDO $pdo, KycWebhookEvent $event): void
     {
+        $subjectType = self::subjectTypeOf($pdo, $event);
+        $params = [
+            'p'   => $event->provider,
+            'e'   => $event->environment,
+            'aid' => $event->applicantId,
+        ];
+
+        if ($subjectType === KycSubjectType::COMPANY->value) {
+            // KYB — la vérification d'entreprise ne touche PAS au KYC individuel.
+            $pdo->prepare(
+                'UPDATE users u
+                    JOIN kyc_verifications k ON k.user_id = u.id
+                    SET u.kyb_status = :st, u.kyb_verified_at = NOW()
+                  WHERE k.provider = :p AND k.environment = :e AND k.applicant_id = :aid'
+            )->execute(['st' => KycStatus::VERIFIED->value] + $params);
+            return;
+        }
+
         $pdo->prepare(
             'UPDATE users u
                 JOIN kyc_verifications k ON k.user_id = u.id
                 SET u.kyc_level = :lvl, u.kyc_verified_at = NOW()
               WHERE k.provider = :p AND k.environment = :e AND k.applicant_id = :aid'
-        )->execute([
-            'lvl' => 'standard',
-            'p'   => $event->provider,
-            'e'   => $event->environment,
-            'aid' => $event->applicantId,
-        ]);
+        )->execute(['lvl' => 'standard'] + $params);
     }
 
     private static function demoteUserKycLevel(PDO $pdo, KycWebhookEvent $event): void
     {
+        $subjectType = self::subjectTypeOf($pdo, $event);
+        $params = [
+            'p'   => $event->provider,
+            'e'   => $event->environment,
+            'aid' => $event->applicantId,
+        ];
+
+        if ($subjectType === KycSubjectType::COMPANY->value) {
+            // KYB — révoque l'état d'entreprise vérifiée.
+            $pdo->prepare(
+                'UPDATE users u
+                    JOIN kyc_verifications k ON k.user_id = u.id
+                    SET u.kyb_status = :st, u.kyb_verified_at = NULL
+                  WHERE k.provider = :p AND k.environment = :e AND k.applicant_id = :aid'
+            )->execute(['st' => 'none'] + $params);
+            return;
+        }
+
         $pdo->prepare(
             'UPDATE users u
                 JOIN kyc_verifications k ON k.user_id = u.id
                 SET u.kyc_level = :lvl, u.kyc_verified_at = NULL
               WHERE k.provider = :p AND k.environment = :e AND k.applicant_id = :aid'
-        )->execute([
-            'lvl' => 'none',
+        )->execute(['lvl' => 'none'] + $params);
+    }
+
+    /** Nature du sujet porté par l'applicant (lecture projetée, non sensible). */
+    private static function subjectTypeOf(PDO $pdo, KycWebhookEvent $event): ?string
+    {
+        $stmt = $pdo->prepare(
+            'SELECT subject_type FROM kyc_verifications
+              WHERE provider = :p AND environment = :e AND applicant_id = :aid
+              LIMIT 1'
+        );
+        $stmt->execute([
             'p'   => $event->provider,
             'e'   => $event->environment,
             'aid' => $event->applicantId,
         ]);
+        $v = $stmt->fetchColumn();
+        return $v === false ? null : (string) $v;
     }
 }

@@ -169,6 +169,106 @@ final class PolicyEngineTest extends TestCase
     }
 
     /**
+     * PolicyEngine bloque un compte Business dont l'entreprise n'est pas
+     * vérifiée (KYB) — indépendamment du KYC individuel.
+     */
+    public function test_evaluate_bloque_business_sans_kyb(): void
+    {
+        $s   = $this->uniqueSuffix();
+        $uid = $this->createUser($s, 'ACTIVE', 'standard');
+        $this->createWallet($uid, 'EUR', '500.00', '0.00');
+
+        $user = [
+            'id'           => $uid,
+            'status'       => 'ACTIVE',
+            'kyc_level'    => 'standard',
+            'kyb_status'   => 'none',
+            'account_type' => 'business',
+        ];
+
+        $intent = ['amount' => 100.0, 'sourceCurrency' => 'EUR', 'destCountry' => 'FR'];
+
+        try {
+            PolicyEngine::evaluate($user, $intent, 100.0);
+            $this->fail('HttpException non levée : un Business non vérifié doit être refusé.');
+        } catch (HttpException $e) {
+            $this->assertSame(403, $e->statusCode());
+            $this->assertSame('POLICY_DECLINED', $e->errorCode());
+            $this->assertStringContainsString('KYB', $e->getMessage());
+        }
+    }
+
+    /**
+     * PolicyEngine n'applique PAS le blocage KYB à un compte individuel.
+     */
+    public function test_evaluate_ignore_kyb_pour_compte_personnel(): void
+    {
+        $s   = $this->uniqueSuffix();
+        $uid = $this->createUser($s, 'ACTIVE', 'standard');
+        $this->createWallet($uid, 'EUR', '500.00', '0.00');
+
+        $user = [
+            'id'           => $uid,
+            'status'       => 'ACTIVE',
+            'kyc_level'    => 'standard',
+            'kyb_status'   => 'none', // présent mais ignoré pour un personnel
+            'account_type' => 'personal',
+        ];
+
+        $intent = ['amount' => 100.0, 'sourceCurrency' => 'EUR', 'destCountry' => 'FR'];
+
+        $saved = getenv(SanctionsScreening::ENV_COUNTRIES);
+        putenv(SanctionsScreening::ENV_COUNTRIES . '=KP,IR');
+        try {
+            $res = PolicyEngine::evaluate($user, $intent, 100.0);
+        } finally {
+            if ($saved === false) {
+                putenv(SanctionsScreening::ENV_COUNTRIES);
+            } else {
+                putenv(SanctionsScreening::ENV_COUNTRIES . '=' . $saved);
+            }
+        }
+
+        $this->assertNotSame('DECLINED', $res['decision']);
+        $this->assertArrayNotHasKey('kyb_required', $res['details']);
+    }
+
+    /**
+     * PolicyEngine approuve un compte Business une fois l'entreprise
+     * vérifiée (KYB) et les autres contrôles passés.
+     */
+    public function test_evaluate_approuve_business_kyb_verifie(): void
+    {
+        $s   = $this->uniqueSuffix();
+        $uid = $this->createUser($s, 'ACTIVE', 'standard');
+        $this->createWallet($uid, 'EUR', '500.00', '0.00');
+
+        $user = [
+            'id'           => $uid,
+            'status'       => 'ACTIVE',
+            'kyc_level'    => 'standard',
+            'kyb_status'   => 'verified',
+            'account_type' => 'business',
+        ];
+
+        $intent = ['amount' => 100.0, 'sourceCurrency' => 'EUR', 'destCountry' => 'FR'];
+
+        $saved = getenv(SanctionsScreening::ENV_COUNTRIES);
+        putenv(SanctionsScreening::ENV_COUNTRIES . '=KP,IR');
+        try {
+            $res = PolicyEngine::evaluate($user, $intent, 100.0);
+        } finally {
+            if ($saved === false) {
+                putenv(SanctionsScreening::ENV_COUNTRIES);
+            } else {
+                putenv(SanctionsScreening::ENV_COUNTRIES . '=' . $saved);
+            }
+        }
+
+        $this->assertSame('APPROVED', $res['decision']);
+    }
+
+    /**
      * PolicyEngine refuse si le solde disponible est insuffisant
      * (meme si le balance total est superieur au montant demande).
      */

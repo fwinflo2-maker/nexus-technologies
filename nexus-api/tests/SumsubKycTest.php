@@ -344,6 +344,47 @@ final class SumsubKycTest extends TestCase
         self::assertTrue($event->status->isVerified());
     }
 
+    /**
+     * Un webhook KYB (subject_type=company) projette le flag DISTINCT
+     * `users.kyb_status` et NE touche PAS au `kyc_level` individuel.
+     */
+    public function test_webhook_kyb_met_a_jour_kyb_status_distinct(): void
+    {
+        $adapter = $this->adapter([['status' => 200, 'body' => '{}']]);
+        $env = strtolower((string) (getenv('SUMSUB_ENVIRONMENT') ?: 'sandbox'));
+        $this->pdo->prepare(
+            'INSERT INTO kyc_verifications (user_id, provider, environment, subject_type, applicant_id, status)
+             VALUES (:uid, :p, :e, :t, :aid, :st)'
+        )->execute([
+            'uid' => $this->userId,
+            'p'   => 'sumsub',
+            'e'   => $env,
+            't'   => 'company',
+            'aid' => 'appl_kyb_proj',
+            'st'  => 'pending',
+        ]);
+
+        $event = $adapter->parseWebhook(json_encode([
+            'applicantId'   => 'appl_kyb_proj',
+            'correlationId' => 'evt-kyb-proj',
+            'applicantType' => 'company',
+            'reviewStatus'  => 'completed',
+            'reviewResult'  => ['reviewAnswer' => 'GREEN'],
+        ]));
+        self::assertSame(KycSubjectType::COMPANY, $event->subjectType);
+        KycService::handleVerifiedWebhook($this->pdo, $event);
+
+        $stmt = $this->pdo->prepare(
+            'SELECT kyb_status, kyb_verified_at, kyc_level FROM users WHERE id = :id'
+        );
+        $stmt->execute(['id' => $this->userId]);
+        $user = $stmt->fetch();
+
+        self::assertSame('verified', $user['kyb_status'], 'Le flag KYB doit être élevé.');
+        self::assertNotNull($user['kyb_verified_at']);
+        self::assertSame('none', $user['kyc_level'], 'Le KYB ne doit pas élever le KYC individuel.');
+    }
+
     public function test_audit_de_l_evenement_ne_contient_aucun_secret(): void
     {
         $adapter = $this->adapter([['status' => 200, 'body' => '{}']]);

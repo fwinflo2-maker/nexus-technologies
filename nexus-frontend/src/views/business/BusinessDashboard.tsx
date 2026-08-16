@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { apiBusinessOverview, type BusinessOverview } from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
 
 import { useDashT } from '../../data/dashboard-i18n';
 import { AnimatedNumber, EASE, RevealGroup, HoverCard, SectionTransition } from '../../components/anim/Premium';
@@ -15,6 +16,8 @@ export default function BusinessDashboard() {
   // les branches loading/error/!data sortent plus bas et changeraient sinon
   // l'ordre des Hooks d'un rendu à l'autre.
   const td = useDashT();
+  const { user } = useAuth();
+  const kybOk = (user?.kyb_status ?? 'none') === 'verified';
 
   const fetch = useCallback(async () => {
     setLoading(true);
@@ -65,6 +68,23 @@ export default function BusinessDashboard() {
         <span className="pill p-c" style={{ fontSize: 10 }}>🔒 Compte entreprise sécurisé</span>
         <span className="pill" style={{ fontSize: 10 }}>🌍 Paiements multi-devises</span>
       </div>
+
+      {/* KYB — l'entreprise doit être soumise à Sumsub avant tout paiement */}
+      {!kybOk && (
+        <motion.div className="card" style={{ padding: 16, marginBottom: 18, border: '1px solid var(--warn,#eab308)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}
+          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: EASE }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ fontSize: 22 }}>🛡️</div>
+            <div>
+              <div style={{ fontWeight: 700, color: 'var(--text-bright)' }}>Vérification d'entreprise requise (KYB)</div>
+              <div style={{ fontSize: 12, color: 'var(--text-mid)', marginTop: 4 }}>
+                Votre entreprise doit être vérifiée via Sumsub avant d'effectuer des paiements. Les envois sont bloqués tant que la vérification n'est pas validée.
+              </div>
+            </div>
+          </div>
+          <Link to="/kyc" className="btn btn-primary" style={{ whiteSpace: 'nowrap' }}>Vérifier mon entreprise</Link>
+        </motion.div>
+      )}
 
       {/* KPIs essentiels */}
       <RevealGroup className="kpi-grid" stagger={0.05}>

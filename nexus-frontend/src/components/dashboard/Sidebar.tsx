@@ -27,6 +27,7 @@ const navBusiness = [
   { to: '/beneficiaries', icon: '👥', label: 'nav.beneficiaries' },
   { to: '/reconciliation', icon: '⇌', label: 'nav.reconciliation' },
   { to: '/team', icon: '⊕', label: 'nav.team' },
+  { to: '/kyc', icon: '✓', label: 'nav.kyc' },
 ];
 
 // NB: /providers est une fonctionnalité du Back Office, absente des dashboards personal/business.
