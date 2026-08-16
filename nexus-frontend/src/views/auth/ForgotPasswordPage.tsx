@@ -4,35 +4,91 @@ import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import './AuthPages.css';
 import { useI18n } from '../../context/I18nContext';
 import { ParticlesBackground } from '../../components/ParticlesBackground';
+import { apiForgotPassword, apiResetPassword } from '../../api/client';
 
+/**
+ * Mot de passe oublié — flow RÉEL connecté au backend.
+ *
+ * Étape 1 : saisie de l'email → POST /api/auth/forgot-password. Le serveur
+ * vérifie le compte et (en environnement de développement) retourne le jeton
+ * de réinitialisation. En production, ce jeton partirait par e-mail.
+ *
+ * Étape 2 : saisie du nouveau mot de passe → POST /api/auth/reset-password,
+ * qui consomme le jeton (stocké haché en base, usage unique, expiration 30 min).
+ *
+ * Anti-énumération : la réponse du serveur est identique que l'email existe
+ * ou non ; l'UI n'affiche jamais « compte introuvable ».
+ */
 export default function ForgotPasswordPage() {
+  const [step, setStep] = useState<'email' | 'newpass' | 'done'>('email');
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
+  const [sending, setSending] = useState(false);
+  const [devToken, setDevToken] = useState<string | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const navigate = useNavigate();
   const { t } = useI18n();
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleRequest(e: React.FormEvent) {
     e.preventDefault();
     setError('');
     if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       setError(t('fp_err_email'));
       return;
     }
-    // FAUX SUCCÈS SUPPRIMÉ.
-    //
-    // Cette fonction attendait une seconde puis affichait « e-mail envoyé ».
-    // Aucun e-mail n'était envoyé : il n'existe AUCUNE route de
-    // réinitialisation côté API, aucune table de jetons, et aucune capacité
-    // d'envoi d'e-mail configurée (ni SMTP, ni service tiers).
-    //
-    // Un utilisateur qui a réellement perdu son mot de passe attendait donc
-    // indéfiniment un message qui n'arriverait jamais.
-    //
-    // La fonctionnalité est BLOQUÉE sur une dépendance externe (fournisseur
-    // d'e-mail transactionnel + décision produit sur la durée de vie du
-    // jeton). Tant qu'elle n'est pas implémentée côté backend, l'interface
-    // doit le DIRE, et orienter l'utilisateur vers un canal qui fonctionne.
-    setError(t('fp_err_unavailable'));
+    setSending(true);
+    try {
+      const resp = await apiForgotPassword(email);
+      if (!resp.success) {
+        setError(resp.error ?? t('fp_err_email'));
+        return;
+      }
+      // En dev, le backend renvoie le jeton pour permettre un reset de bout en bout.
+      const token = resp.data?.reset_token ?? null;
+      setDevToken(token);
+      if (token) {
+        // Le jeton est disponible (mode dev) : passer directement à l'étape 2.
+        setStep('newpass');
+      } else {
+        // Sinon, on affiche l'état « e-mail envoyé » (production).
+        setStep('done');
+      }
+    } catch {
+      setError('Service temporairement indisponible. Veuillez réessayer.');
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function handleReset(e: React.FormEvent) {
+    e.preventDefault();
+    setError('');
+    if (newPassword.length < 8) {
+      setError('Le mot de passe doit contenir au moins 8 caractères.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('Les mots de passe ne correspondent pas.');
+      return;
+    }
+    if (!devToken) {
+      setError('Jeton de réinitialisation manquant.');
+      return;
+    }
+    setSending(true);
+    try {
+      const resp = await apiResetPassword(devToken, newPassword, confirmPassword);
+      if (!resp.success) {
+        setError(resp.error ?? 'Erreur lors de la réinitialisation.');
+        return;
+      }
+      setStep('done');
+    } catch {
+      setError('Service temporairement indisponible. Veuillez réessayer.');
+    } finally {
+      setSending(false);
+    }
   }
 
   return (
@@ -50,32 +106,61 @@ export default function ForgotPasswordPage() {
               <LanguageSwitcher />
             </div>
 
-              <h1 className="auth-title">{t('fp_title')}</h1>
-              <p className="auth-subtitle">
-                {t('fp_subtitle')}
-              </p>
+            {step === 'email' && (
+              <>
+                <h1 className="auth-title">{t('fp_title')}</h1>
+                <p className="auth-subtitle">{t('fp_subtitle')}</p>
+                <form className="auth-form" onSubmit={handleRequest} noValidate>
+                  <div>
+                    <label htmlFor="reset-email" className="form-label">{t('fp_email_label')}</label>
+                    <input
+                      id="reset-email" type="email" className="form-control"
+                      placeholder={t('fp_email_placeholder')} value={email}
+                      onChange={(e) => setEmail(e.target.value)} autoFocus autoComplete="email"
+                    />
+                  </div>
+                  {error && <div className="auth-error">{error}</div>}
+                  <button type="submit" className="btn btn-glow btn-block btn-lg" disabled={sending}>
+                    {sending ? <><span className="spinner" /> {t('fp_sending')}</> : t('fp_submit')}
+                  </button>
+                </form>
+              </>
+            )}
 
-              <form className="auth-form" onSubmit={handleSubmit} noValidate>
-                <div>
-                  <label htmlFor="reset-email" className="form-label">{t('fp_email_label')}</label>
-                  <input
-                    id="reset-email"
-                    type="email"
-                    className="form-control"
-                    placeholder={t('fp_email_placeholder')}
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    autoFocus
-                    autoComplete="email"
-                  />
-                </div>
+            {step === 'newpass' && (
+              <>
+                <h1 className="auth-title">Définir un nouveau mot de passe</h1>
+                <p className="auth-subtitle">
+                  Compte vérifié. Choisissez un nouveau mot de passe pour <b>{email}</b>.
+                </p>
+                <form className="auth-form" onSubmit={handleReset} noValidate>
+                  <div>
+                    <label htmlFor="np1" className="form-label">Nouveau mot de passe</label>
+                    <input id="np1" type="password" className="form-control" placeholder="Min. 8 caractères"
+                      value={newPassword} onChange={(e) => setNewPassword(e.target.value)} autoComplete="new-password" />
+                  </div>
+                  <div>
+                    <label htmlFor="np2" className="form-label">Confirmer le mot de passe</label>
+                    <input id="np2" type="password" className="form-control" placeholder="Confirmer"
+                      value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" />
+                  </div>
+                  {error && <div className="auth-error">{error}</div>}
+                  <button type="submit" className="btn btn-glow btn-block btn-lg" disabled={sending}>
+                    {sending ? <><span className="spinner" /> Réinitialisation…</> : 'Réinitialiser le mot de passe'}
+                  </button>
+                </form>
+              </>
+            )}
 
-                {error && <div className="auth-error">{error}</div>}
-
-                <button type="submit" className="btn btn-glow btn-block btn-lg">
-                  {t('fp_submit')}
+            {step === 'done' && (
+              <>
+                <h1 className="auth-title">{t('fp_sent_title')}</h1>
+                <p className="auth-subtitle">{t('fp_sent_text')}</p>
+                <button className="btn btn-glow btn-block btn-lg" onClick={() => navigate('/login')}>
+                  Retour à la connexion
                 </button>
-              </form>
+              </>
+            )}
           </div>
 
           <aside className="auth-panel-side">

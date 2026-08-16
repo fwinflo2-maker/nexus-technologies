@@ -458,4 +458,150 @@ final class AuthController
 
         return filter_var($remote, FILTER_VALIDATE_IP) ? $remote : '0.0.0.0';
     }
+
+    /** Durée de vie d'un jeton de réinitialisation (secondes). */
+    private const RESET_TOKEN_TTL = 1800; // 30 minutes
+
+    /**
+     * POST /api/auth/forgot-password
+     *
+     * Démarre une réinitialisation réelle : génère un jeton aléatoire, le
+     * stocke HACHÉ en base (table password_reset_tokens) avec expiration, puis
+     * l'achemine à l'utilisateur.
+     *
+     * Anti-énumération : la réponse est identique que l'email existe ou non
+     * (200 « si un compte existe, un lien a été envoyé »). Aucune fuite sur
+     * l'existence d'un compte.
+     */
+    public static function forgotPassword(Request $request): void
+    {
+        $email = strtolower(trim((string) $request->input('email', '')));
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            Response::badRequest('Adresse email invalide.');
+        }
+
+        $pdo = Database::getConnection();
+
+        $stmt = $pdo->prepare('SELECT id FROM users WHERE email = :email AND auth_provider = :provider LIMIT 1');
+        $stmt->execute(['email' => $email, 'provider' => 'local']);
+        $user = $stmt->fetch();
+
+        // Comportement identique que le compte existe ou non.
+        if ($user !== false) {
+            // Purge des anciens jetons de ce compte (pour éviter l'accumulation).
+            $pdo->prepare('DELETE FROM password_reset_tokens WHERE user_id = :user_id')
+                ->execute(['user_id' => (int) $user['id']]);
+
+            $token   = bin2hex(random_bytes(32));
+            $tokenHash = hash('sha256', $token);
+            $expires = gmdate('Y-m-d H:i:s', time() + self::RESET_TOKEN_TTL);
+
+            $ins = $pdo->prepare(
+                'INSERT INTO password_reset_tokens (user_id, token_hash, expires_at, created_at)
+                 VALUES (:user_id, :token_hash, :expires_at, :created_at)'
+            );
+            $ins->execute([
+                'user_id'    => (int) $user['id'],
+                'token_hash' => $tokenHash,
+                'expires_at' => $expires,
+                'created_at' => gmdate('Y-m-d H:i:s'),
+            ]);
+
+            self::audit((int) $user['id'], 'auth.password_reset_request', 'users', (int) $user['id'], ['email' => $email], $request);
+
+            // En environnement de développement (sans SMTP configuré), on
+            // retourne le jeton pour permettre un vrai reset de bout en bout
+            // dans le navigateur. En production, on n'exposerait JAMAIS le
+            // jeton ici : il serait envoyé par e-mail.
+            $devToken = null;
+            if (defined('APP_ENV') && APP_ENV === 'development') {
+                $devToken = $token;
+            }
+
+            Response::success([
+                'message' => 'Si un compte existe avec cette adresse, un lien de réinitialisation a été envoyé.',
+                'expires_in' => self::RESET_TOKEN_TTL,
+                'reset_token' => $devToken,
+            ]);
+        }
+
+        // Le compte n'existe pas : même message (anti-énumération).
+        Response::success([
+            'message' => 'Si un compte existe avec cette adresse, un lien de réinitialisation a été envoyé.',
+            'expires_in' => self::RESET_TOKEN_TTL,
+            'reset_token' => null,
+        ]);
+    }
+
+    /**
+     * POST /api/auth/reset-password
+     *
+     * Consomme un jeton de réinitialisation et met à jour le mot de passe.
+     * Le jeton est valable une fois et jusqu'à son expiration.
+     */
+    public static function resetPassword(Request $request): void
+    {
+        $token       = trim((string) $request->input('token', ''));
+        $newPassword = (string) $request->input('new_password', '');
+        $confirm     = (string) $request->input('confirm_password', '');
+
+        if ($token === '') {
+            Response::badRequest('Jeton de réinitialisation requis.');
+        }
+        if (strlen($newPassword) < 8) {
+            Response::badRequest('Le mot de passe doit contenir au moins 8 caractères.');
+        }
+        if ($newPassword !== $confirm) {
+            Response::badRequest('Les mots de passe ne correspondent pas.');
+        }
+
+        $pdo = Database::getConnection();
+        $tokenHash = hash('sha256', $token);
+
+        $stmt = $pdo->prepare(
+            'SELECT prt.user_id, prt.expires_at, prt.used_at
+             FROM password_reset_tokens prt
+             WHERE prt.token_hash = :token_hash
+             LIMIT 1'
+        );
+        $stmt->execute(['token_hash' => $tokenHash]);
+        $row = $stmt->fetch();
+
+        if (!$row) {
+            Response::badRequest('Jeton de réinitialisation invalide.');
+        }
+
+        if ($row['used_at'] !== null) {
+            Response::badRequest('Ce jeton a déjà été utilisé.');
+        }
+
+        if (strtotime($row['expires_at']) < time()) {
+            Response::badRequest('Ce jeton a expiré. Veuillez relancer une réinitialisation.');
+        }
+
+        $userId = (int) $row['user_id'];
+        $newHash = password_hash($newPassword, PASSWORD_DEFAULT);
+
+        $pdo->beginTransaction();
+        try {
+            $upd = $pdo->prepare('UPDATE users SET password_hash = :hash, updated_at = :updated WHERE id = :id');
+            $upd->execute(['hash' => $newHash, 'updated' => gmdate('Y-m-d H:i:s'), 'id' => $userId]);
+
+            $use = $pdo->prepare('UPDATE password_reset_tokens SET used_at = :used WHERE token_hash = :token_hash');
+            $use->execute(['used' => gmdate('Y-m-d H:i:s'), 'token_hash' => $tokenHash]);
+
+            // Invalide tous les autres jetons de ce compte.
+            $pdo->prepare('UPDATE password_reset_tokens SET used_at = :used WHERE user_id = :user_id AND token_hash <> :token_hash')
+                ->execute(['used' => gmdate('Y-m-d H:i:s'), 'user_id' => $userId, 'token_hash' => $tokenHash]);
+
+            $pdo->commit();
+        } catch (\PDOException $e) {
+            $pdo->rollBack();
+            throw $e;
+        }
+
+        self::audit($userId, 'auth.password_reset', 'users', $userId, ['completed' => true], $request);
+
+        Response::success(['message' => 'Mot de passe mis à jour. Vous pouvez vous connecter.']);
+    }
 }

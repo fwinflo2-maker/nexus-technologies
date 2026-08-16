@@ -109,6 +109,8 @@ $router->get('/health', static function (Request $request): void {
 $router->post('/register', [AuthController::class, 'register']);
 $router->post('/login', [AuthController::class, 'login']);
 $router->post('/logout', [AuthController::class, 'logout']);
+$router->post('/auth/forgot-password', [AuthController::class, 'forgotPassword']);
+$router->post('/auth/reset-password', [AuthController::class, 'resetPassword']);
 $router->get('/me', [AuthController::class, 'me']);
 
 // --- Dashboard (protégé) ------------------------------------------------------

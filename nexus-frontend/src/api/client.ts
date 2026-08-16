@@ -1492,3 +1492,22 @@ export async function apiAdminTechnical(): Promise<ApiResponse<{
 }>> {
   return request('GET', '/admin/technical');
 }
+
+// --- Réinitialisation de mot de passe (backend réel, tokens en base) --------
+
+export async function apiForgotPassword(email: string): Promise<ApiResponse<{ message: string; expires_in: number; reset_token: string | null }>> {
+  return request('POST', '/auth/forgot-password', { email });
+}
+
+export async function apiResetPassword(token: string, newPassword: string, confirmPassword: string): Promise<ApiResponse<{ message: string }>> {
+  return request('POST', '/auth/reset-password', { token, new_password: newPassword, confirm_password: confirmPassword });
+}
+
+/**
+ * Chemin d'accueil d'un utilisateur après connexion/inscription.
+ * - superadmin → tableau de bord Super Admin
+ * - sinon       → dashboard client (personal/business selon account_type)
+ */
+export function getHomePath(user: { platform_role?: string }): string {
+  return user.platform_role === 'superadmin' ? '/admin' : '/dashboard';
+}

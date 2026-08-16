@@ -81,3 +81,6 @@
 
 # 0.26 — Profil client riche (infos saisies à l'inscription)
 2026_08_15_rich_client_profile.sql
+
+# 0.27 — Réinitialisation de mot de passe réelle (tokens en base)
+2026_08_16_password_reset_tokens.sql

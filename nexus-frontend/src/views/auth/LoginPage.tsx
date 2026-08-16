@@ -6,7 +6,7 @@ import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import './AuthPages.css';
 import { useI18n } from '../../context/I18nContext';
 import { useAuth } from '../../context/AuthContext';
-import { apiLogin } from '../../api/client';
+import { apiLogin, apiMe, getHomePath } from '../../api/client';
 import { ParticlesBackground } from '../../components/ParticlesBackground';
 import { EASE } from '../../components/anim/Premium';
 
@@ -68,8 +68,11 @@ export function LoginPage({ onSwitchToRegister, onBackHome }: LoginPageProps) {
       }
       // Revalide la session via /api/me pour que le contexte React mette à jour le user
       await refreshSession();
-      // Navigation SPA vers le dashboard (pas de reload)
-      navigate('/dashboard', { replace: true });
+      // Redirige vers le dashboard référent (superadmin → /admin, sinon le
+      // dashboard client personal/business → /dashboard).
+      const me = await apiMe().catch(() => null);
+      const target = getHomePath(me?.data?.user ?? {});
+      navigate(target, { replace: true });
     } catch {
       // Filet de sécurité : ne jamais laisser le formulaire bloqué en « envoi ».
       setError(t('login_err_required'));
