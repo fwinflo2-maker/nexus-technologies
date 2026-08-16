@@ -88,7 +88,8 @@ export function LoginPage({ onSwitchToRegister, onBackHome }: LoginPageProps) {
 
   return (
     <div className="auth-page">
-      <ParticlesBackground />
+      {/* Animation de particules identique au landing page */}
+      <ParticlesBackground density={60} color="#8B5CF6" opacity={0.6} />
       <div className="auth-card">
         <div className="auth-glow" aria-hidden="true" />
         <div className="auth-card-inner">

@@ -1,13 +1,14 @@
 import { useAuth } from '../../context/AuthContext';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import Avatar from '../../components/Avatar';
+import { ParticlesBackground } from '../../components/ParticlesBackground';
 
 /** Items de navigation du Super Admin (sidebar). */
 export const ADMIN_NAV = [
   { id: 'overview', label: 'Vue d’ensemble', icon: '👑' },
   { id: 'send', label: 'Envoyer', icon: '↗️' },
   { id: 'wallet', label: 'Portefeuille', icon: '💼' },
-  { id: 'accounts', label: 'Comptes', icon: '👥' },
+  { id: 'clients', label: 'Gestion des clients', icon: '👥' },
   { id: 'transactions', label: 'Transactions', icon: '🔄' },
   { id: 'operations', label: 'Opérations', icon: '⚙️' },
   { id: 'treasury', label: 'Trésorerie', icon: '💰' },
@@ -19,6 +20,7 @@ export const ADMIN_NAV = [
   { id: 'technical', label: 'Technique', icon: '🛠️' },
   { id: 'audit', label: 'Audit', icon: '📜' },
   { id: 'settings', label: 'Paramètres', icon: '⚙️' },
+  { id: 'account', label: 'Mon compte', icon: '👤' },
 ];
 
 export default function AdminLayout({
@@ -31,12 +33,19 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const now = new Date();
   const timeStr = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 
+  const handleLogout = async () => {
+    await logout();
+    navigate('/admin-login');
+  };
+
   return (
     <div className="nexus-dash layout" style={{ minHeight: '100vh' }}>
-      {/* Fond */}
+      {/* Fond animé avec particules */}
+      <ParticlesBackground density={35} color="#3B82F6" opacity={0.25} />
       <div className="dash-ambient-bg" aria-hidden="true" />
       <div className="bg-grid" />
       <div className="ambient-vignette" aria-hidden="true" />
@@ -94,7 +103,7 @@ export default function AdminLayout({
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-bright)' }}>{user?.name || 'Admin'}</div>
               <div style={{ fontSize: 10, color: '#3B82F6' }}>superadmin</div>
             </div>
-            <button onClick={() => { void logout(); }} className="btn btn-ghost" style={{ fontSize: 11, padding: '6px 12px' }}>⏻</button>
+            <button onClick={() => { void handleLogout(); }} className="btn btn-ghost" style={{ fontSize: 11, padding: '6px 12px' }}>⏻</button>
           </div>
         </header>
 
