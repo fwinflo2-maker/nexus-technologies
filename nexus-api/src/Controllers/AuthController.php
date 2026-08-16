@@ -227,13 +227,48 @@ final class AuthController
     }
 
     /**
-     * POST /api/login — vérifie les identifiants.
+     * POST /api/login — vérifie les identifiants pour un compte PERSONAL.
      *
      * L'identifiant est soit une adresse email, soit un numéro de téléphone
      * au format international (commençant par '+'). Le rate-limit s'applique
      * quelle que soit la méthode d'identification.
+     * 
+     * Login scope: personal - refuse les comptes business et superadmin
      */
     public static function login(Request $request): void
+    {
+        self::loginWithScope($request, 'personal');
+    }
+
+    /**
+     * POST /api/business-login — vérifie les identifiants pour un compte BUSINESS.
+     *
+     * Accepte uniquement les comptes avec account_type = business.
+     * Refuse les comptes personal et superadmin.
+     */
+    public static function businessLogin(Request $request): void
+    {
+        self::loginWithScope($request, 'business');
+    }
+
+    /**
+     * POST /api/admin-login — vérifie les identifiants pour un SUPERADMIN.
+     *
+     * Accepte uniquement les utilisateurs avec platform_role = superadmin.
+     * Refuse les comptes user normaux (personal/business).
+     */
+    public static function adminLogin(Request $request): void
+    {
+        self::loginWithScope($request, 'admin');
+    }
+
+    /**
+     * Logique commune de connexion avec validation du scope.
+     *
+     * @param Request $request
+     * @param string $scope 'personal', 'business', ou 'admin'
+     */
+    private static function loginWithScope(Request $request, string $scope): void
     {
         $identifier = trim((string) $request->input('identifier', ''));
         $password   = (string) $request->input('password', '');
@@ -295,11 +330,27 @@ final class AuthController
             Response::unauthorized('Identifiants incorrects.');
         }
 
+        // Vérification du scope après validation du mot de passe
+        $userId = (int) $user['id'];
+        $accountType = $user['account_type'];
+        $platformRole = $user['platform_role'] ?? 'user';
+
+        // Validation du scope selon les règles métier
+        $scopeValid = self::validateLoginScope($accountType, $platformRole, $scope);
+        
+        if (!$scopeValid) {
+            // On enregistre l'échec de scope
+            $pdo->prepare('INSERT INTO login_attempts (email, ip_address, success) VALUES (:email, :ip, 0)')
+                ->execute(['email' => $identifier, 'ip' => $ip]);
+            
+            // Message générique pour ne pas révéler le type de compte
+            Response::forbidden('Accès non autorisé pour ce type de compte.');
+        }
+
         // Succès : purge des tentatives + trace d'audit.
         $pdo->prepare('DELETE FROM login_attempts WHERE email = :email')->execute(['email' => $identifier]);
 
-        $userId = (int) $user['id'];
-        self::audit($userId, 'auth.login', 'users', $userId, [$lookupKey => $identifier], $request);
+        self::audit($userId, 'auth.login.' . $scope, 'users', $userId, [$lookupKey => $identifier, 'scope' => $scope], $request);
 
         // Notifications de démo au premier login (idempotent : uniquement si
         // l'utilisateur n'a encore aucune notification).
@@ -313,7 +364,26 @@ final class AuthController
         Response::success([
             'token' => $token,
             'user'  => self::publicUser($user),
+            'scope' => $scope,
         ]);
+    }
+
+    /**
+     * Valide que le compte correspond au scope demandé.
+     *
+     * @param string $accountType 'personal' ou 'business'
+     * @param string $platformRole 'user' ou 'superadmin'
+     * @param string $scope 'personal', 'business', ou 'admin'
+     * @return bool true si autorisé, false sinon
+     */
+    private static function validateLoginScope(string $accountType, string $platformRole, string $scope): bool
+    {
+        return match ($scope) {
+            'personal' => $accountType === 'personal' && $platformRole !== 'superadmin',
+            'business' => $accountType === 'business' && $platformRole !== 'superadmin',
+            'admin'    => $platformRole === 'superadmin',
+            default    => false,
+        };
     }
 
     /** POST /api/logout — révoque le jeton courant côté serveur. */

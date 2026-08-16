@@ -108,7 +108,9 @@ $router->get('/health', static function (Request $request): void {
 
 // --- Authentification ----------------------------------------------------------
 $router->post('/register', [AuthController::class, 'register']);
-$router->post('/login', [AuthController::class, 'login']);
+$router->post('/login', [AuthController::class, 'login']);                 // Personal login
+$router->post('/business-login', [AuthController::class, 'businessLogin']); // Business login
+$router->post('/admin-login', [AuthController::class, 'adminLogin']);       // Super Admin login
 $router->post('/logout', [AuthController::class, 'logout']);
 $router->post('/auth/forgot-password', [AuthController::class, 'forgotPassword']);
 $router->post('/auth/reset-password', [AuthController::class, 'resetPassword']);

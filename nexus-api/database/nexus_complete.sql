@@ -1,11 +1,77 @@
 -- =============================================================================
--- NEXUS — BASE COMPLÈTE (structure + données de référence)
+-- NEXUS — FICHIER SQL UNIQUE ET COMPLET
+-- =============================================================================
+-- Ce fichier permet d'initialiser complètement la base de données NEXUS :
+--   1. Crée la base de données
+--   2. Crée l'utilisateur et les privilèges pour l'application
+--   3. Crée toutes les tables (schéma complet)
+--   4. Insère les données de référence (démonstration/sandbox uniquement)
+--
+-- USAGE :
+--   mysql -u root -p < database/nexus_complete.sql
+--
+-- IMPORTANT :
+--   * Les données incluses sont pour DÉMONSTRATION (sandbox) uniquement
+--   * NE JAMAIS exécuter en production avec les données de démo
+--   * Changer le mot de passe par défaut en production
+-- =============================================================================
+
+SET NAMES utf8mb4;
+SET FOREIGN_KEY_CHECKS = 0;
+
+/*M!999999\- enable the sandbox mode */ 
+/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
+/*!40103 SET TIME_ZONE='+00:00' */;
+/*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
+/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
+/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
+/*M!100616 SET @OLD_NOTE_VERBOSITY=@@NOTE_VERBOSITY, NOTE_VERBOSITY=0 */;
+
+-- =============================================================================
+-- 1. CRÉATION DE LA BASE DE DONNÉES
+-- =============================================================================
+DROP DATABASE IF EXISTS nexus;
+CREATE DATABASE nexus CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE nexus;
+
+-- =============================================================================
+-- 2. CRÉATION DE L'UTILISATEUR ET PRIVILÈGES POUR L'APPLICATION
+-- =============================================================================
+-- Identifiants par défaut pour l'application NEXUS :
+--   Utilisateur : nexus_app
+--   Mot de passe  : NexusApp@2024!Secure
+--
+-- IMPORTANT : Changer ce mot de passe en production !
+-- =============================================================================
+
+-- Supprimer l'utilisateur s'il existe déjà
+DROP USER IF EXISTS 'nexus_app'@'localhost';
+DROP USER IF EXISTS 'nexus_app'@'%';
+
+-- Créer l'utilisateur avec un mot de passe sécurisé
+CREATE USER 'nexus_app'@'localhost' IDENTIFIED BY 'NexusApp@2024!Secure';
+CREATE USER 'nexus_app'@'%' IDENTIFIED BY 'NexusApp@2024!Secure';
+
+-- Accorder tous les privilèges sur la base nexus
+GRANT ALL PRIVILEGES ON nexus.* TO 'nexus_app'@'localhost';
+GRANT ALL PRIVILEGES ON nexus.* TO 'nexus_app'@'%';
+
+-- Appliquer les changements
+FLUSH PRIVILEGES;
+
+-- =============================================================================
+-- 3. SCHÉMA COMPLET DE LA BASE DE DONNÉES
+-- =============================================================================
+
+-- Début des tables...
+-- =============================================================================
+-- NEXUS — SCHÉMA DE RÉFÉRENCE (structure seule)
 --
 -- Fichier GÉNÉRÉ depuis la base réellement installée par le runner de
 -- migrations. Ne pas éditer à la main.
 --   Régénérer : bash scripts/export_sql_reference.sh
 --
--- Les données incluses sont des jeux de DÉMONSTRATION (§15).
+-- Aucune donnée : ni compte, ni solde, ni transaction, ni credential.
 -- =============================================================================
 
 SET NAMES utf8mb4;
@@ -102,7 +168,7 @@ CREATE TABLE `employees` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `user_id` bigint(20) unsigned NOT NULL,
   `department` varchar(100) DEFAULT NULL,
-  `role` varchar(50) NOT NULL DEFAULT 'operations_manager',
+  `role` varchar(50) NOT NULL DEFAULT 'superadmin',
   `permissions` json DEFAULT NULL,
   `status` enum('active','invited','disabled') NOT NULL DEFAULT 'invited',
   `manager_id` bigint(20) unsigned DEFAULT NULL,
@@ -460,7 +526,7 @@ CREATE TABLE `users` (
   `phone` varchar(20) DEFAULT NULL,
   `password_hash` varchar(255) NOT NULL DEFAULT '',
   `account_type` enum('personal','business') NOT NULL DEFAULT 'personal',
-  `platform_role` enum('user','superadmin','operations_manager','finance_treasury','treasury_manager','compliance_officer','risk_fraud','risk_analyst','provider_manager','customer_support','security_technical','security_admin','technical_admin','business_manager','support_operator','compliance_operator','finance_operator','security_engineer','provider_engineer','backend_engineer','qa_engineer','sre_operator','ai_agent') NOT NULL DEFAULT 'user' COMMENT 'RÃ´le d''exploitation de la plateforme. Distinct de account_type (type de client).',
+  `platform_role` enum('user','superadmin') NOT NULL DEFAULT 'user' COMMENT 'Rôle d''exploitation de la plateforme. Distinct de account_type (type de client).',
   `auth_provider` enum('local','google') NOT NULL DEFAULT 'local',
   `provider_id` varchar(191) DEFAULT NULL,
   `status` enum('PENDING','ACTIVE','SUSPENDED','CLOSED') NOT NULL DEFAULT 'PENDING',
@@ -554,8 +620,29 @@ CREATE TABLE `wallets` (
 /*M!100616 SET NOTE_VERBOSITY=@OLD_NOTE_VERBOSITY */;
 
 
--- ─── Données de référence (démonstration) ───
--- demo_fx_rates.sql
+SET FOREIGN_KEY_CHECKS = 1;
+
+-- =============================================================================
+-- 4. DONNÉES DE RÉFÉRENCE (DÉMONSTRATION - SANDBOX UNIQUEMENT)
+-- =============================================================================
+-- AVERTISSEMENT : Ces données sont pour DÉMONSTRATION uniquement.
+-- NE JAMAIS exécuter en production.
+-- =============================================================================
+
+-- =============================================================================
+-- NEXUS — DONNÉES DE RÉFÉRENCE (DÉMONSTRATION UNIQUEMENT)
+--
+-- Fichier GÉNÉRÉ : concaténation de database/seeds/.
+--   Régénérer : bash scripts/export_sql_reference.sh
+--
+-- AVERTISSEMENT (§15) : ces jeux sont des données de DÉMONSTRATION. Ils ne
+-- doivent JAMAIS être chargés dans un environnement de production. Toute
+-- donnée issue de ce fichier appartient à l'environnement « sandbox ».
+-- =============================================================================
+
+SET NAMES utf8mb4;
+
+-- ─── demo_fx_rates.sql ───
 -- =============================================================================
 -- NEXUS — SEED : taux de change de démonstration
 --
@@ -599,7 +686,7 @@ INSERT INTO fx_rates_cache (base_currency, quote_currency, rate, source, environ
     ('GBP', 'EUR',  1.17000000, 'manual', 'sandbox', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR)),
     ('XAF', 'EUR',  0.00152400, 'manual', 'sandbox', NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR));
 
--- demo_payment_accounts.sql
+-- ─── demo_payment_accounts.sql ───
 -- =============================================================================
 -- NEXUS — SEED : compte source de démonstration (multi-origine)
 --
@@ -666,4 +753,12 @@ WHERE @NEXUS_ALLOW_DEMO_SEED = 1
 LIMIT 10;
 
 
+-- =============================================================================
+-- FIN DU FICHIER SQL UNIQUE NEXUS
+-- =============================================================================
 SET FOREIGN_KEY_CHECKS = 1;
+/*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
+/*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
+/*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
+/*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
+/*M!100616 SET NOTE_VERBOSITY=@OLD_NOTE_VERBOSITY */;

@@ -15,9 +15,8 @@ use Nexus\Core\Response;
  * RBAC :
  *   * Un CLIENT (authentifié) ne voit et n'écrit QUE dans ses propres
  *     conversations. Il ne voit JAMAIS les notes internes des agents.
- *   * Un AGENT (customer_support, support_operator, superadmin, …) voit toutes
- *     les conversations, peut répondre, laisser des notes internes, changer le
- *     statut.
+ *   * Un AGENT (superadmin uniquement) voit toutes les conversations, peut
+ *     répondre, laisser des notes internes, changer le statut.
  *
  * Flux "bot pré-ticket" :
  *   L'utilisateur discute d'abord avec le bot SANS créer de ticket. Un ticket
@@ -31,7 +30,7 @@ use Nexus\Core\Response;
 final class SupportController
 {
     private const AGENT_ROLES = [
-        'customer_support', 'support_operator', 'superadmin',
+        'superadmin',
     ];
 
     private const CATEGORIES = ['account', 'transfer', 'kyc', 'billing', 'other'];

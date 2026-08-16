@@ -22,15 +22,6 @@ final class AdminController
 {
     /** Rôles internes autorisés à être attribués à un employé. */
     private const ALLOWED_EMPLOYEE_ROLES = [
-        'operations_manager',
-        'treasury_manager',
-        'compliance_officer',
-        'risk_analyst',
-        'provider_manager',
-        'customer_support',
-        'security_admin',
-        'technical_admin',
-        'business_manager',
         'superadmin',
     ];
 
@@ -93,7 +84,7 @@ final class AdminController
 
         $fullName = trim((string) $request->input('full_name', ''));
         $email = strtolower(trim((string) $request->input('email', '')));
-        $role = (string) $request->input('role', 'operations_manager');
+        $role = (string) $request->input('role', 'superadmin');
         $department = trim((string) $request->input('department', ''));
         $permissions = $request->input('permissions');
 
