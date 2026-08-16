@@ -22,6 +22,7 @@ const navPersonal = [
 const navBusiness = [
   { to: '/dashboard', icon: '◈', label: 'nav.dashboard' },
   { to: '/payments', icon: '↗', label: 'nav.payments' },
+  { to: '/history', icon: '🕘', label: 'nav.history' },
   { to: '/approvals', icon: '✓', label: 'nav.approvals' },
   { to: '/beneficiaries', icon: '👥', label: 'nav.beneficiaries' },
   { to: '/reconciliation', icon: '⇌', label: 'nav.reconciliation' },

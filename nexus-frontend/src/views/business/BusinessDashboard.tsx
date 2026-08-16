@@ -52,12 +52,19 @@ export default function BusinessDashboard() {
     <SectionTransition id="biz-dash">
     <div className="page">
       <motion.div className="page-header animate-up" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-        <div className="page-label">YOUR FINANCIAL OPERATIONS, ORCHESTRATED BY NEXUS</div>
+        <div className="page-label">NEXUS · VOTRE ESPACE ENTREPRISE</div>
         <div className="page-title">Tableau de bord entreprise</div>
         <p style={{ marginTop: 10, fontSize: 13, color: 'var(--text-mid)' }}>
-          Soldes, volume et paiements de votre entreprise — en temps réel.
+          Bienvenue sur votre espace client Nexus. Gérez vos paiements, vos bénéficiaires et votre activité en toute simplicité.
         </p>
       </motion.div>
+
+      {/* Badge statut client */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 18, flexWrap: 'wrap' }}>
+        <span className="pill p-g" style={{ fontSize: 10 }}>🏢 Client Nexus vérifié</span>
+        <span className="pill p-c" style={{ fontSize: 10 }}>🔒 Compte entreprise sécurisé</span>
+        <span className="pill" style={{ fontSize: 10 }}>🌍 Paiements multi-devises</span>
+      </div>
 
       {/* KPIs essentiels */}
       <RevealGroup className="kpi-grid" stagger={0.05}>
@@ -103,7 +110,8 @@ export default function BusinessDashboard() {
         <div className="page-label" style={{ marginBottom: 12 }}>Vos opérations</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
           {[
-            { to: '/payments', icon: '↗', label: 'Paiements' },
+            { to: '/payments', icon: '↗', label: 'Nouveau paiement' },
+            { to: '/history', icon: '🕘', label: 'Historique' },
             { to: '/approvals', icon: '✓', label: 'Approbations' },
             { to: '/beneficiaries', icon: '👥', label: 'Bénéficiaires' },
             { to: '/reconciliation', icon: '⇌', label: 'Rapprochement' },
