@@ -4,6 +4,7 @@ import SendPage from '../dashboard/SendPage';
 import WalletPage from '../dashboard/WalletPage';
 import ProviderKeys from './ProviderKeys';
 import AdminAccounts from './AdminAccounts';
+import AdminAccountSettings from './AdminAccountSettings';
 import AdminTransactions from './AdminTransactions';
 import AdminCompliance from './AdminCompliance';
 import AdminAudit from './AdminAudit';
@@ -157,9 +158,9 @@ export default function SuperAdminDashboard() {
           )}
 
           {/* ═══ COMPTES ═══ */}
-          {section === 'accounts' && (
+          {section === 'clients' && (
             <>
-              <Header title="Comptes" desc="Tous les clients Nexus classés par secteur (Personnel / Business). Cliquez sur un compte pour le détail complet." />
+              <Header title="Gestion des clients" desc="Tous les clients Nexus classés par secteur (Personnel / Business). Cliquez sur un compte pour le détail complet." />
               <div className="g4" style={{ marginBottom: 20 }}>
                 <Card title="Total" icon="👥"><Num v={ov.accounts.total} /></Card>
                 <Card title="Personnel" icon="👤"><Num v={ov.accounts.personal} /></Card>
@@ -167,6 +168,14 @@ export default function SuperAdminDashboard() {
                 <Card title="Connect" icon="🔌"><Num v={ov.accounts.connect} /></Card>
               </div>
               <AdminAccounts />
+            </>
+          )}
+
+          {/* ═══ MON COMPTE - SUPER ADMIN ═══ */}
+          {section === 'account' && (
+            <>
+              <Header title="Mon compte" desc="Gérez vos identifiants Super Admin (nom, email, mot de passe)." />
+              <AdminAccountSettings />
             </>
           )}
 

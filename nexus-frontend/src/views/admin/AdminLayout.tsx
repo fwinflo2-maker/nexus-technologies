@@ -7,7 +7,7 @@ export const ADMIN_NAV = [
   { id: 'overview', label: 'Vue d’ensemble', icon: '👑' },
   { id: 'send', label: 'Envoyer', icon: '↗️' },
   { id: 'wallet', label: 'Portefeuille', icon: '💼' },
-  { id: 'accounts', label: 'Comptes', icon: '👥' },
+  { id: 'clients', label: 'Gestion des clients', icon: '👥' },
   { id: 'transactions', label: 'Transactions', icon: '🔄' },
   { id: 'operations', label: 'Opérations', icon: '⚙️' },
   { id: 'treasury', label: 'Trésorerie', icon: '💰' },
@@ -19,6 +19,7 @@ export const ADMIN_NAV = [
   { id: 'technical', label: 'Technique', icon: '🛠️' },
   { id: 'audit', label: 'Audit', icon: '📜' },
   { id: 'settings', label: 'Paramètres', icon: '⚙️' },
+  { id: 'account', label: 'Mon compte', icon: '👤' },
 ];
 
 export default function AdminLayout({
