@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import { type ReactNode, useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useI18n } from '../../context/I18nContext';
@@ -32,6 +32,28 @@ const svgIcons: Record<string, ReactNode> = {
 export function LandingPage({ onLogin, onRegister }: LandingPageProps) {
   const { t } = useI18n();
 
+  // Accès admin protégé : il faut 3 clics (rapides) sur le logo NEXUS pour
+  // éviter toute redirection accidentelle vers la page de connexion.
+  const [adminClicks, setAdminClicks] = useState(0);
+  const clickResetRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (adminClicks === 0) return;
+    // Réinitialise le compteur si l'utilisateur attend trop entre deux clics.
+    clickResetRef.current = window.setTimeout(() => setAdminClicks(0), 1500);
+    return () => window.clearTimeout(clickResetRef.current);
+  }, [adminClicks]);
+
+  function handleLogoClick() {
+    const next = adminClicks + 1;
+    if (next >= 3) {
+      setAdminClicks(0);
+      onLogin();
+    } else {
+      setAdminClicks(next);
+    }
+  }
+
   const steps = [
     { num: '01', icon: 'send', title: t('landing_step1_title'), text: t('landing_step1_text') },
     { num: '02', icon: 'search', title: t('landing_step2_title'), text: t('landing_step2_text') },
@@ -49,9 +71,14 @@ export function LandingPage({ onLogin, onRegister }: LandingPageProps) {
       <ParticlesBackground />
       <nav className="site-nav">
         <div className="site-nav-inner">
-          <div className="nav-brand" role="button" aria-label="Connexion" onClick={onLogin} style={{ cursor: 'pointer' }} title="Se connecter">
+          <div className="nav-brand" role="button" aria-label="Connexion (3 clics)" onClick={handleLogoClick} style={{ cursor: 'pointer', userSelect: 'none' }} title="Connexion admin">
             <svg width="28" height="28" viewBox="0 0 32 32" fill="none"><path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="url(#lg-nav)" strokeWidth="2" fill="none"/><path d="M16 10L22 14V22L16 26L10 22V14L16 10Z" fill="url(#lg-nav)"/><defs><linearGradient id="lg-nav" x1="4" y1="2" x2="28" y2="30"><stop stopColor="#7C3AED"/><stop offset="1" stopColor="#a855f7"/></linearGradient></defs></svg>
             <span className="brand-text">NEXUS</span>
+            {adminClicks > 0 && (
+              <span style={{ fontSize: 9, color: 'var(--cyan)', marginLeft: 6, fontWeight: 600 }}>
+                {3 - adminClicks} clic{3 - adminClicks > 1 ? 's' : ''}
+              </span>
+            )}
           </div>
           <div className="nav-links">
             <a href="#comment-ca-marche" className="nav-link-text">{t('nav_how')}</a>
