@@ -77,7 +77,7 @@ final class CapabilityEngine
      *
      * @throws HttpException 400 si aucun provider ne couvre le corridor.
      */
-    public static function findEligible(array $intent, ?ExecutionEnvironment $environment = null): array
+    public static function findEligible(array $intent, ?ExecutionEnvironment $environment = null, bool $allRoutes = false): array
     {
         // La fiabilité se mesure PAR environnement : des succès en sandbox ne
         // disent rien de la production. À défaut de contexte, on suit le
@@ -100,10 +100,14 @@ final class CapabilityEngine
             }
 
             // ── Filtre 2 : couvre le pays de destination ─────────
-            // On étend « EU » vers les pays individuels
-            $providerCountries = self::expandCountries($provider['countries']);
-            if (!in_array($countryCode, $providerCountries, true)) {
-                continue;
+            // On étend « EU » vers les pays individuels. Le Super Admin
+            // ($allRoutes) accède à TOUTES les routes, y compris hors des
+            // pays couverts par le provider.
+            if (!$allRoutes) {
+                $providerCountries = self::expandCountries($provider['countries']);
+                if (!in_array($countryCode, $providerCountries, true)) {
+                    continue;
+                }
             }
 
             // ── Filtre 3 : disponibilité réelle (§12, §13) ────────

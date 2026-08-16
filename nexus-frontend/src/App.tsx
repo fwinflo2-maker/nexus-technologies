@@ -102,17 +102,16 @@ function DashboardLayout() {
   const { user } = useAuth();
   const t = useDashT();
 
-  // Garde-fou : un superadmin atterrissant sur le dashboard client est
-  // redirigé vers son tableau de bord Super Admin. Centralisé ici, cela
-  // garantit que la redirection s'applique quel que soit le timing de
-  // navigation (résultat identique sur tous les navigateurs).
-  if (user?.platform_role === 'superadmin') {
-    return <Navigate to="/admin" replace />;
-  }
+  // Le Super Admin peut accéder au dashboard client (Portefeuille, Envoyer…)
+  // en plus de son centre de contrôle /admin. Il reçoit le mode personnel
+  // pour disposer des outils d'envoi/portefeuille, et peut envoyer depuis
+  // n'importe où (backend : aucune restriction).
+  const isSuperAdmin = user?.platform_role === 'superadmin';
 
   // Le mode est FIXÉ par le type de compte : un compte personal est toujours
   // personal, un compte business toujours business. Pas de bascule P/B.
-  const isPersonalAccount = user?.account_type === 'personal';
+  // Pour le Super Admin, on force le mode personnel (Portefeuille + Envoyer).
+  const isPersonalAccount = isSuperAdmin ? true : user?.account_type === 'personal';
   const effectiveMode: Mode = isPersonalAccount ? 'personal' : 'business';
 
   return (

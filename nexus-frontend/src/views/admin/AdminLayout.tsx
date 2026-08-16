@@ -75,6 +75,10 @@ export default function AdminLayout({
           <Link to="/dashboard" style={{ fontSize: 12, color: 'var(--text-dim)', textDecoration: 'none', display: 'block', padding: '6px 12px' }}>
             ← Dashboard client
           </Link>
+          <div style={{ display: 'flex', gap: 4, padding: '6px 12px' }}>
+            <Link to="/send" style={{ fontSize: 11, color: 'var(--cyan)', textDecoration: 'none', border: '1px solid rgba(59,130,246,0.3)', borderRadius: 8, padding: '4px 10px' }}>↗ Envoyer</Link>
+            <Link to="/wallet" style={{ fontSize: 11, color: 'var(--cyan)', textDecoration: 'none', border: '1px solid rgba(59,130,246,0.3)', borderRadius: 8, padding: '4px 10px' }}>💼 Portefeuille</Link>
+          </div>
         </div>
       </aside>
 

@@ -94,6 +94,35 @@ final class PolicyEngine
             return self::declined($reason, ['status' => $status]);
         }
 
+        // ── 1bis. EXEMPTION SUPER ADMIN ──────────────────────────
+        // Le Super Admin peut envoyer sans restriction de plafond KYC ni de
+        // filtrage de corridor/sanctions : il a accès à toutes les routes
+        // possibles depuis n'importe où. On conserve uniquement le contrôle
+        // de disponibilité du wallet (sinon aucune exécution n'est possible)
+        // et le statut du compte.
+        $isSuperAdmin = ($user['platform_role'] ?? '') === 'superadmin';
+        if ($isSuperAdmin) {
+            $details['superadmin_exempt'] = true;
+
+            // Disponibilité du wallet (toujours vérifiée).
+            $available = self::getWalletAvailable($userId, $intent['sourceCurrency']);
+            $details['wallet_available'] = $available;
+            if ($available < $amount) {
+                return self::declined(
+                    sprintf('Solde disponible insuffisant : %.2f %s.', $available, $intent['sourceCurrency']),
+                    $details
+                );
+            }
+
+            $details['status'] = $status;
+            $details['kyc_level'] = $kycLevel;
+            return [
+                'decision' => 'APPROVED',
+                'reason'   => 'Super Admin — envoi sans restriction (toutes routes autorisées).',
+                'details'  => $details,
+            ];
+        }
+
         // ── 2. Plafonds KYC ─────────────────────────────────────
         $monthlyLimit = self::KYC_LIMITS[$kycLevel] ?? self::KYC_LIMITS['basic'];
         $monthlyTotal = self::getMonthlyTotal($userId, $intent['sourceCurrency']);
