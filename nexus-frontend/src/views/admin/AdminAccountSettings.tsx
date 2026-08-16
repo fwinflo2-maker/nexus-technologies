@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { apiGetUserProfile, apiUpdateProfile, apiUpdatePassword, type UserProfile } from '../../api/client';
+import { apiGetUserProfile, apiUpdateProfile, apiUpdatePassword, apiGetSessions, apiRevokeSession, type UserProfile, type UserSession } from '../../api/client';
 
 export default function AdminAccountSettings() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -13,9 +13,12 @@ export default function AdminAccountSettings() {
     new_password: '',
     confirm_password: '',
   });
+  const [sessions, setSessions] = useState<UserSession[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
 
   useEffect(() => {
     loadProfile();
+    loadSessions();
   }, []);
 
   async function loadProfile() {
@@ -29,6 +32,35 @@ export default function AdminAccountSettings() {
       }
     } catch (err) {
       setError('Impossible de charger le profil.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadSessions() {
+    try {
+      setSessionsLoading(true);
+      const response = await apiGetSessions();
+      if (response.success && response.data) {
+        setSessions(response.data.sessions || []);
+      }
+    } catch (err) {
+      console.error('Erreur chargement sessions:', err);
+    } finally {
+      setSessionsLoading(false);
+    }
+  }
+
+  async function handleRevokeSession(jti: string) {
+    try {
+      setLoading(true);
+      const response = await apiRevokeSession(jti);
+      if (response.success) {
+        setSuccess('Session révoquée avec succès.');
+        loadSessions();
+      }
+    } catch (err: any) {
+      setError(err.message || 'Erreur lors de la révocation de la session.');
     } finally {
       setLoading(false);
     }
@@ -155,6 +187,32 @@ export default function AdminAccountSettings() {
         <div style={{ marginTop: 16 }}>
           <button className="btn btn-primary" onClick={handleUpdatePassword} disabled={loading}>{loading ? 'Modification...' : 'Changer le mot de passe'}</button>
         </div>
+      </div>
+
+      {/* Sessions actives */}
+      <div className="card" style={{ padding: 20, marginTop: 20 }}>
+        <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>🔒 Sessions actives</h3>
+        {sessionsLoading ? (
+          <div style={{ textAlign: 'center', padding: 20 }}><div className="nexus-spinner" /></div>
+        ) : sessions.length === 0 ? (
+          <p style={{ fontSize: 12, color: 'var(--text-dim)' }}>Aucune session active.</p>
+        ) : (
+          <div style={{ display: 'grid', gap: 10 }}>
+            {sessions.map((session) => (
+              <div key={session.jti} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', background: 'var(--bg-tertiary)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 600 }}>{session.device || 'Appareil inconnu'}</div>
+                  <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>{session.ip_address || 'IP inconnue'}</div>
+                  <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>Créée: {new Date(session.created_at).toLocaleString('fr-FR')}</div>
+                  {session.is_current && <span style={{ fontSize: 9, color: '#10B981', fontWeight: 700 }}>● Actuelle</span>}
+                </div>
+                {!session.is_current && (
+                  <button className="btn btn-ghost" onClick={() => handleRevokeSession(session.jti)} style={{ fontSize: 11, padding: '4px 10px' }}>Révoquer</button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
