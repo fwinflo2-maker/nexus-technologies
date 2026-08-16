@@ -1,48 +1,26 @@
-# ==============================================================================
-# NEXUS — fichiers non versionnés
-# ==============================================================================
-# Règle : tout ce qui est reconstructible (dépendances, builds, caches) ou
-# secret (.env) reste hors de Git. Les lockfiles, eux, SONT versionnés : ils
-# garantissent que tout le monde installe exactement les mêmes versions.
+```
+# Database related files
+*.sql
+*.db
+*.sqlite
 
-# --- Dépendances (reconstructibles : composer install / npm ci) ---------------
-vendor/
-node_modules/
-
-# --- Secrets ------------------------------------------------------------------
+# Environment files
 .env
+.env.local
 .env.*
-!.env.example
 
-# --- PHP ----------------------------------------------------------------------
-*.php~
-*.php.bak
-.php_cs.cache
-.php-cs-fixer.cache
-.phpunit.result.cache
-.phpunit.cache/
-
-# --- Frontend / build ---------------------------------------------------------
-dist/
-build/
-.vite/
-*.min.js
-*.min.css
-*.tsbuildinfo
-
-# --- Journaux -----------------------------------------------------------------
+# Logs
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
 
-# --- IDE ----------------------------------------------------------------------
-.vscode/
-.idea/
-*.swp
-*.swo
+# Temporary files
+*.tmp
+*.temp
 
-# --- OS -----------------------------------------------------------------------
+# Backup files
+*.bak
+*.backup
+
+# OS generated files
 .DS_Store
 Thumbs.db
+```
