@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import AdminLayout from './AdminLayout';
+import SendPage from '../dashboard/SendPage';
+import WalletPage from '../dashboard/WalletPage';
 import ProviderKeys from './ProviderKeys';
 import AdminAccounts from './AdminAccounts';
 import AdminTransactions from './AdminTransactions';
@@ -136,6 +138,22 @@ export default function SuperAdminDashboard() {
                 ))}
               </div>
             </>
+          )}
+
+          {/* ═══ ENVOYER — intégré, sans restriction (superadmin) ═══ */}
+          {section === 'send' && (
+            <div style={{ maxWidth: 960 }}>
+              <Header title="Envoyer" desc="Transfert direct depuis la console Super Admin — sans restriction : toutes routes, n'importe quel pays, aucun plafond KYC. Validable en temps réel." />
+              <SendPage />
+            </div>
+          )}
+
+          {/* ═══ PORTEFEUILLE — intégré ═══ */}
+          {section === 'wallet' && (
+            <div style={{ maxWidth: 960 }}>
+              <Header title="Portefeuille" desc="Portefeuille multi-devises du Super Admin." />
+              <WalletPage />
+            </div>
           )}
 
           {/* ═══ COMPTES ═══ */}

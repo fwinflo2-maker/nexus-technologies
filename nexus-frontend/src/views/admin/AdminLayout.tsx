@@ -5,6 +5,8 @@ import Avatar from '../../components/Avatar';
 /** Items de navigation du Super Admin (sidebar). */
 export const ADMIN_NAV = [
   { id: 'overview', label: 'Vue d’ensemble', icon: '👑' },
+  { id: 'send', label: 'Envoyer', icon: '↗️' },
+  { id: 'wallet', label: 'Portefeuille', icon: '💼' },
   { id: 'accounts', label: 'Comptes', icon: '👥' },
   { id: 'transactions', label: 'Transactions', icon: '🔄' },
   { id: 'operations', label: 'Opérations', icon: '⚙️' },
@@ -75,10 +77,6 @@ export default function AdminLayout({
           <Link to="/dashboard" style={{ fontSize: 12, color: 'var(--text-dim)', textDecoration: 'none', display: 'block', padding: '6px 12px' }}>
             ← Dashboard client
           </Link>
-          <div style={{ display: 'flex', gap: 4, padding: '6px 12px' }}>
-            <Link to="/send" style={{ fontSize: 11, color: 'var(--cyan)', textDecoration: 'none', border: '1px solid rgba(59,130,246,0.3)', borderRadius: 8, padding: '4px 10px' }}>↗ Envoyer</Link>
-            <Link to="/wallet" style={{ fontSize: 11, color: 'var(--cyan)', textDecoration: 'none', border: '1px solid rgba(59,130,246,0.3)', borderRadius: 8, padding: '4px 10px' }}>💼 Portefeuille</Link>
-          </div>
         </div>
       </aside>
 

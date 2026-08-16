@@ -1,0 +1,108 @@
+/* ════════════════════════════════════════════════════════════════════════
+   ADMIN LOGIN — page de connexion Super Admin ultra premium (glassmorphism)
+   ════════════════════════════════════════════════════════════════════════ */
+
+.admin-login-page {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1.25rem;
+  overflow: hidden;
+  background: radial-gradient(1200px 800px at 50% -10%, #0b1220, #070b14 60%, #05070d);
+}
+
+/* Halos ambiants */
+.al-orb { position: fixed; border-radius: 50%; filter: blur(70px); pointer-events: none; opacity: 0.35; }
+.al-orb-1 { width: 480px; height: 480px; top: -10%; left: -6%; background: radial-gradient(circle, rgba(59,130,246,0.45), transparent 70%); }
+.al-orb-2 { width: 420px; height: 420px; bottom: -12%; right: -8%; background: radial-gradient(circle, rgba(96,165,250,0.30), transparent 70%); }
+
+/* Grille technologique de fond */
+.al-grid {
+  position: fixed; inset: 0; pointer-events: none; opacity: 0.5;
+  background-image:
+    linear-gradient(rgba(59,130,246,0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(59,130,246,0.05) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 45%, #000, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 45%, #000, transparent 75%);
+}
+
+/* Carte glass */
+.al-glass {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  padding: 2.2rem 2.2rem 1.8rem;
+  border-radius: 22px;
+  background: linear-gradient(160deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02));
+  border: 1px solid rgba(255,255,255,0.10);
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  box-shadow: 0 30px 80px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.08);
+}
+
+/* En-tête */
+.al-head { display: flex; align-items: center; gap: 14px; margin-bottom: 2rem; }
+.al-logo {
+  width: 54px; height: 54px; border-radius: 16px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, rgba(59,130,246,0.25), rgba(96,165,250,0.08));
+  border: 1px solid rgba(59,130,246,0.35);
+  box-shadow: 0 8px 30px rgba(59,130,246,0.25);
+}
+.al-title-block { flex: 1; min-width: 0; }
+.al-eyebrow { font-size: 9px; letter-spacing: 0.22em; color: rgba(147,197,253,0.8); font-weight: 700; }
+.al-title { font-size: 1.35rem; font-weight: 800; color: #fff; margin: 3px 0 0; letter-spacing: -0.3px; }
+.al-secure {
+  display: flex; align-items: center; gap: 6px; font-size: 10px; color: #86efac;
+  background: rgba(16,185,129,0.10); border: 1px solid rgba(16,185,129,0.25);
+  padding: 4px 9px; border-radius: 20px; white-space: nowrap;
+}
+.al-secure-dot { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; animation: al-pulse 1.8s infinite; }
+@keyframes al-pulse { 0%,100%{ box-shadow: 0 0 0 0 rgba(34,197,94,0.5);} 70%{ box-shadow: 0 0 0 7px rgba(34,197,94,0);} }
+
+/* Champs */
+.al-field { margin-bottom: 1.1rem; }
+.al-label { display: block; font-size: 11px; font-weight: 600; color: rgba(203,213,225,0.85); margin-bottom: 6px; letter-spacing: 0.02em; }
+.al-input {
+  width: 100%; padding: 12px 14px; font-size: 13px; color: #f1f5f9;
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 11px; outline: none; transition: all 0.2s ease;
+}
+.al-input::placeholder { color: rgba(148,163,184,0.6); }
+.al-input:focus { border-color: rgba(59,130,246,0.6); box-shadow: 0 0 0 3px rgba(59,130,246,0.15); background: rgba(255,255,255,0.07); }
+.al-pass-wrap { position: relative; }
+.al-eye { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 15px; padding: 4px; opacity: 0.7; }
+.al-eye:hover { opacity: 1; }
+
+.al-error {
+  font-size: 12px; color: #fca5a5; background: rgba(239,68,68,0.10);
+  border: 1px solid rgba(239,68,68,0.25); padding: 8px 12px; border-radius: 9px; margin-bottom: 1rem;
+}
+
+/* Bouton */
+.al-submit {
+  width: 100%; padding: 13px; font-size: 13.5px; font-weight: 700; color: #fff;
+  background: linear-gradient(135deg, #2563EB, #3B82F6);
+  border: none; border-radius: 11px; cursor: pointer;
+  box-shadow: 0 12px 30px rgba(37,99,235,0.35);
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: box-shadow 0.2s ease;
+}
+.al-submit:hover { box-shadow: 0 14px 36px rgba(37,99,235,0.5); }
+.al-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+.al-spinner { width: 15px; height: 15px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: al-spin 0.7s linear infinite; }
+@keyframes al-spin { to { transform: rotate(360deg); } }
+
+/* Pied */
+.al-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 1.6rem; gap: 8px; }
+.al-back { background: none; border: none; color: rgba(148,163,184,0.85); font-size: 12px; cursor: pointer; padding: 0; }
+.al-back:hover { color: #93c5fd; }
+.al-hint { font-size: 10px; color: rgba(148,163,184,0.5); }
+
+@media (max-width: 480px) {
+  .al-glass { padding: 1.6rem 1.3rem 1.3rem; }
+  .al-secure { display: none; }
+}

@@ -7,6 +7,7 @@ import { LandingPage } from './views/public/LandingPage';
 import { LoginPage } from './views/auth/LoginPage';
 import { RegisterPage } from './views/auth/RegisterPage';
 import ForgotPasswordPage from './views/auth/ForgotPasswordPage';
+import AdminLoginPage from './views/auth/AdminLoginPage';
 import { PrivacyPage, TermsPage, DocumentationPage, SupportPage } from './views/public/InfoPages';
 import GearsBackground from './components/dashboard/GearsBackground';
 import { ParticlesBackground } from './components/ParticlesBackground';
@@ -62,6 +63,7 @@ function PublicRouter() {
           element={
             <LandingPage
               onLogin={() => navigate('/login')}
+              onAdminLogin={() => navigate('/admin-login')}
               onRegister={() => navigate('/register')}
             />
           }
@@ -85,6 +87,7 @@ function PublicRouter() {
           }
         />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/admin-login" element={<AdminLoginPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/docs" element={<DocumentationPage />} />
