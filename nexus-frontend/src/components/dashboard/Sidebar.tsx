@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useDashT } from '../../data/dashboard-i18n';
 import Avatar from '../Avatar';
@@ -43,7 +43,6 @@ const navCommon = [
  * (clavier accessible : Echap pour fermer, focus sur le premier lien).
  */
 export default function Sidebar({ mode }: SidebarProps) {
-  const navigate = useNavigate();
   const { user, logout } = useAuth();
   const t = useDashT();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -89,8 +88,8 @@ export default function Sidebar({ mode }: SidebarProps) {
   }, [menuOpen]);
 
   const handleLogout = async () => {
+    // logout() (AuthContext) révogue la session et redirige vers /login.
     await logout();
-    navigate('/login', { replace: true });
   };
 
 

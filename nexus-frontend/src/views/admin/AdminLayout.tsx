@@ -92,7 +92,7 @@ export default function AdminLayout({
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-bright)' }}>{user?.name || 'Admin'}</div>
               <div style={{ fontSize: 10, color: '#3B82F6' }}>superadmin</div>
             </div>
-            <button onClick={async () => { await logout(); }} className="btn btn-ghost" style={{ fontSize: 11, padding: '6px 12px' }}>⏻</button>
+            <button onClick={() => { void logout(); }} className="btn btn-ghost" style={{ fontSize: 11, padding: '6px 12px' }}>⏻</button>
           </div>
         </header>
 

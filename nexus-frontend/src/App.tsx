@@ -83,7 +83,10 @@ function PublicRouter() {
           }
         />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        {/* Toute route inconnue ou protégée atteinte sans session (ex. juste
+            après une déconnexion depuis /admin ou /dashboard) mène à la page
+            de connexion, et non à la landing. */}
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </>
   );

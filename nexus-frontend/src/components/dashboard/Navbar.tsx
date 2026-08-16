@@ -98,8 +98,8 @@ export default function Navbar({ mode, onModeChange }: NavbarProps) {
   }, [menuOpen]);
 
   const handleLogout = async () => {
+    // logout() (AuthContext) révogue la session et redirige vers /login.
     await logout();
-    navigate('/login', { replace: true });
   };
 
   const handleModeChange = (m: Mode) => {

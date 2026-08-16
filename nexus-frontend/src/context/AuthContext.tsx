@@ -55,11 +55,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refreshSession();
   }, [refreshSession]);
 
-  /** Déconnexion — révoque le token côté serveur et nettoie l'état local */
-  const logout = async () => {
-    await apiLogout();
+  /**
+   * Déconnexion — révoque le token côté serveur, nettoie l'état local et
+   * redirige TOUJOURS vers la page de connexion.
+   *
+   * On navigue vers /login AVANT de vider `user` : sinon, au passage de
+   * `user` à null, AppRoutes rend PublicRouter dont le fallback
+   * `<Navigate to="/">` ramène sur la landing. Naviguer en premier garantit
+   * qu'à la mise à jour de l'état l'URL est déjà /login (page de connexion).
+   */
+  const logout = useCallback(async () => {
+    try {
+      await apiLogout();
+    } catch {
+      // Même si la révocation serveur échoue (réseau), on déconnecte localement.
+    }
+    // En vidant `user`, AppRoutes repasse sur PublicRouter. Comme on se
+    // trouve alors sur une route protégée (/dashboard, /admin, …), le
+    // fallback de PublicRouter redirige vers /login (page de connexion),
+    // jamais vers la landing.
     setUser(null);
-  };
+  }, []);
 
   return (
     <AuthContext.Provider
