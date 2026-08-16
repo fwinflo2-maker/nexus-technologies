@@ -1,5 +1,5 @@
 import { useAuth } from '../../context/AuthContext';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import Avatar from '../../components/Avatar';
 import { ParticlesBackground } from '../../components/ParticlesBackground';
 
@@ -33,8 +33,14 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const now = new Date();
   const timeStr = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/admin-login');
+  };
 
   return (
     <div className="nexus-dash layout" style={{ minHeight: '100vh' }}>
@@ -97,7 +103,7 @@ export default function AdminLayout({
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-bright)' }}>{user?.name || 'Admin'}</div>
               <div style={{ fontSize: 10, color: '#3B82F6' }}>superadmin</div>
             </div>
-            <button onClick={() => { void logout(); }} className="btn btn-ghost" style={{ fontSize: 11, padding: '6px 12px' }}>⏻</button>
+            <button onClick={() => { void handleLogout(); }} className="btn btn-ghost" style={{ fontSize: 11, padding: '6px 12px' }}>⏻</button>
           </div>
         </header>
 
