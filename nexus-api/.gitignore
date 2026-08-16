@@ -1,0 +1,8 @@
+# Fichier d'environnement local (secrets) — jamais versionné.
+.env
+
+# Journaux
+*.log
+
+# Cache de tests PHPUnit
+.phpunit.cache/

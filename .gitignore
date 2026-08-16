@@ -1,0 +1,46 @@
+```
+# Dependencies
+vendor/
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+
+# Environment
+.env
+.env.local
+.env.*
+
+# Editors
+.vscode/
+.idea/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# PHP specific
+*.php~
+*.php.bak
+*.php.swp
+
+# Composer
+composer.lock
+composer.phar
+
+# PHPUnit
+.phpunit.result.cache
+
+# Code coverage
+coverage/
+htmlcov/
+*.clover.xml
+*.crap.xml
+*.html
+*.xml
+
+# IDE
+nbproject/
+
+```

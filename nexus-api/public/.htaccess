@@ -1,0 +1,11 @@
+# Désactive le listing des répertoires.
+Options -Indexes
+
+RewriteEngine On
+
+# Ne réécrit pas si le fichier ou le dossier demandé existe réellement.
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+
+# Toutes les autres requêtes (dont /api/*) sont routées vers le front controller.
+RewriteRule ^(.*)$ index.php [QSA,L]

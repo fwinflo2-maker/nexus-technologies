@@ -1,0 +1,245 @@
+name: CI
+
+# Le dépôt embarque 49 fichiers de tests PHPUnit, un typecheck TypeScript et un
+# lint — mais rien ne les exécutait automatiquement. Ce workflow les branche sur
+# chaque push et chaque pull request.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Un push qui en remplace un autre sur la même branche annule le run précédent.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Backend PHP — schéma réel + migrations + PHPUnit sur MySQL
+  # ---------------------------------------------------------------------------
+  api:
+    name: API PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # 8.1 = plancher déclaré dans composer.json ; 8.3 = version courante.
+        php: ['8.1', '8.3']
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: nexus_test
+        ports:
+          - 3306:3306
+        # Sans ce health check, les premiers tests attaquent un MySQL encore
+        # en cours d'initialisation et échouent de façon intermittente.
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    defaults:
+      run:
+        working-directory: nexus-api
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Installer PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          # bcmath : arithmétique décimale du ledger. mbstring/openssl :
+          # validation et chiffrement. Sans elles, l'API démarre mais casse
+          # à l'exécution (cf. README.dev.md).
+          extensions: pdo, pdo_mysql, bcmath, mbstring, openssl, json
+          coverage: none
+          tools: composer:v2
+
+      - name: Installer les dépendances Composer
+        run: composer install --prefer-dist --no-progress --no-interaction
+
+      - name: Vérifier la syntaxe PHP de tout le code source
+        run: composer run-script lint
+
+      - name: Construire la base de test (schéma + migrations)
+        # Rejoue database/schema.sql puis toutes les migrations du manifeste,
+        # dans l'ordre : la CI teste le vrai chemin d'installation, pas un dump.
+        run: php scripts/setup_test_db.php
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_USER: root
+          DB_PASS: ''
+          DB_TEST_NAME: nexus_test
+
+      - name: PHPUnit
+        run: vendor/bin/phpunit --colors=never
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_NAME: nexus_test
+          DB_USER: root
+          DB_PASS: ''
+
+  # ---------------------------------------------------------------------------
+  # Cohérence du schéma : migrations et full_schema.sql doivent converger
+  # ---------------------------------------------------------------------------
+  schema:
+    name: Cohérence du schéma SQL
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Installer le client MySQL
+        run: sudo apt-get update && sudo apt-get install -y mysql-client
+
+      - name: Comparer les deux chemins d'installation
+        # scripts/compare_schemas.sh installe la base par migrations d'un côté,
+        # par full_schema.sql de l'autre, et diffe les deux. Une migration
+        # ajoutée sans régénérer full_schema.sql est rattrapée ici.
+        working-directory: nexus-api
+        run: bash scripts/compare_schemas.sh 127.0.0.1 root ''
+
+      - name: Vérifier que database/sql/ décrit bien le schéma courant
+        # Le SQL de référence est GÉNÉRÉ. S'il n'est pas régénéré après une
+        # migration, il décrit un schéma périmé tout en restant plausible —
+        # c'est exactement ainsi que full_schema.sql avait divergé.
+        #
+        # On ne compare PAS le texte du fichier : `mysqldump` de MySQL 8 et
+        # celui de MariaDB produisent des dumps différents pour un schéma
+        # identique (`bigint` vs `bigint(20)`, guillemets, COMMENT…). Exiger
+        # l'égalité textuelle rendrait le job dépendant du moteur ayant servi
+        # à générer le fichier, et il échouerait éternellement.
+        #
+        # On compare donc ce qui compte : la STRUCTURE obtenue en installant
+        # d'un côté par migrations, de l'autre par database/sql/nexus_schema.sql.
+        working-directory: nexus-api
+        run: |
+          set -euo pipefail
+
+          mysql -h127.0.0.1 -uroot -e "
+            DROP DATABASE IF EXISTS nexus_from_migrations;
+            DROP DATABASE IF EXISTS nexus_from_sqlref;
+            CREATE DATABASE nexus_from_migrations CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+            CREATE DATABASE nexus_from_sqlref     CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+
+          # Chemin 1 : le runner de migrations (source de vérité).
+          sed 's/CREATE DATABASE[^;]*;//Ig; s/USE `\?nexus`\?[[:space:]]*;//Ig' database/schema.sql \
+            | mysql -h127.0.0.1 -uroot nexus_from_migrations
+          grep -vE '^\s*#|^\s*$' database/migrations.manifest | while read -r m; do
+            sed 's/CREATE DATABASE[^;]*;//Ig; s/USE `\?nexus`\?[[:space:]]*;//Ig' "database/migrations/$m" \
+              | mysql -h127.0.0.1 -uroot nexus_from_migrations
+          done
+
+          # Chemin 2 : le SQL de référence versionné.
+          mysql -h127.0.0.1 -uroot nexus_from_sqlref < database/sql/nexus_schema.sql
+
+          dump_structure() {
+            mysql -h127.0.0.1 -uroot -sN -e "
+              SELECT CONCAT_WS('|', table_name, column_name, column_type,
+                               is_nullable, COALESCE(column_default,'~'))
+              FROM information_schema.columns
+              WHERE table_schema='$1' ORDER BY table_name, column_name;"
+          }
+
+          dump_structure nexus_from_migrations > /tmp/from_migrations.txt
+          dump_structure nexus_from_sqlref     > /tmp/from_sqlref.txt
+
+          COLS=$(wc -l < /tmp/from_migrations.txt)
+          if [ "$COLS" -eq 0 ]; then
+            echo "::error::Aucune colonne installée — vérification sans objet."
+            exit 1
+          fi
+
+          if ! diff -u /tmp/from_migrations.txt /tmp/from_sqlref.txt; then
+            echo "::error::database/sql/nexus_schema.sql ne décrit plus le schéma des migrations."
+            echo "Régénérez-le : bash nexus-api/scripts/export_sql_reference.sh"
+            exit 1
+          fi
+
+          echo "database/sql/ décrit fidèlement le schéma courant ($COLS colonnes)."
+
+  # ---------------------------------------------------------------------------
+  # Frontend React — typecheck, lint, build de production
+  # ---------------------------------------------------------------------------
+  frontend:
+    name: Frontend React
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: nexus-frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: nexus-frontend/package-lock.json
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      - name: Typecheck TypeScript
+        run: npx tsc -b
+
+      - name: Lint
+        # --deny-warnings n'est pas activé : 6 avertissements connus
+        # (react-refresh/only-export-components) subsistent et seront traités
+        # séparément. Les erreurs, elles, font échouer le job.
+        run: npx oxlint
+
+      - name: Build de production
+        run: npm run build
+
+  # ---------------------------------------------------------------------------
+  # Service d'agents Node — compilation TypeScript
+  # ---------------------------------------------------------------------------
+  agents:
+    name: Agents Node
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: agents
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: agents/package-lock.json
+
+      - name: Installer les dépendances
+        run: npm ci
+
+      - name: Compiler
+        run: npm run build

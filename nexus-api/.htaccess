@@ -1,0 +1,18 @@
+# Défense en profondeur : protège la configuration et le code source
+# si le DocumentRoot Apache pointe (à tort) sur la racine du projet.
+# Le DocumentRoot doit normalement pointer sur public/.
+
+Options -Indexes
+
+# Apache 2.4+ : refuse l'accès direct aux fichiers d'environnement.
+<IfModule mod_authz_core.c>
+    <FilesMatch "^(\.env|\.env\.example)$">
+        Require all denied
+    </FilesMatch>
+</IfModule>
+
+# Refuse l'accès direct aux dossiers hors du web root (config/, src/).
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^(?:config|src)(?:/|$) - [F,L]
+</IfModule>

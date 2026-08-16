@@ -1,0 +1,107 @@
+import { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { apiBusinessTreasury, type BusinessWallet } from '../../api/client';
+import { fmtMoney } from './ui';
+import { useDashT } from '../../data/dashboard-i18n';
+import { AnimatedNumber, TiltCard, EASE } from '../../components/anim/Premium';
+
+/** Trésorerie — multi-devises, liquidité, exposition FX (backend). */
+export default function TreasuryPage() {
+  const t = useDashT();
+  const [wallets, setWallets] = useState<BusinessWallet[]>([]);
+  const [totals, setTotals] = useState<{ total_assets: number; available: number; ref_currency: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetch = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const res = await apiBusinessTreasury();
+    if (!res.success || !res.data) {
+      setError(res.error || 'Impossible de charger la trésorerie.');
+      setLoading(false);
+      return;
+    }
+    setWallets(res.data.wallets);
+    setTotals({ total_assets: res.data.totals.total_assets, available: res.data.totals.available, ref_currency: res.data.totals.ref_currency });
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetch(); }, [fetch]);
+
+  if (loading) return <div className="card card-hi-c" style={{ padding: 48, textAlign: 'center' }}><div className="nexus-spinner" /><p style={{ marginTop: 14, color: 'var(--text-mid)' }}>Chargement…</p></div>;
+  if (error) return <div className="card card-hi-g" style={{ padding: 40, textAlign: 'center' }}><p style={{ color: 'var(--text-mid)', marginBottom: 14 }}>{error}</p><button className="se-cta" onClick={fetch}>↻ Réessayer</button></div>;
+
+  const maxVal = Math.max(1, ...wallets.map(w => w.ref_value));
+
+  return (
+    <div className="page">
+      <motion.div className="page-header animate-up" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+        <div className="page-label">TRÉSORERIE</div>
+        <div className="page-title">Trésorerie multi-devises</div>
+      </motion.div>
+
+      {totals && (
+        <div style={{ display: 'flex', gap: 14, marginBottom: 22, flexWrap: 'wrap' }}>
+          <TiltCard className="card" style={{ padding: 18, flex: 1, minWidth: 200, position: 'relative' }} max={6}>
+            <div style={{ fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Liquidité totale</div>
+            <div className="mono" style={{ fontSize: 24, fontWeight: 800, color: 'var(--cyan)', marginTop: 6 }}>
+              <AnimatedNumber value={totals.total_assets} format={(n) => fmtMoney(n, totals.ref_currency)} />
+            </div>
+          </TiltCard>
+          <TiltCard className="card" style={{ padding: 18, flex: 1, minWidth: 200, position: 'relative' }} max={6}>
+            <div style={{ fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Disponible immédiatement</div>
+            <div className="mono" style={{ fontSize: 24, fontWeight: 800, color: 'var(--green)', marginTop: 6 }}>
+              <AnimatedNumber value={totals.available} format={(n) => fmtMoney(n, totals.ref_currency)} />
+            </div>
+          </TiltCard>
+        </div>
+      )}
+
+      {wallets.length === 0 ? (
+        <div className="card card-hi-c" style={{ padding: 40, textAlign: 'center' }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>💼</div>
+          <p style={{ color: 'var(--text-mid)' }}>{t('empty.noWallets')}</p>
+        </div>
+      ) : (
+        <div className="card" style={{ padding: 20 }}>
+          <div className="page-label" style={{ marginBottom: 14 }}>Positions par devise + exposition FX</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {wallets.map((w, i) => (
+              <motion.div
+                key={w.currency}
+                style={{ borderBottom: '1px solid var(--border)', paddingBottom: 14 }}
+                initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15 + i * 0.08, duration: 0.45, ease: EASE }}
+                whileHover={{ x: 4, transition: { type: 'spring', stiffness: 260, damping: 20 } }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <div>
+                    <span style={{ fontWeight: 700, color: 'var(--text-bright)', fontSize: 15 }}>{w.currency}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-dim)', marginLeft: 8 }}>solde <AnimatedNumber value={w.balance} /></span>
+                  </div>
+                  <div className="mono" style={{ fontWeight: 700, color: 'var(--text-bright)' }}>≈ <AnimatedNumber value={w.ref_value} /> EUR</div>
+                </div>
+                <div style={{ display: 'flex', gap: 10, marginTop: 6, fontSize: 11, color: 'var(--text-dim)' }}>
+                  <span>dispo <AnimatedNumber value={w.available} /></span>
+                  {w.pending > 0 && <span>· en attente <AnimatedNumber value={w.pending} /></span>}
+                  {w.in_transit > 0 && <span>· en transit <AnimatedNumber value={w.in_transit} /></span>}
+                  {w.settlement > 0 && <span>· règlement <AnimatedNumber value={w.settlement} /></span>}
+                </div>
+                <div style={{ marginTop: 8, height: 6, background: 'var(--panel2)', borderRadius: 3, overflow: 'hidden' }}>
+                  <motion.div
+                    style={{ height: '100%', background: 'linear-gradient(90deg, var(--cyan), var(--violet))', borderRadius: 3 }}
+                    initial={{ width: 0 }} animate={{ width: `${Math.round((w.ref_value / maxVal) * 100)}%` }}
+                    transition={{ delay: 0.25 + i * 0.08, duration: 0.7, ease: EASE }}
+                  />
+                </div>
+              </motion.div>
+            ))}
+          </div>
+          <Link to="/convert" className="btn btn-ghost" style={{ marginTop: 16, fontSize: 11 }}>Convertir des devises →</Link>
+        </div>
+      )}
+    </div>
+  );
+}

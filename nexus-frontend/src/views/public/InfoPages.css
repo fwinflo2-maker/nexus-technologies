@@ -1,0 +1,95 @@
+/* ════════════════════════════════════════════════════════════════════════
+   Pages d'information professionnelles (TOC sticky, résumés, badges).
+   Style cohérent avec la landing, inspiré des pages légales fintech.
+   ════════════════════════════════════════════════════════════════════════ */
+
+.doc-shell {
+  max-width: 1140px; margin: 0 auto; padding: 2.5rem 1.25rem;
+  display: grid; grid-template-columns: 240px 1fr; gap: 2.5rem; align-items: start;
+}
+
+/* ── TOC sticky ────────────────────────────────────────────────────────── */
+.doc-toc { position: sticky; top: 24px; }
+.doc-toc-inner {
+  border: 1px solid var(--border); border-radius: 14px; padding: 16px 12px;
+  background: rgba(255,255,255,0.02);
+}
+.doc-toc-title { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-faint); font-weight: 700; margin-bottom: 10px; padding: 0 6px; }
+.doc-toc-item {
+  display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 8px;
+  color: var(--text-muted); font-size: 0.8rem; text-decoration: none; transition: all 0.15s;
+  border-left: 2px solid transparent;
+}
+.doc-toc-item:hover { color: var(--text-heading); background: rgba(255,255,255,0.03); }
+.doc-toc-item.active { color: var(--cyan); background: rgba(59,130,246,0.1); border-left-color: var(--cyan); font-weight: 600; }
+.doc-toc-icon { font-size: 0.85rem; width: 18px; text-align: center; }
+
+/* ── Contenu principal ─────────────────────────────────────────────────── */
+.doc-main { min-width: 0; }
+.doc-header { margin-bottom: 22px; }
+.doc-title { font-size: clamp(1.6rem, 3.5vw, 2.3rem); font-weight: 800; margin: 0.4rem 0 0.8rem; color: var(--text-heading); letter-spacing: -0.5px; }
+.doc-meta { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.doc-updated { font-size: 0.78rem; color: var(--text-faint); }
+.doc-actions { display: flex; gap: 8px; }
+.doc-print {
+  background: rgba(255,255,255,0.04); border: 1px solid var(--border); color: var(--text-muted);
+  font-size: 0.75rem; padding: 5px 12px; border-radius: 8px; cursor: pointer; transition: all 0.15s;
+}
+.doc-print:hover { color: var(--cyan); border-color: var(--cyan); }
+
+/* ── Badges de conformité ──────────────────────────────────────────────── */
+.doc-trust-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 24px; }
+.trust-badge {
+  display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 12px;
+  background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.2); font-size: 0.78rem;
+  color: var(--text-mid); font-weight: 600;
+}
+.trust-badge-icon { font-size: 1rem; }
+
+/* ── Résumé « en clair » ───────────────────────────────────────────────── */
+.doc-summary {
+  display: flex; gap: 14px; align-items: flex-start; padding: 16px 18px; border-radius: 14px;
+  background: linear-gradient(135deg, rgba(124,58,237,0.08), rgba(59,130,246,0.08));
+  border: 1px solid rgba(124,58,237,0.15); margin-bottom: 24px;
+}
+.doc-summary-icon { font-size: 1.5rem; line-height: 1; }
+.doc-summary-title { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--cyan); font-weight: 700; margin-bottom: 4px; }
+.doc-summary-text { font-size: 0.9rem; line-height: 1.6; color: var(--text-muted); }
+
+/* ── Sections ──────────────────────────────────────────────────────────── */
+.doc-section { margin-bottom: 28px; scroll-margin-top: 20px; }
+.doc-section-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.doc-section-icon {
+  width: 34px; height: 34px; border-radius: 10px; background: rgba(59,130,246,0.12);
+  display: flex; align-items: center; justify-content: center; font-size: 1rem; flex-shrink: 0;
+}
+.doc-section-head h2 { font-size: 1.15rem; font-weight: 700; color: var(--text-heading); margin: 0; }
+.doc-section-body { padding-left: 44px; }
+.doc-p { font-size: 0.92rem; line-height: 1.7; color: var(--text-muted); margin: 0 0 10px; }
+.doc-ul { margin: 0 0 12px; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 7px; }
+.doc-li { font-size: 0.9rem; line-height: 1.6; color: var(--text-muted); }
+.doc-muted { color: var(--text-faint) !important; font-size: 0.85rem; }
+.doc-note {
+  font-size: 0.82rem; color: var(--text-mid); background: rgba(255,255,255,0.03);
+  border-left: 3px solid var(--cyan); padding: 8px 12px; border-radius: 0 8px 8px 0; margin-top: 6px;
+}
+
+/* ── Code & tableaux ───────────────────────────────────────────────────── */
+.doc-code { font-family: var(--font-mono); font-size: 0.8rem; background: rgba(255,255,255,0.05); padding: 1px 5px; border-radius: 4px; color: var(--cyan); }
+.doc-codeblock {
+  font-family: var(--font-mono); font-size: 0.78rem; background: #0d1117; border: 1px solid var(--border);
+  padding: 14px 16px; border-radius: 10px; overflow-x: auto; color: #c9d1d9; margin: 10px 0 14px; line-height: 1.6;
+}
+.doc-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin: 10px 0 14px; }
+.doc-table th { text-align: left; color: var(--text-dim); font-weight: 600; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.05em; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.doc-table td { padding: 9px 10px; border-bottom: 1px solid var(--border-soft); color: var(--text-muted); }
+
+/* ── Responsive ────────────────────────────────────────────────────────── */
+@media (max-width: 860px) {
+  .doc-shell { grid-template-columns: 1fr; gap: 1rem; }
+  .doc-toc { position: static; }
+  .doc-toc-inner { display: flex; flex-wrap: wrap; gap: 4px; padding: 10px; }
+  .doc-toc-title { width: 100%; }
+  .doc-toc-item { border-left: none; padding: 5px 8px; }
+  .doc-section-body { padding-left: 0; }
+}
