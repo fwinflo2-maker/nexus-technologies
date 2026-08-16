@@ -237,6 +237,9 @@ $router->delete('/team/{id}', [TeamController::class, 'remove']);
 
 // --- Business : rapprochement (protégé) -------------------------------------
 // --- Support chat (tickets / conversations) --------------------------------
+$router->post('/support/bot', [SupportController::class, 'bot']);
+$router->post('/support/attachments', [SupportController::class, 'uploadAttachment']);
+$router->get('/support/unread', [SupportController::class, 'unread']);
 $router->get('/support/conversations', [SupportController::class, 'conversations']);
 $router->post('/support/conversations', [SupportController::class, 'createConversation']);
 $router->get('/support/conversations/{id}/messages', [SupportController::class, 'messages']);

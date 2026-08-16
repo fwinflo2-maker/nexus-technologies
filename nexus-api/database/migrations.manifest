@@ -87,3 +87,6 @@
 
 # 0.28 — Support chat (tickets / conversations)
 2026_08_16_support_chat.sql
+
+# 0.29 — Support chat : notes internes, pièces jointes
+2026_08_16_support_chat_enhancements.sql

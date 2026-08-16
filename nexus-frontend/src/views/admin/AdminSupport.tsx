@@ -1,27 +1,28 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
-  apiSupportConversations, apiSupportMessages, apiSupportSendMessage, apiSupportSetStatus,
+  apiSupportConversations, apiSupportMessages, apiSupportSendMessage, apiSupportSetStatus, apiSupportUpload,
   type SupportConversation, type SupportMessage,
 } from '../../api/client';
 import { Stat } from './adminUi';
 
-/** Gestion du support chat côté agent (Super Admin). */
+/** Console support agent (Super Admin) : tickets, réponses, notes internes, pièces jointes, temps de réponse. */
 export default function AdminSupport() {
   const [convs, setConvs] = useState<SupportConversation[]>([]);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [activeConv, setActiveConv] = useState<SupportConversation | null>(null);
   const [messages, setMessages] = useState<SupportMessage[]>([]);
   const [draft, setDraft] = useState('');
-  const lastMsgId = { current: 0 };
+  const [internal, setInternal] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const lastMsgId = useRef(0);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
     const res = await apiSupportConversations();
     if (res.success && res.data) setConvs(res.data.items);
   };
-
   useEffect(() => { void load(); }, []);
 
-  // Polling des messages de la conversation active.
   useEffect(() => {
     if (!activeId) return;
     let alive = true;
@@ -45,10 +46,7 @@ export default function AdminSupport() {
   }, [activeId]);
 
   async function openConv(c: SupportConversation) {
-    setActiveId(c.id);
-    setActiveConv(c);
-    setMessages([]);
-    lastMsgId.current = 0;
+    setActiveId(c.id); setActiveConv(c); setMessages([]); lastMsgId.current = 0;
     const res = await apiSupportMessages(c.id);
     if (res.success && res.data) {
       setMessages(res.data.items);
@@ -57,12 +55,22 @@ export default function AdminSupport() {
   }
 
   async function send() {
-    if (!draft.trim() || !activeId) return;
-    const body = draft.trim();
+    if (!activeId) return;
+    let attName: string | undefined; let attUrl: string | undefined;
+    if (file) {
+      const up = await apiSupportUpload(file);
+      if (up.success && up.data) { attName = up.data.name; attUrl = up.data.url; }
+      setFile(null);
+    }
+    const body = draft.trim() || (attUrl ? `📎 ${attName}` : '');
+    if (!body && !attUrl) return;
     setDraft('');
-    // Affiche immédiatement le message (optimiste), puis le polling confirme.
-    setMessages((prev) => [...prev, { id: Date.now(), conversation_id: activeId, customer_id: null, agent_id: 1, is_bot: false, body, read_at: null, created_at: new Date().toISOString(), customer_name: null, agent_name: 'Vous' }]);
-    await apiSupportSendMessage(activeId, body);
+    setMessages((prev) => [...prev, {
+      id: Date.now(), conversation_id: activeId, customer_id: null, agent_id: 1, is_bot: false, is_internal: internal,
+      body, attachment_name: attName ?? null, attachment_url: attUrl ?? null, read_at: null,
+      created_at: new Date().toISOString(), customer_name: null, agent_name: 'Vous',
+    }]);
+    await apiSupportSendMessage(activeId, body, { is_internal: internal, attachment_name: attName, attachment_url: attUrl });
   }
 
   async function setStatus(status: string) {
@@ -78,6 +86,22 @@ export default function AdminSupport() {
   const waiting = convs.filter((c) => c.status === 'waiting').length;
   const resolved = convs.filter((c) => c.status === 'resolved' || c.status === 'closed').length;
   const unreadTotal = convs.reduce((s, c) => s + (c.unread ?? 0), 0);
+
+  // Temps de réponse moyen (agent) : écarts entre message client et réponse agent.
+  function responseTime(): string {
+    if (!activeId) return '—';
+    let lastClient: Date | null = null; let firstAgent: Date | null = null;
+    for (const m of messages) {
+      if (m.customer_id && !m.is_internal) lastClient = new Date(m.created_at);
+      if (m.agent_id && !m.is_internal && !firstAgent) firstAgent = new Date(m.created_at);
+    }
+    if (lastClient && firstAgent) {
+      const sec = Math.max(0, Math.round((firstAgent.getTime() - lastClient.getTime()) / 1000));
+      if (sec < 60) return `${sec}s`;
+      return `${Math.round(sec / 60)}m`;
+    }
+    return '—';
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -95,16 +119,8 @@ export default function AdminSupport() {
           {convs.length === 0 ? (
             <div style={{ fontSize: 12, color: 'var(--text-dim)', padding: 12 }}>Aucun ticket pour le moment.</div>
           ) : convs.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => void openConv(c)}
-              style={{
-                width: '100%', textAlign: 'left', padding: '10px 12px', borderRadius: 10, cursor: 'pointer',
-                border: `1px solid ${activeId === c.id ? 'rgba(59,130,246,0.5)' : 'var(--border-soft)'}`,
-                background: activeId === c.id ? 'rgba(59,130,246,0.1)' : 'var(--panel)',
-                marginBottom: 8, display: 'flex', flexDirection: 'column', gap: 3,
-              }}
-            >
+            <button key={c.id} onClick={() => void openConv(c)}
+              style={{ width: '100%', textAlign: 'left', padding: '10px 12px', borderRadius: 10, cursor: 'pointer', border: `1px solid ${activeId === c.id ? 'rgba(59,130,246,0.5)' : 'var(--border-soft)'}`, background: activeId === c.id ? 'rgba(59,130,246,0.1)' : 'var(--panel)', marginBottom: 8, display: 'flex', flexDirection: 'column', gap: 3 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-bright)' }}>{c.client_name}</span>
                 <span className={`chat-status s-${c.status}`} style={{ fontSize: 9 }}>{c.status}</span>
@@ -119,22 +135,17 @@ export default function AdminSupport() {
         {/* Fil de la conversation active */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
           {!activeId ? (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-dim)', fontSize: 13 }}>
-              Sélectionnez une conversation à gauche.
-            </div>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-dim)', fontSize: 13 }}>Sélectionnez une conversation à gauche.</div>
           ) : (
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 10, borderBottom: '1px solid var(--border-soft)', marginBottom: 10 }}>
                 <div>
                   <div style={{ fontWeight: 700, color: 'var(--text-bright)' }}>{activeConv?.subject}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{activeConv?.client_name} · {activeConv?.client_email}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{activeConv?.client_name} · {activeConv?.client_email} · ⏱ réponse {responseTime()}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
                   {['waiting', 'resolved', 'closed', 'open'].map((s) => (
-                    <button key={s} onClick={() => void setStatus(s)}
-                      style={{ fontSize: 10, padding: '4px 10px', borderRadius: 10, cursor: 'pointer', border: activeConv?.status === s ? '1px solid var(--cyan)' : '1px solid var(--border-soft)', background: activeConv?.status === s ? 'rgba(59,130,246,0.15)' : 'var(--panel)', color: 'var(--text-main)' }}>
-                      {s}
-                    </button>
+                    <button key={s} onClick={() => void setStatus(s)} style={{ fontSize: 10, padding: '4px 10px', borderRadius: 10, cursor: 'pointer', border: activeConv?.status === s ? '1px solid var(--cyan)' : '1px solid var(--border-soft)', background: activeConv?.status === s ? 'rgba(59,130,246,0.15)' : 'var(--panel)', color: 'var(--text-main)' }}>{s}</button>
                   ))}
                 </div>
               </div>
@@ -142,9 +153,18 @@ export default function AdminSupport() {
               <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {messages.map((m) => {
                   const mine = m.agent_id !== null;
+                  const internalNote = m.is_internal;
                   return (
-                    <div key={m.id} className={`chat-bubble ${mine ? 'mine' : m.is_bot ? 'bot' : 'agent'}`}>
-                      <div className="chat-bubble-body">{m.body}</div>
+                    <div key={m.id} className={`chat-bubble ${internalNote ? 'internal' : mine ? 'mine' : m.is_bot ? 'bot' : 'agent'}`}>
+                      <div className="chat-bubble-body">
+                        {internalNote && <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 3, opacity: 0.7 }}>🔒 Note interne</div>}
+                        {m.body}
+                        {m.attachment_url && (
+                          <div style={{ marginTop: 6 }}>
+                            <a href={m.attachment_url} target="_blank" rel="noreferrer" className="chat-attach">📎 {m.attachment_name ?? 'pièce jointe'}</a>
+                          </div>
+                        )}
+                      </div>
                       <div className="chat-bubble-time">{m.agent_name ?? m.customer_name} · {new Date(m.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</div>
                     </div>
                   );
@@ -152,9 +172,16 @@ export default function AdminSupport() {
               </div>
 
               <div className="chat-panel-input" style={{ borderTop: '1px solid var(--border-soft)', marginTop: 10 }}>
-                <input placeholder="Répondre en tant qu'agent…" value={draft} onChange={(e) => setDraft(e.target.value)}
+                <button className="chat-file-btn" onClick={() => fileRef.current?.click()} title="Joindre un fichier">📎</button>
+                {file && <span className="chat-file-tag">{file.name} ✕</span>}
+                <input ref={fileRef} type="file" hidden accept="image/*,.pdf,.txt" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+                <input placeholder={internal ? 'Note interne (visible agents uniquement)…' : "Répondre en tant qu'agent…"} value={draft} onChange={(e) => setDraft(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) void send(); }} />
-                <button onClick={() => void send()} disabled={!draft.trim()} aria-label="Envoyer">➤</button>
+                <label className="chat-internal-toggle">
+                  <input type="checkbox" checked={internal} onChange={(e) => setInternal(e.target.checked)} />
+                  <span>Interne</span>
+                </label>
+                <button onClick={() => void send()} disabled={!draft.trim() && !file} aria-label="Envoyer">➤</button>
               </div>
             </>
           )}

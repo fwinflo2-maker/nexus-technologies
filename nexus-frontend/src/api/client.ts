@@ -1535,7 +1535,10 @@ export interface SupportMessage {
   customer_id: number | null;
   agent_id: number | null;
   is_bot: boolean;
+  is_internal: boolean;
   body: string;
+  attachment_name: string | null;
+  attachment_url: string | null;
   read_at: string | null;
   created_at: string;
   customer_name: string | null;
@@ -1546,8 +1549,12 @@ export async function apiSupportConversations(): Promise<ApiResponse<{ items: Su
   return request('GET', '/support/conversations');
 }
 
-export async function apiSupportCreateConversation(subject: string, category: string): Promise<ApiResponse<{ conversation: SupportConversation; bot_reply: string }>> {
-  return request('POST', '/support/conversations', { subject, category });
+export async function apiSupportCreateConversation(subject: string, category: string, opts?: { history?: Array<{ sender: string; body: string }>; priority?: string }): Promise<ApiResponse<{ conversation: SupportConversation }>> {
+  return request('POST', '/support/conversations', {
+    subject, category,
+    history: opts?.history ?? [],
+    priority: opts?.priority ?? 'normal',
+  });
 }
 
 export async function apiSupportMessages(id: number, afterId?: number): Promise<ApiResponse<{ items: SupportMessage[] }>> {
@@ -1555,10 +1562,49 @@ export async function apiSupportMessages(id: number, afterId?: number): Promise<
   return request('GET', `/support/conversations/${id}/messages${q}`);
 }
 
-export async function apiSupportSendMessage(id: number, body: string): Promise<ApiResponse<{ bot_reply: string | null }>> {
-  return request('POST', `/support/conversations/${id}/messages`, { body });
+export async function apiSupportSendMessage(id: number, body: string, opts?: { is_internal?: boolean; attachment_name?: string; attachment_url?: string }): Promise<ApiResponse<{ bot_reply: string | null }>> {
+  return request('POST', `/support/conversations/${id}/messages`, {
+    body,
+    is_internal: opts?.is_internal ?? false,
+    attachment_name: opts?.attachment_name,
+    attachment_url: opts?.attachment_url,
+  });
 }
 
 export async function apiSupportSetStatus(id: number, status: string): Promise<ApiResponse<{ status: string }>> {
   return request('PATCH', `/support/conversations/${id}/status`, { status });
+}
+
+// --- Support : bot pré-ticket, non-lus, pièces jointes --------------------
+
+export interface SupportBotResult {
+  reply: string | null;
+  escalate: boolean;
+  category: string;
+  subject: string;
+}
+
+export async function apiSupportBot(message: string): Promise<ApiResponse<SupportBotResult>> {
+  return request('POST', '/support/bot', { message });
+}
+
+export async function apiSupportUnread(): Promise<ApiResponse<{ total: number; conversations: Array<{ id: number; unread: number }> }>> {
+  return request('GET', '/support/unread');
+}
+
+/** Upload d'une pièce jointe (multipart). */
+export async function apiSupportUpload(file: File): Promise<ApiResponse<{ url: string; name: string }>> {
+  const fd = new FormData();
+  fd.append('file', file);
+  const token = getToken();
+  try {
+    const resp = await fetch(`${API_PREFIX}/support/attachments`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: fd,
+    });
+    return (await resp.json()) as ApiResponse<{ url: string; name: string }>;
+  } catch {
+    return { success: false, error: 'Service temporairement indisponible.' };
+  }
 }
