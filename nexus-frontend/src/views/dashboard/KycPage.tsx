@@ -3,7 +3,8 @@ import { motion } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
 import { pillForStatus, labelForStatus } from '../business/ui';
 import { useDashT } from '../../data/dashboard-i18n';
-import { apiKycStatus, apiKycSession, KycStatusData } from '../../api/client';
+import { apiKycStatus, apiKycSession } from '../../api/client';
+import type { KycStatusData } from '../../api/client';
 
 const KYC_LEVELS = ['none', 'basic', 'standard', 'advanced'];
 
