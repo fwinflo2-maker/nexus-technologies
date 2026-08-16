@@ -49,7 +49,7 @@ export function LandingPage({ onLogin, onRegister }: LandingPageProps) {
       <ParticlesBackground />
       <nav className="site-nav">
         <div className="site-nav-inner">
-          <div className="nav-brand">
+          <div className="nav-brand" role="button" aria-label="Connexion" onClick={onLogin} style={{ cursor: 'pointer' }} title="Se connecter">
             <svg width="28" height="28" viewBox="0 0 32 32" fill="none"><path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="url(#lg-nav)" strokeWidth="2" fill="none"/><path d="M16 10L22 14V22L16 26L10 22V14L16 10Z" fill="url(#lg-nav)"/><defs><linearGradient id="lg-nav" x1="4" y1="2" x2="28" y2="30"><stop stopColor="#7C3AED"/><stop offset="1" stopColor="#a855f7"/></linearGradient></defs></svg>
             <span className="brand-text">NEXUS</span>
           </div>

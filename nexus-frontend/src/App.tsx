@@ -102,16 +102,9 @@ function DashboardLayout() {
   const { user } = useAuth();
   const t = useDashT();
 
-  // Le Super Admin peut accéder au dashboard client (Portefeuille, Envoyer…)
-  // en plus de son centre de contrôle /admin. Il reçoit le mode personnel
-  // pour disposer des outils d'envoi/portefeuille, et peut envoyer depuis
-  // n'importe où (backend : aucune restriction).
-  const isSuperAdmin = user?.platform_role === 'superadmin';
-
   // Le mode est FIXÉ par le type de compte : un compte personal est toujours
   // personal, un compte business toujours business. Pas de bascule P/B.
-  // Pour le Super Admin, on force le mode personnel (Portefeuille + Envoyer).
-  const isPersonalAccount = isSuperAdmin ? true : user?.account_type === 'personal';
+  const isPersonalAccount = user?.account_type === 'personal';
   const effectiveMode: Mode = isPersonalAccount ? 'personal' : 'business';
 
   return (
@@ -133,7 +126,12 @@ function DashboardLayout() {
 
         <div className="main-content">
           <Routes>
-            <Route path="/dashboard" element={<><DashTopbar mode={effectiveMode} title={t('page.dashboard')} subtitle="" />{effectiveMode === 'business' ? <BusinessDashboard /> : <DashboardPage mode={effectiveMode} />}</>} />
+            {/* /dashboard : le Super Admin est redirigé vers son centre de
+                contrôle /admin. Il accède à Envoyer/Portefeuille via /send et
+                /wallet (liens dédiés dans la sidebar admin). */}
+            <Route path="/dashboard" element={user?.platform_role === 'superadmin'
+              ? <Navigate to="/admin" replace />
+              : <><DashTopbar mode={effectiveMode} title={t('page.dashboard')} subtitle="" />{effectiveMode === 'business' ? <BusinessDashboard /> : <DashboardPage mode={effectiveMode} />}</>} />
             <Route path="/wallet" element={<><DashTopbar mode={effectiveMode} title={t('page.wallet')} subtitle="" /><WalletPage /></>} />
             {/* Redirection /routing → /send (routing intégré dans /send) */}
             <Route path="/routing" element={<Navigate to="/send" replace />} />

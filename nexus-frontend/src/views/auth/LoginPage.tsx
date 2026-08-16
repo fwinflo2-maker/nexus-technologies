@@ -69,12 +69,11 @@ export function LoginPage({ onSwitchToRegister, onBackHome }: LoginPageProps) {
       // Le user est déjà retourné par /api/login (fiable, aucune re-requête).
       // refreshSession() synchronise le contexte React avec ce même user.
       await refreshSession();
-      // On navigue TOUJOURS vers /dashboard : c'est le point d'entrée universel
-      // qui existe dans tous les cas. La redirection finale vers /admin (pour
-      // un superadmin) est gérée par DashboardLayout, ce qui élimine toute
-      // course entre la navigation et la mise à jour de l'état React — résultat
-      // identique sur tous les navigateurs.
-      navigate('/dashboard', { replace: true });
+      // Super Admin → son centre de contrôle ; les autres comptes → dashboard
+      // client (personal/business). Le user vient de la réponse de login, donc
+      // aucune course de timing (fiable sur tous les navigateurs).
+      const target = resp.data?.user?.platform_role === 'superadmin' ? '/admin' : '/dashboard';
+      navigate(target, { replace: true });
     } catch {
       // Filet de sécurité : ne jamais laisser le formulaire bloqué en « envoi ».
       setError(t('login_err_required'));

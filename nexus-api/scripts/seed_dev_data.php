@@ -34,25 +34,32 @@ $pdo->exec("ALTER TABLE users AUTO_INCREMENT = 1");
 $pdo->exec("SET FOREIGN_KEY_CHECKS=1");
 
 // ---------------------------------------------------------------------------
-// Utilisateurs (id1..id5)
+// Utilisateurs
+//   id1 = SUPER ADMIN dédié (compte personal, PAS business)
+//   id5 = compte Business pur (business@example.com)
 // ---------------------------------------------------------------------------
 $users = [
-    [1, 'Amina Diallo', 'business@example.com', '+33612345678', 'business', 'superadmin', 'ACTIVE', 'advanced',
+    // id1 — Super Admin dédié (compte personal, rôle superadmin)
+    [1, 'Amina Diallo', 'admin@nexus-tech.io', '+33612345678', 'personal', 'superadmin', 'ACTIVE', 'advanced',
         'FR', '1986-04-12', 'female', 'Paris', '75008', '12 Avenue Montaigne',
-        'Nexus Technologies SAS', 'SAS', 'RCS PARIS 921 884 512', 'Fintech', '51-200', 'https://nexus-tech.io'],
+        null, null, null, null, null, null],
     [2, 'Marc Lefèvre', 'auth2@example.com', '+33623456789', 'personal', 'user', 'ACTIVE', 'standard',
         'FR', '1990-11-03', 'male', 'Lyon', '69002', '8 Rue de la République', null, null, null, null, null, null],
     [3, 'Sophie Martin', 'test@example.com', '+33634567890', 'personal', 'compliance_officer', 'ACTIVE', 'standard',
         'FR', '1988-07-21', 'female', 'Marseille', '13001', '5 La Canebière', null, null, null, null, null, null],
     [4, 'Jean Dupont', 'jean.dupont@example.com', '+33745678901', 'personal', 'user', 'ACTIVE', 'basic',
         'CM', '1992-02-15', 'male', 'Douala', '00237', '45 Rue de la Pépinière', null, null, null, null, null, null],
-    [5, 'Acme Import-Export', 'contact@acme.example.com', '+33656789012', 'business', 'user', 'PENDING', 'basic',
+    // id5 — compte Business pur (mode business)
+    [5, 'Nexus Technologies SAS', 'business@example.com', '+33656789012', 'business', 'user', 'ACTIVE', 'advanced',
+        'FR', null, null, 'Paris', '75008', '12 Avenue Montaigne',
+        'Nexus Technologies SAS', 'SAS', 'RCS PARIS 921 884 512', 'Fintech', '51-200', 'https://nexus-tech.io'],
+    [6, 'Acme Import-Export', 'contact@acme.example.com', '+33667890123', 'business', 'user', 'PENDING', 'basic',
         'FR', null, null, 'Bordeaux', '33000', '3 Quai de Bacalan',
         'ACME SARL', 'SARL', 'RCS BORDEAUX 884 512 903', 'Import / Export', '1-10', 'https://acme.example.com'],
     // Employés internes supplémentaires (comptes users liés à la table employees)
-    [6, 'Karim Bensaid', 'ops@nexus-tech.io', '+33667890123', 'business', 'operations_manager', 'ACTIVE', 'none',
+    [7, 'Karim Bensaid', 'ops@nexus-tech.io', '+33678901234', 'business', 'operations_manager', 'ACTIVE', 'none',
         'FR', '1984-09-30', 'male', 'Paris', '75009', '15 Rue Lafayette', null, null, null, null, null, null],
-    [7, 'Léa Moreau', 'risk@nexus-tech.io', '+33678901234', 'business', 'risk_analyst', 'ACTIVE', 'none',
+    [8, 'Léa Moreau', 'risk@nexus-tech.io', '+33689012345', 'business', 'risk_analyst', 'ACTIVE', 'none',
         'FR', '1991-01-17', 'female', 'Paris', '75002', '2 Rue de la Paix', null, null, null, null, null, null],
 ];
 
@@ -88,11 +95,11 @@ foreach ($users as $u) {
 // Wallets
 // ---------------------------------------------------------------------------
 $wallets = [
-    [1, 'EUR', 2457890.00], [1, 'USD', 1120300.50], [1, 'XAF', 0.00],
+    [1, 'EUR', 2457890.00], [1, 'USD', 1120300.50], [1, 'XAF', 0.00],   // Super Admin
     [2, 'EUR', 12450.75], [2, 'XAF', 1540000.00],
     [3, 'EUR', 3220.00], [3, 'USD', 8900.00],
     [4, 'EUR', 540.00], [4, 'XAF', 3200000.00],
-    [5, 'EUR', 0.00],
+    [5, 'EUR', 58400.00], [5, 'XAF', 2000000.00],                        // Business pur
 ];
 $wstmt = $pdo->prepare(
     "INSERT INTO wallets (user_id, currency, balance, available_balance, pending_balance,
@@ -184,10 +191,10 @@ $kycs = [
     [2, 'sumsub', 'production', 'individual', 'appl_1001', 'standard', 'verified', null],
     [3, 'sumsub', 'production', 'individual', 'appl_1002', 'standard', 'verified', null],
     [4, 'sumsub', 'sandbox', 'individual', 'appl_1003', 'basic', 'pending', 'Selfie en attente'],
-    [5, 'sumsub', 'sandbox', 'company', 'appl_1004', 'basic', 'pending', 'Documents entreprise en attente'],
-    [1, 'sumsub', 'production', 'company', 'appl_1005', 'advanced', 'verified', null],
-    [6, 'sumsub', 'production', 'individual', 'appl_1006', 'basic', 'resubmission_requested', 'Document illisible'],
-    [7, 'sumsub', 'production', 'individual', 'appl_1007', 'standard', 'verified', null],
+    [6, 'sumsub', 'sandbox', 'company', 'appl_1004', 'basic', 'pending', 'Documents entreprise en attente'],
+    [1, 'sumsub', 'production', 'individual', 'appl_1005', 'advanced', 'verified', null],
+    [7, 'sumsub', 'production', 'individual', 'appl_1006', 'basic', 'resubmission_requested', 'Document illisible'],
+    [8, 'sumsub', 'production', 'individual', 'appl_1007', 'standard', 'verified', null],
 ];
 $kstmt = $pdo->prepare(
     "INSERT INTO kyc_verifications (user_id, provider, environment, subject_type, applicant_id,
@@ -204,8 +211,8 @@ echo "kyc_verifications: " . count($kycs) . "\n";
 // Employés internes
 // ---------------------------------------------------------------------------
 $emps = [
-    [6, 'Operations', 'operations_manager', '["operations"]', 'active'],
-    [7, 'Risk', 'risk_analyst', '["risk"]', 'active'],
+    [7, 'Operations', 'operations_manager', '["operations"]', 'active'],
+    [8, 'Risk', 'risk_analyst', '["risk"]', 'active'],
 ];
 $estmt = $pdo->prepare(
     "INSERT INTO employees (user_id, department, role, permissions, status, last_login_at, created_at, updated_at)

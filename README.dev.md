@@ -312,7 +312,8 @@ Seedé via `scripts/seed_dev_data.php` (mot de passe `password123`) :
 
 | Compte | Email | Rôle |
 |---|---|---|
-| Super Admin | `business@example.com` | `superadmin` → `/admin` |
+| Super Admin (dédié) | `admin@nexus-tech.io` | `superadmin` (compte **personal**) → `/admin` |
+| Business (pur) | `business@example.com` | `user` (mode business) → `/dashboard` |
 | Personnel | `auth2@example.com` | `user` (client personnel) |
 | Compliance | `test@example.com` | `compliance_officer` |
 | Client personnel (profil riche) | `jean.dupont@example.com` | `user` |
