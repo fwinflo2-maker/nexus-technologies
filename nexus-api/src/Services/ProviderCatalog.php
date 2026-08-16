@@ -180,6 +180,22 @@ final class ProviderCatalog
             'doc_url'    => 'https://docs.wise.com/guides/developer',
             'countries'  => ['EU','GB','US','AU','SG'],
         ],
+        'western_union' => [
+            'name'        => 'Western Union',
+            'category'    => 'fx',
+            'icon'        => '🔵',
+            'auth_type'   => 'oauth2',
+            'base_url'    => 'https://api.westernunion.com',
+            'sandbox_url' => 'https://masspaysandbox.api.westernunion.com/MassPayments/',
+            'credentials' => [
+                ['key' => 'client_id',        'label' => 'Client ID (OAuth)',  'placeholder' => 'Votre Client ID Western Union', 'required' => true,  'type' => 'text'],
+                ['key' => 'client_secret',    'label' => 'Client Secret',      'placeholder' => 'Votre Client Secret',          'required' => true,  'type' => 'password'],
+                ['key' => 'partner_id',       'label' => 'Partner ID (clientId)', 'placeholder' => 'Votre ID partenaire WU',    'required' => false, 'type' => 'text'],
+                ['key' => 'mtsc_cert_path',   'label' => 'Certificat mTLS (chemin)', 'placeholder' => '/chemin/vers/cert.p12',  'required' => false, 'type' => 'password'],
+            ],
+            'doc_url'    => 'https://business.westernunion.com/en-us/global-payment-solutions/mass-payments/mass-payments-documentation/api-reference',
+            'countries'  => ['US','GB','FR','DE','ES','IT','NG','KE','IN','MX','PH','CA','AU','ZA','BR','AR','EG','TR','PK','BD','CM','SN','CI','GH','MA','TN','DZ'],
+        ],
 
         // ── Cartes / Issuing ──────────────────────────────────────────────
         'stripe' => [

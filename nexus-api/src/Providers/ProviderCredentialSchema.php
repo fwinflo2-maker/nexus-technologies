@@ -43,6 +43,7 @@ final class ProviderCredentialSchema
             'pawapay' => self::pawapay(),
             'wise'    => self::wise(),
             'nium'    => self::nium(),
+            'western_union' => self::westernUnion(),
             default   => null,
         };
     }
@@ -207,6 +208,59 @@ final class ProviderCredentialSchema
                 usage: CredentialDefinition::USAGE_API_AUTH,
                 justification: 'docs.nium.com : credential d\'authentification serveur. Jamais exposable.',
                 placeholder: 'client_secret Nium'
+            ),
+        ];
+    }
+
+    /**
+     * Western Union — Business Solutions / WU Connect
+     *
+     * Sources :
+     *   - Mass Payments API (WUBS) : https://business.westernunion.com/.../api-reference
+     *   - WU Partnership APIs (WU Connect) : https://api.westernunion.com
+     *
+     * Authentification : OAuth2.0 (token renouvelé ~30 min) OU mTLS via
+     * certificat PKCS12. Aucun de ces credentials ne doit atteindre le
+     * navigateur. L'accès est délivré après onboarding partenaire/compliance
+     * (pas de self-service).
+     */
+    private static function westernUnion(): array
+    {
+        return [
+            CredentialDefinition::secret(
+                name: 'client_id',
+                label: 'Client ID (OAuth 2.0)',
+                required: true,
+                usage: CredentialDefinition::USAGE_API_AUTH,
+                justification: 'business.westernunion.com : « OAuth2.0 authentication » - credentials '
+                    . 'serveur assignés au partenaire. Backend uniquement, jamais exposable.',
+                placeholder: 'Client ID Western Union'
+            ),
+            CredentialDefinition::secret(
+                name: 'client_secret',
+                label: 'Client Secret',
+                required: true,
+                usage: CredentialDefinition::USAGE_API_AUTH,
+                justification: 'business.westernunion.com : « retrieve an API token » via client secret. '
+                    . 'Secret strict, backend uniquement.',
+                placeholder: 'Client Secret Western Union'
+            ),
+            CredentialDefinition::identifier(
+                name: 'partner_id',
+                label: 'Partner ID (clientId)',
+                required: false,
+                justification: 'api.westernunion.com : endpoints référencent le clientId du partenaire '
+                    . '(/customers/:clientId, /HoldingBalance/:clientId). Non secret mais backend-only par défaut.',
+                placeholder: 'ID partenaire WU'
+            ),
+            CredentialDefinition::secret(
+                name: 'mtsc_cert_path',
+                label: 'Certificat mTLS (PKCS12)',
+                required: false,
+                usage: CredentialDefinition::USAGE_SIGNING,
+                justification: 'business.westernunion.com : méthode alternative « PKCS12 client certificate » '
+                    . 'pour mTLS. Chemin/secret serveur, jamais exposable.',
+                placeholder: '/chemin/vers/cert.p12'
             ),
         ];
     }
