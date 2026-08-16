@@ -213,54 +213,55 @@ final class ProviderCredentialSchema
     }
 
     /**
-     * Western Union — Business Solutions / WU Connect
+     * Western Union — Mass Payments API (Partnership Program / WU Connect)
      *
-     * Sources :
-     *   - Mass Payments API (WUBS) : https://business.westernunion.com/.../api-reference
-     *   - WU Partnership APIs (WU Connect) : https://api.westernunion.com
+     * Sources : documentation officielle OpenAPI Western Union
+     *   https://developer.westernunion.com/getting-started.html
+     *   serveurs : prod https://api.westernunion.com · sandbox https://api-sandbox.westernunion.com
+     *   endpoints : GET /Ping, GET /customers/{clientId}, POST /customers/{clientId}/quotes,
+     *               PUT /customers/{clientId}/batches/{batchId}, POST .../payments
      *
-     * Authentification : OAuth2.0 (token renouvelé ~30 min) OU mTLS via
-     * certificat PKCS12. Aucun de ces credentials ne doit atteindre le
-     * navigateur. L'accès est délivré après onboarding partenaire/compliance
-     * (pas de self-service).
+     * Authentification : MUTUAL TLS (mTLS) via certificat client délivré par
+     * Western Union à l'adhésion au Partnership Program. Aucun credential ne
+     * doit atteindre le navigateur. Accès après onboarding partenaire/compliance.
      */
     private static function westernUnion(): array
     {
         return [
-            CredentialDefinition::secret(
+            CredentialDefinition::identifier(
                 name: 'client_id',
-                label: 'Client ID (OAuth 2.0)',
+                label: 'Client ID (WU clientId)',
                 required: true,
-                usage: CredentialDefinition::USAGE_API_AUTH,
-                justification: 'business.westernunion.com : « OAuth2.0 authentication » - credentials '
-                    . 'serveur assignés au partenaire. Backend uniquement, jamais exposable.',
-                placeholder: 'Client ID Western Union'
+                justification: 'developer.westernunion.com : endpoints référencent le clientId du partenaire '
+                    . '(/customers/:clientId, /customers/:clientId/quotes, /customers/:clientId/batches/:batchId). '
+                    . 'Non secret mais backend-only par défaut.',
+                placeholder: 'Client ID partenaire WU'
             ),
             CredentialDefinition::secret(
-                name: 'client_secret',
-                label: 'Client Secret',
+                name: 'client_cert_path',
+                label: 'Certificat mTLS (chemin)',
                 required: true,
-                usage: CredentialDefinition::USAGE_API_AUTH,
-                justification: 'business.westernunion.com : « retrieve an API token » via client secret. '
-                    . 'Secret strict, backend uniquement.',
-                placeholder: 'Client Secret Western Union'
+                usage: CredentialDefinition::USAGE_SIGNING,
+                justification: 'developer.westernunion.com : « Mutual TLS authentication using client '
+                    . 'certificates provided by Western Union upon enrollment in the Partnership Program ». '
+                    . 'Chemin serveur, jamais exposable.',
+                placeholder: '/chemin/vers/client.crt'
+            ),
+            CredentialDefinition::secret(
+                name: 'client_key_path',
+                label: 'Clé privée mTLS (chemin)',
+                required: true,
+                usage: CredentialDefinition::USAGE_SIGNING,
+                justification: 'developer.westernunion.com : clé privée du certificat mTLS, incluse avec '
+                    . 'chaque requête. Secret strict, backend uniquement.',
+                placeholder: '/chemin/vers/client.key'
             ),
             CredentialDefinition::identifier(
                 name: 'partner_id',
-                label: 'Partner ID (clientId)',
+                label: 'Partner ID',
                 required: false,
-                justification: 'api.westernunion.com : endpoints référencent le clientId du partenaire '
-                    . '(/customers/:clientId, /HoldingBalance/:clientId). Non secret mais backend-only par défaut.',
+                justification: 'Identifiant du partenaire Western Union. Non secret mais backend-only.',
                 placeholder: 'ID partenaire WU'
-            ),
-            CredentialDefinition::secret(
-                name: 'mtsc_cert_path',
-                label: 'Certificat mTLS (PKCS12)',
-                required: false,
-                usage: CredentialDefinition::USAGE_SIGNING,
-                justification: 'business.westernunion.com : méthode alternative « PKCS12 client certificate » '
-                    . 'pour mTLS. Chemin/secret serveur, jamais exposable.',
-                placeholder: '/chemin/vers/cert.p12'
             ),
         ];
     }

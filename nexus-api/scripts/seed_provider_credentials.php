@@ -36,7 +36,7 @@ $creds = [
     ['wise', 'sandbox',       ['client_id' => 'wise_sandbox_client_000', 'client_secret' => 'wise_sandbox_secret_000', 'profile_id' => 'profile_000']],
     ['wise', 'production',    ['client_id' => 'wise_live_client_000', 'client_secret' => 'wise_live_secret_000', 'profile_id' => 'profile_000']],
     ['nium', 'sandbox',       ['client_id' => 'nium_sandbox_client_000', 'client_secret' => 'nium_sandbox_secret_000']],
-    ['western_union', 'sandbox', ['client_id' => 'wu_sandbox_client_000', 'client_secret' => 'wu_sandbox_secret_000', 'partner_id' => 'wu_partner_000']],
+    ['western_union', 'sandbox', ['client_id' => 'wu_sandbox_client_000', 'client_cert_path' => '/tmp/wu/client.crt', 'client_key_path' => '/tmp/wu/client.key', 'partner_id' => 'wu_partner_000']],
 ];
 
 $sel = $pdo->prepare('SELECT id FROM provider_credentials WHERE provider_slug = ? AND environment = ? AND (user_id IS NULL OR user_id = ?)');

@@ -117,6 +117,7 @@ final class ProviderRegistry
         return match ($slug) {
             'stripe'  => new StripeAdapter(),
             'pawapay' => new PawaPayAdapter(),
+            'western_union' => new WesternUnionAdapter(),
             default   => new ConfigDrivenProviderAdapter($slug),
         };
     }
