@@ -305,3 +305,56 @@ php vendor/bin/phpunit --filter ProviderRegistryTest   # architecture providers
 
 
 
+
+## Comptes de démo (développement)
+
+Seedé via `scripts/seed_dev_data.php` (mot de passe `password123`) :
+
+| Compte | Email | Rôle |
+|---|---|---|
+| Super Admin | `business@example.com` | `superadmin` → `/admin` |
+| Personnel | `auth2@example.com` | `user` (client personnel) |
+| Compliance | `test@example.com` | `compliance_officer` |
+| Client personnel (profil riche) | `jean.dupont@example.com` | `user` |
+| Client entreprise | `contact@acme.example.com` | `user` (business) |
+
+## Fonctionnalités récentes
+
+- **Dashboard Super Admin** (`/admin`, réservé `superadmin`) : cockpit avec
+  graphiques Recharts sur données réelles, 13 sections (comptes, transactions,
+  trésorerie, compliance/KYC, risque, providers, support, sécurité, technique,
+  audit…), RBAC strict côté backend.
+- **Support chat** : widget flottant côté client (assistant « Fin » pré-ticket +
+  escalade agent), console agent dans le Super Admin, notes internes, pièces
+  jointes, badge non-lu. Tables `support_conversations` / `support_messages`.
+- **Mot de passe oublié** : reset réel connecté à la base
+  (`password_reset_tokens`, token haché, usage unique, expiration 30 min).
+- **Source des fonds** (envoi) : wallet réel **ou** proposition d'un provider ;
+  **modes de transfert** (Optimisé/Plus rapide/Moins cher/Plus reçu/Plus fiable)
+  transmis au backend comme préférence de routage — l'utilisateur ne voit jamais
+  les providers ni les mécanismes de routing.
+- **Western Union** intégré au catalogue providers (Mass Payments API, auth
+  mTLS, endpoints officiels vérifiés) — activation via
+  `PROVIDER_WESTERN_UNION_*` dans `.env` (onboarding partenaire requis).
+- **Animations React premium** : framer-motion (springs, stagger, transitions)
+  + GSAP (ScrollTrigger, parallax) sur tout le produit ; stockage navigateur
+  sécurisé (`lib/safeStorage`, fallback mémoire) pour une robustesse
+  cross-navigateur (mode privé inclus).
+
+## Récapitulatif des routes API ajoutées récemment
+
+| Méthode | Route | Auth | Description |
+|---|---|---|---|
+| POST | `/api/auth/forgot-password` | Non | Demande de reset (token en base, anti-énumération) |
+| POST | `/api/auth/reset-password` | Non | Consomme le token + met à jour le mot de passe |
+| GET/POST | `/api/support/conversations` | Oui | Liste / création de tickets support |
+| POST | `/api/support/bot` | Oui | Réponse de l'assistant (pré-ticket) |
+| GET | `/api/support/unread` | Oui | Compteur de messages non lus |
+| GET/POST | `/api/support/conversations/{id}/messages` | Oui | Lire / envoyer des messages |
+| POST | `/api/support/attachments` | Oui | Upload pièce jointe (images/PDF/texte) |
+| PATCH | `/api/support/conversations/{id}/status` | Oui (agent) | Changer le statut du ticket |
+| GET | `/api/admin/overview` | Oui (superadmin) | KPIs cockpit + séries + répartitions |
+| GET | `/api/admin/transactions` | Oui (superadmin) | Registre transactions + filtres |
+| GET | `/api/admin/operations` | Oui (superadmin) | File d'exécution |
+| GET | `/api/admin/risk` | Oui (superadmin) | Indicateurs risque/fraude |
+| GET | `/api/admin/technical` | Oui (superadmin) | Santé des services |
