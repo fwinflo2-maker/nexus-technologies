@@ -48,7 +48,9 @@ final class CapabilityEngine
         'mobile_money' => ['mobile_money', 'payout_network'],
         'bank'         => ['banking', 'fx', 'payout_network'],
         'crypto'       => ['crypto', 'onramp'],
-        'cash_pickup'  => ['payout_network'],
+        // cash_pickup : retrait en espèces — Western Union (catégorie fx) et les
+        // réseaux de paiement sont les acteurs historiques de ce mode de réception.
+        'cash_pickup'  => ['payout_network', 'fx'],
     ];
 
     private function __construct() {}
