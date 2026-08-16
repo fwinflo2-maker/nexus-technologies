@@ -18,6 +18,12 @@ const KYB_STATES: Record<string, { label: string; tone: 'pending' | 'active' | '
   on_hold: { label: 'En attente de revue', tone: 'pending' },
 };
 
+const RISK_LEVELS: Record<string, { label: string; tone: 'pending' | 'active' | 'p' }> = {
+  low: { label: 'Risque faible', tone: 'active' },
+  medium: { label: 'Risque modéré', tone: 'pending' },
+  high: { label: 'Risque élevé', tone: 'p' },
+};
+
 /** Charge dynamiquement le WebSDK Sumsub (documentation officielle). */
 function loadSumsubWebSdk(): Promise<boolean> {
   return new Promise(resolve => {
@@ -139,6 +145,16 @@ export default function KycPage() {
             <div style={{ marginTop: 12 }}>
               <span className={`pill ${kybState.tone}`}>{kybState.label}</span>
             </div>
+            {live?.risk_level && (
+              <div style={{ marginTop: 10 }}>
+                <span className={`pill ${RISK_LEVELS[live.risk_level]?.tone ?? 'pending'}`}>
+                  {RISK_LEVELS[live.risk_level]?.label ?? live.risk_level}
+                </span>
+                <p style={{ marginTop: 8, fontSize: 11, color: 'var(--text-mid)' }}>
+                  Niveau de risque évalué selon votre pays de résidence et votre secteur d’activité.
+                </p>
+              </div>
+            )}
             {live?.kyb_verified_at && (
               <p style={{ marginTop: 8, fontSize: 11, color: 'var(--text-mid)' }}>
                 Vérifiée le {new Date(live.kyb_verified_at).toLocaleDateString('fr-FR')}

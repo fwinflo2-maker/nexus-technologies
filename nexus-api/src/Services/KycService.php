@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nexus\Services;
 
 use Nexus\Kyc\KycProvider;
+use Nexus\Kyc\KycRiskScorer;
 use Nexus\Kyc\KycStatus;
 use Nexus\Kyc\KycSubjectType;
 use Nexus\Kyc\KycWebhookEvent;
@@ -109,6 +110,22 @@ final class KycService
         }
 
         return ['processed' => true, 'duplicate' => false, 'status' => $event->status->value];
+    }
+
+    /**
+     * Évalue puis persiste le niveau de risque KYB d'un compte Business.
+     *
+     * Le niveau est une PROJECTION déterministe (KycRiskScorer) des attributs
+     * déjà collectés (pays, secteur) : il sert au Policy Engine et à la
+     * priorisation des revues, sans remplacer l'évaluation de Sumsub.
+     *
+     * @param array<string,mixed> $user Ligne `users`.
+     */
+    public static function persistRiskLevel(PDO $pdo, int $userId, array $user): void
+    {
+        $risk = KycRiskScorer::assess($user);
+        $pdo->prepare('UPDATE users SET risk_level = :r WHERE id = :id')
+            ->execute(['r' => $risk, 'id' => $userId]);
     }
 
     /** Statut courant, exposable à l'API (§32) — sans donnée sensible. */

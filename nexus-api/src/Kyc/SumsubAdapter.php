@@ -143,7 +143,34 @@ final class SumsubAdapter implements KycProvider
             $payload['phone'] = $profile['phone'];
         }
         if ($type->isCompany()) {
+            // KYB : le sujet est une entreprise. On fournit les données
+            // d'identification de la société (voir doc officielle :
+            // docs.sumsub.com/reference/autokyb-api-examples) pour permettre
+            // le contrôle registre. Sans companyName / registrationNumber /
+            // country, la vérification d'entreprise ne peut pas aboutir.
             $payload['type'] = 'company';
+
+            $companyInfo = [];
+            if (isset($profile['company_name']) && is_string($profile['company_name']) && $profile['company_name'] !== '') {
+                $companyInfo['companyName'] = $profile['company_name'];
+            }
+            if (isset($profile['registration_number']) && is_string($profile['registration_number']) && $profile['registration_number'] !== '') {
+                $companyInfo['registrationNumber'] = $profile['registration_number'];
+            }
+
+            // Le pays doit être fourni en alpha-3 (GBR, FRA, DEU…). Nexus le
+            // stocke en alpha-2 : conversion via CountryCodes, omis si inconnu
+            // (jamais de code deviné — §37).
+            $countryAlpha3 = CountryCodes::alpha2ToAlpha3(
+                isset($profile['country']) && is_string($profile['country']) ? $profile['country'] : null
+            );
+            if ($countryAlpha3 !== null) {
+                $companyInfo['country'] = $countryAlpha3;
+            }
+
+            if ($companyInfo !== []) {
+                $payload['fixedInfo'] = ['companyInfo' => $companyInfo];
+            }
         }
 
         $response = $this->request('POST', $path, $payload);

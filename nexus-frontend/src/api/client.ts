@@ -77,6 +77,7 @@ export interface KycStatusData {
   configured: boolean;
   kyb_status?: string;
   kyb_verified_at?: string | null;
+  risk_level?: 'low' | 'medium' | 'high' | null;
 }
 
 /** Réponse POST /api/kyc/session — token SDK court à destination du WebSDK. */

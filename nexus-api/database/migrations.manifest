@@ -92,3 +92,5 @@
 2026_08_16_support_chat_enhancements.sql
 # 0.31 — KYB distinct pour comptes Business (Sumsub subject_type=company)
 2026_08_16_business_kyb.sql
+# 0.32 — KYB : infos entreprise vers Sumsub + niveau de risque (low/medium/high)
+2026_08_16_kyb_company_risk.sql

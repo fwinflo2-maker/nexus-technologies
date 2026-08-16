@@ -542,6 +542,7 @@ CREATE TABLE `users` (
   `kyc_level` enum('none','basic','standard','advanced') NOT NULL DEFAULT 'none',
   `kyb_status` enum('none','in_progress','pending','verified','resubmission_requested','rejected','on_hold') NOT NULL DEFAULT 'none' COMMENT 'VÃ©rification d''entreprise (KYB, Sumsub subject_type=company)',
   `kyb_verified_at` datetime DEFAULT NULL,
+  `risk_level` enum('low','medium','high') DEFAULT NULL COMMENT 'Niveau de risque KYB (approche basée sur le risque) — Business uniquement',
   `country_of_residence` char(2) DEFAULT NULL,
   `birth_date` date DEFAULT NULL,
   `gender` varchar(20) DEFAULT NULL,

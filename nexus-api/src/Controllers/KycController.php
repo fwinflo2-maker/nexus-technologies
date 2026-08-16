@@ -62,6 +62,8 @@ final class KycController
         if (($user['account_type'] ?? 'personal') === 'business') {
             $status['kyb_status'] = $user['kyb_status'] ?? 'none';
             $status['kyb_verified_at'] = $user['kyb_verified_at'] ?? null;
+            // Niveau de risque KYB (approche basée sur le risque, FATF).
+            $status['risk_level'] = $user['risk_level'] ?? null;
         }
 
         // §32 : statut, action attendue, type — jamais de secret ni de document.
@@ -83,13 +85,31 @@ final class KycController
             Response::error('Vérification d\'identité indisponible : provider KYC non configuré.', 503, 'KYC_PROVIDER_NOT_CONFIGURED');
         }
 
+        $pdo = Database::getConnection();
+        $profile = ['email' => $user['email'] ?? null, 'phone' => $user['phone'] ?? null];
+
+        // KYB : on transmet les données d'identification de l'entreprise,
+        // collectées à l'inscription (users.company_name, etc.), pour permettre
+        // le contrôle registre Sumsub. On évalue aussi le niveau de risque.
+        if (self::subjectTypeFor($user)->isCompany()) {
+            $profile = array_merge($profile, [
+                'company_name'         => $user['company_name'] ?? null,
+                'registration_number'  => $user['company_registration_number'] ?? null,
+                'country'              => $user['country_of_residence'] ?? null,
+            ]);
+
+            // Approche basée sur le risque : level low/medium/high persisté
+            // avant le démarrage (déterministe, auditable).
+            KycService::persistRiskLevel($pdo, (int) $user['id'], $user);
+        }
+
         try {
             $session = KycService::startVerification(
-                Database::getConnection(),
+                $pdo,
                 $provider,
                 (int) $user['id'],
                 self::subjectTypeFor($user),
-                ['email' => $user['email'] ?? null]
+                $profile
             );
         } catch (RuntimeException $e) {
             Response::error('Impossible de démarrer la vérification.', 502, 'KYC_SESSION_FAILED');

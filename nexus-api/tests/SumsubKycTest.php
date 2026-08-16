@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Nexus\Tests;
 
 use Nexus\Core\Database;
+use Nexus\Kyc\CountryCodes;
+use Nexus\Kyc\KycRiskScorer;
 use Nexus\Kyc\KycStatus;
 use Nexus\Kyc\KycSubjectType;
 use Nexus\Kyc\SumsubAdapter;
@@ -399,6 +401,141 @@ final class SumsubKycTest extends TestCase
         self::assertStringNotContainsString(self::TEST_WEBHOOK_SECRET, $audit);
         self::assertStringNotContainsString(self::TEST_SECRET_KEY, $audit);
         self::assertStringNotContainsString(self::TEST_APP_TOKEN, $audit);
+    }
+
+    // ── KYB : infos entreprise envoyées à Sumsub (§37, doc officielle) ──────
+
+    public function test_create_applicant_company_envoie_les_infos_entreprise(): void
+    {
+        $captured = null;
+        $adapter = new SumsubAdapter(function (string $m, string $u, string $b, array $h) use (&$captured): array {
+            $captured = ['method' => $m, 'body' => json_decode($b, true)];
+            return ['status' => 201, 'body' => json_encode(['id' => 'appl_kyb_1'])];
+        });
+
+        $id = $adapter->createApplicant('42', KycSubjectType::COMPANY, [
+            'company_name'        => 'Nexus Corp SARL',
+            'registration_number' => 'RCS 123 456 789',
+            'country'             => 'FR',
+            'email'               => 'finance@nexus.test',
+        ]);
+
+        self::assertSame('appl_kyb_1', $id);
+        self::assertSame('POST', $captured['method']);
+
+        $payload      = $captured['body'];
+        $companyInfo  = $payload['fixedInfo']['companyInfo'] ?? [];
+
+        self::assertSame('company', $payload['type'], 'Le sujet doit être une entreprise.');
+        self::assertSame('Nexus Corp SARL', $companyInfo['companyName'] ?? null);
+        self::assertSame('RCS 123 456 789', $companyInfo['registrationNumber'] ?? null);
+        self::assertSame('FRA', $companyInfo['country'] ?? null, 'Le pays doit être converti en alpha-3.');
+    }
+
+    public function test_create_applicant_company_omet_le_pays_inconnu(): void
+    {
+        $captured = null;
+        $adapter = new SumsubAdapter(function (string $m, string $u, string $b, array $h) use (&$captured): array {
+            $captured = json_decode($b, true);
+            return ['status' => 201, 'body' => json_encode(['id' => 'appl_kyb_2'])];
+        });
+
+        $adapter->createApplicant('42', KycSubjectType::COMPANY, [
+            'company_name' => 'Unknown Co',
+            'country'      => 'ZZ', // code inexistant
+        ]);
+
+        $companyInfo = $captured['fixedInfo']['companyInfo'] ?? [];
+        self::assertArrayNotHasKey('country', $companyInfo, 'Un code inconnu ne doit jamais être deviné (§37).');
+        self::assertSame('Unknown Co', $companyInfo['companyName'] ?? null);
+    }
+
+    public function test_create_applicant_individual_n_envoie_pas_de_company_info(): void
+    {
+        $captured = null;
+        $adapter = new SumsubAdapter(function (string $m, string $u, string $b, array $h) use (&$captured): array {
+            $captured = json_decode($b, true);
+            return ['status' => 201, 'body' => json_encode(['id' => 'appl_kyc_1'])];
+        });
+
+        $adapter->createApplicant('42', KycSubjectType::INDIVIDUAL, ['email' => 'a@b.test']);
+
+        self::assertArrayNotHasKey('fixedInfo', $captured);
+        self::assertArrayNotHasKey('type', $captured, 'Pas de type company pour un individu.');
+    }
+
+    // ── Codes pays (alpha-2 → alpha-3) ─────────────────────────────────────
+
+    public function test_conversion_alpha2_vers_alpha3(): void
+    {
+        self::assertSame('FRA', CountryCodes::alpha2ToAlpha3('FR'));
+        self::assertSame('GBR', CountryCodes::alpha2ToAlpha3('gb'));
+        self::assertSame('CMR', CountryCodes::alpha2ToAlpha3('CM'));
+        self::assertSame('USA', CountryCodes::alpha2ToAlpha3('US'));
+    }
+
+    public function test_conversion_code_inconnu_retourne_null(): void
+    {
+        self::assertNull(CountryCodes::alpha2ToAlpha3('ZZ'));
+        self::assertNull(CountryCodes::alpha2ToAlpha3(''));
+        self::assertNull(CountryCodes::alpha2ToAlpha3(null));
+    }
+
+    // ── Niveau de risque KYB (approche basée sur le risque) ─────────────────
+
+    public function test_risque_high_pour_juridiction_sous_sanctions(): void
+    {
+        self::assertSame(
+            KycRiskScorer::HIGH,
+            KycRiskScorer::assess(['country_of_residence' => 'KP', 'industry' => 'Commerce'])
+        );
+        self::assertSame(
+            KycRiskScorer::HIGH,
+            KycRiskScorer::assess(['country_of_residence' => 'IR', 'industry' => ''])
+        );
+    }
+
+    public function test_risque_high_pour_secteur_sensible(): void
+    {
+        self::assertSame(
+            KycRiskScorer::HIGH,
+            KycRiskScorer::assess(['country_of_residence' => 'FR', 'industry' => 'Échange de crypto-monnaies'])
+        );
+        self::assertSame(
+            KycRiskScorer::HIGH,
+            KycRiskScorer::assess(['country_of_residence' => 'DE', 'industry' => 'Forex / trading'])
+        );
+    }
+
+    public function test_risque_medium_pour_juridiction_surveillee(): void
+    {
+        self::assertSame(
+            KycRiskScorer::MEDIUM,
+            KycRiskScorer::assess(['country_of_residence' => 'SN', 'industry' => 'Agroalimentaire'])
+        );
+    }
+
+    public function test_risque_low_par_defaut(): void
+    {
+        self::assertSame(
+            KycRiskScorer::LOW,
+            KycRiskScorer::assess(['country_of_residence' => 'FR', 'industry' => 'Édition de logiciels'])
+        );
+        self::assertSame(
+            KycRiskScorer::LOW,
+            KycRiskScorer::assess(['country_of_residence' => '', 'industry' => ''])
+        );
+    }
+
+    public function test_persist_risk_level_ecrit_le_niveau_en_base(): void
+    {
+        $user = ['country_of_residence' => 'KP', 'industry' => 'Commerce'];
+
+        KycService::persistRiskLevel($this->pdo, $this->userId, $user);
+
+        $stmt = $this->pdo->prepare('SELECT risk_level FROM users WHERE id = :id');
+        $stmt->execute(['id' => $this->userId]);
+        self::assertSame(KycRiskScorer::HIGH, (string) $stmt->fetchColumn());
     }
 
     /** Crée un dossier de vérification rattaché à l'utilisateur de test. */
