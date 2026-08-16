@@ -5,6 +5,8 @@ import {
   apiIntentCoverage,
   apiAuthorizedOrigins,
   estimateConvert,
+  apiWalletsList,
+  type WalletState,
   type IntentCoverageData,
   type IntentCountry,
   type AuthorizedOriginsData,
@@ -415,6 +417,7 @@ export default function SendPage() {
 
   const [coverage, setCoverage] = useState<IntentCoverageData | null>(null);
   const [authorizedOrigins, setAuthorizedOrigins] = useState<AuthorizedOriginsData | null>(null);
+  const [wallets, setWallets] = useState<WalletState[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -423,13 +426,17 @@ export default function SendPage() {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const [covRes, originsRes] = await Promise.all([apiIntentCoverage(), apiAuthorizedOrigins()]);
+    const [covRes, originsRes, walletsRes] = await Promise.all([apiIntentCoverage(), apiAuthorizedOrigins(), apiWalletsList()]);
     if (!covRes.success || !covRes.data) {
       setError(covRes.error || 'Erreur lors du chargement de la couverture provider.');
       setLoading(false);
       return;
     }
     setCoverage(covRes.data);
+    // Wallets réels de l'utilisateur → source des fonds potentielle.
+    if (walletsRes.success && walletsRes.data) {
+      setWallets(walletsRes.data.wallets);
+    }
     if (originsRes.success && originsRes.data) {
       setAuthorizedOrigins(originsRes.data);
       if (originsRes.data.origins.length === 1) {
@@ -443,7 +450,12 @@ export default function SendPage() {
 
   // ─── Données dérivées ────────────────────────────────────────────────
 
-  const sourceCurrencies = useMemo(() => coverage?.source_currencies ?? [], [coverage]);
+  // Devises de la source des fonds : les wallets RÉELS de l'utilisateur
+  // (devises avec un solde disponible) priment ; sinon repli sur la couverture.
+  const sourceCurrencies = useMemo(() => {
+    const walletCurs = wallets.filter(w => w.has_funds || w.available > 0).map(w => w.currency);
+    return walletCurs.length > 0 ? walletCurs : (coverage?.source_currencies ?? []);
+  }, [wallets, coverage]);
   const selectedCountry = useMemo(() => coverage?.countries.find(c => c.code === destCountry) ?? null, [coverage, destCountry]);
   const destCurrencies = useMemo(() => selectedCountry?.currencies ?? [], [selectedCountry]);
   const selectedDestCurrency = useMemo(() => destCurrencies.find(c => c.code === destCurrency) ?? null, [destCurrencies, destCurrency]);
@@ -594,19 +606,36 @@ export default function SendPage() {
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-                    {/* Montant + devise */}
+                    {/* Montant + devise (source = devise du wallet) */}
                     <motion.div {...stagger(0)}>
-                      <div className="se-field-label">Montant</div>
+                      <div className="se-field-label">Source des fonds</div>
                       <div className="se-amount">
                         <select
-                          value={sourceCurrency || 'EUR'}
+                          value={sourceCurrency || (sourceCurrencies[0] ?? '')}
                           onChange={e => setSourceCurrency(e.target.value)}
                           style={{ padding: '11px 10px', background: 'var(--panel2)', color: 'var(--cyan)', fontWeight: 700, fontSize: 12, outline: 'none', border: 'none', borderRight: '1px solid var(--border)', cursor: 'pointer' }}
                         >
-                          {sourceCurrencies.map(c => <option key={c} value={c}>{c}</option>)}
+                          {sourceCurrencies.map(c => {
+                            const w = wallets.find(x => x.currency === c);
+                            return <option key={c} value={c}>{w && (w.available > 0 || w.has_funds) ? `${c} · ${formatCurrencyDisplay(w.available, c)} dispo` : c}</option>;
+                          })}
                         </select>
                         <input type="text" value={amount} onChange={e => setAmount(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="0.00" />
                       </div>
+                      {wallets.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                          {wallets.filter(w => w.available > 0 || w.has_funds).map(w => (
+                            <button
+                              key={w.currency}
+                              onClick={() => setSourceCurrency(w.currency)}
+                              className={`se-chip ${sourceCurrency === w.currency ? 'se-chip-selected' : ''}`}
+                              style={{ fontSize: 10, padding: '5px 10px' }}
+                            >
+                              {w.currency} · {formatCurrencyDisplay(w.available, w.currency)}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                       {errors.amount && <ErrorText>{errors.amount}</ErrorText>}
                     </motion.div>
 
