@@ -101,8 +101,8 @@ function RouteCard({
       initial={{ opacity: 0, y: 20, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.35, delay, ease: [0.22, 1, 0.36, 1] }}
-      whileHover={{ y: -2, transition: { duration: 0.15 } }}
-      whileTap={{ scale: 0.98 }}
+      whileHover={{ y: -5, scale: 1.015, boxShadow: '0 14px 40px rgba(0,200,255,0.14)', transition: { type: 'spring', stiffness: 260, damping: 20 } }}
+      whileTap={{ scale: 0.97 }}
       onClick={onSelect}
       style={{
         borderColor: selected ? 'var(--green)' : recommended ? 'rgba(0,200,255,0.3)' : undefined,

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { EASE } from '../../components/anim/Premium';
 import {
   apiIntentCoverage,
   apiAuthorizedOrigins,
@@ -788,17 +789,28 @@ export default function SendPage() {
                         <div style={{ fontSize: 11, color: 'var(--text-mid)', marginBottom: 8 }}>
                           Vous indiquez votre préférence — Nexus choisit automatiquement la meilleure route.
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                          {OBJECTIVE_OPTIONS.map(opt => (
-                            <button
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                          {OBJECTIVE_OPTIONS.map((opt, oi) => (
+                            <motion.button
                               key={opt.key}
                               onClick={() => setObjective(opt.key)}
                               className={`se-chip ${objective === opt.key ? 'se-chip-selected' : ''}`}
-                              style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, textAlign: 'left', padding: '8px 10px' }}
+                              style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, textAlign: 'left', padding: '9px 11px', position: 'relative', overflow: 'hidden' }}
+                              initial={{ opacity: 0, y: 14, scale: 0.97 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              transition={{ duration: 0.35, delay: oi * 0.05, ease: EASE }}
+                              whileHover={{ y: -3, scale: 1.02 }}
+                              whileTap={{ scale: 0.96 }}
                             >
-                              <span style={{ fontSize: 12, fontWeight: 600 }}>{opt.icon} {opt.label}</span>
+                              <span style={{ fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <motion.span
+                                  animate={{ rotate: objective === opt.key ? [0, -8, 8, 0] : 0 }}
+                                  transition={{ duration: 0.4 }}
+                                >{opt.icon}</motion.span>
+                                {opt.label}
+                              </span>
                               <span style={{ fontSize: 9.5, color: 'var(--text-mid)', fontWeight: 400, lineHeight: 1.3 }}>{opt.desc}</span>
-                            </button>
+                            </motion.button>
                           ))}
                         </div>
                       </motion.div>
