@@ -78,7 +78,11 @@ final class QuoteController
             Response::badRequest('Le pays d\'origine des fonds est requis.');
         }
 
-        $originCheck = FundingSourceEngine::validateOrigin($userId, $user, $originCountry);
+        // Le Super Admin peut valider un envoi depuis n'importe quel pays
+        // (sans KYC ni source vérifiée) pour vérifier en temps réel l'envoi
+        // d'un utilisateur d'un pays quelconque.
+        $isSuperAdmin = ($user['platform_role'] ?? '') === 'superadmin';
+        $originCheck = FundingSourceEngine::validateOrigin($userId, $user, $originCountry, $isSuperAdmin);
 
         if (!$originCheck['authorized']) {
             Response::forbidden(
@@ -94,7 +98,6 @@ final class QuoteController
         // ── 2. Capability Engine : providers éligibles ───────────
         // Le Super Admin accède à toutes les routes possibles (sans restriction
         // de pays/corridor), depuis n'importe où.
-        $isSuperAdmin = ($user['platform_role'] ?? '') === 'superadmin';
         $providers = CapabilityEngine::findEligible($intent, $context->environment, $isSuperAdmin);
 
         // ── 3. Policy Engine : vérification avant quotes ────────

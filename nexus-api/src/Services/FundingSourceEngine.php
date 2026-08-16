@@ -150,7 +150,7 @@ final class FundingSourceEngine
      * @param string $originCountry Code ISO-2 du pays d'origine revendiqué
      * @return array{authorized: bool, reason?: string, sources?: list<array>}
      */
-    public static function validateOrigin(int $userId, array $user, string $originCountry): array
+    public static function validateOrigin(int $userId, array $user, string $originCountry, bool $allowAny = false): array
     {
         $originCountry = strtoupper(trim($originCountry));
 
@@ -159,6 +159,16 @@ final class FundingSourceEngine
             return [
                 'authorized' => false,
                 'reason'     => 'Code pays d\'origine invalide.',
+            ];
+        }
+
+        // Le Super Admin peut valider un envoi depuis N'IMPORTE QUEL pays
+        // (sans KYC, sans source vérifiée) : il effectue l'envoi en temps réel
+        // pour vérifier les assertions d'un utilisateur d'un pays quelconque.
+        if ($allowAny) {
+            return [
+                'authorized' => true,
+                'sources'    => [['kind' => 'superadmin', 'kindLabel' => 'Super Admin (validation)', 'label' => 'Vérification en temps réel', 'country' => $originCountry, 'currency' => null, 'operator' => null, 'isDefault' => true]],
             ];
         }
 
