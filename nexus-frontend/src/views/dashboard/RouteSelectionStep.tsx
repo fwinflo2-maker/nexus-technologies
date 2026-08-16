@@ -483,8 +483,13 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
             transition={{ delay: 0.5 }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 12, borderBottom: '1px solid var(--border)' }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-bright)' }}>
-                Option sélectionnée
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-bright)' }}>
+                  Option sélectionnée
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 2 }}>
+                  Route sélectionnée automatiquement par Nexus
+                </div>
               </div>
                           </div>
             <div style={{ marginTop: 10 }}>
@@ -492,7 +497,9 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
                 ['Envoyé', `\u20AC ${amountSent.toLocaleString('fr-FR')},00`, 'var(--white)'],
                 ['Reçu (estimé)', selectedRoute.received, 'var(--green)'],
                 ['Frais total', selectedRoute.fees, 'var(--text-bright)'],
-                                                ['Expiration', `\u23F1 ${formatCountdown(remaining)} restantes`, countdownColor],
+                ['Taux de change', selectedRoute.rate ? `1 ${intent.sourceCurrency ?? 'EUR'} = ${selectedRoute.rate.toLocaleString('fr-FR')} ${intent.destinationCurrency ?? ''}` : '—', 'var(--cyan)'],
+                ['Délai estimé', selectedRoute.delay, 'var(--cyan)'],
+                ['Expiration', `\u23F1 ${formatCountdown(remaining)} restantes`, countdownColor],
               ].map(([k, v, col]) => (
                 <div key={k as string} className="trow">
                   <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{k}</div>

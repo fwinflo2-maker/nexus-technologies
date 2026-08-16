@@ -52,10 +52,11 @@ interface FormErrors {
 // ─── Constantes ─────────────────────────────────────────────────────────────
 
 const OBJECTIVE_OPTIONS: Array<{ key: string; icon: string; label: string; desc: string }> = [
-  { key: 'optimized',     icon: '⭐', label: 'Optimisé',              desc: 'Meilleur équilibre qualité/prix' },
-  { key: 'max_received',  icon: '💰', label: 'Montant maximum reçu',  desc: 'Maximiser le montant du bénéficiaire' },
-  { key: 'fastest',       icon: '⚡', label: 'Plus rapide',           desc: 'Priorité à la vitesse d\'exécution' },
-  { key: 'cheapest',      icon: '💸', label: 'Moins cher',            desc: 'Minimiser les frais de transfert' },
+  { key: 'optimized',     icon: '⭐', label: 'Optimisé',           desc: 'Meilleur équilibre entre coût, rapidité, montant reçu et fiabilité.' },
+  { key: 'fastest',       icon: '⚡', label: 'Plus rapide',        desc: 'Privilégie la vitesse d\'exécution.' },
+  { key: 'cheapest',      icon: '💸', label: 'Moins cher',         desc: 'Minimise les frais du transfert.' },
+  { key: 'max_received',  icon: '💰', label: 'Plus reçu',          desc: 'Maximise le montant reçu par le bénéficiaire.' },
+  { key: 'most_reliable', icon: '🛡️', label: 'Plus fiable',        desc: 'Privilégie la fiabilité et le taux de réussite.' },
 ];
 
 const STEPS: Array<{ num: Step; label: string; sub: string }> = [
@@ -780,18 +781,23 @@ export default function SendPage() {
                       );
                     })()}
 
-                    {/* Objectif */}
+                    {/* Mode de transfert (préférence de routage) */}
                     {receivingMethod && (
                       <motion.div {...stagger(7)}>
-                        <div className="se-field-label">Objectif du transfert</div>
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <div className="se-field-label">Comment souhaitez-vous envoyer ?</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-mid)', marginBottom: 8 }}>
+                          Vous indiquez votre préférence — Nexus choisit automatiquement la meilleure route.
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                           {OBJECTIVE_OPTIONS.map(opt => (
                             <button
                               key={opt.key}
                               onClick={() => setObjective(opt.key)}
                               className={`se-chip ${objective === opt.key ? 'se-chip-selected' : ''}`}
+                              style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, textAlign: 'left', padding: '8px 10px' }}
                             >
-                              {opt.icon} {opt.label}
+                              <span style={{ fontSize: 12, fontWeight: 600 }}>{opt.icon} {opt.label}</span>
+                              <span style={{ fontSize: 9.5, color: 'var(--text-mid)', fontWeight: 400, lineHeight: 1.3 }}>{opt.desc}</span>
                             </button>
                           ))}
                         </div>
@@ -838,7 +844,7 @@ export default function SendPage() {
 
                     {/* Objectif */}
                     <motion.div className="trow" {...stagger(6)}>
-                      <span style={{ fontSize: 11, color: 'var(--text-mid)' }}>Objectif</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-mid)' }}>Mode de transfert</span>
                       <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-bright)' }}>
                         {OBJECTIVE_OPTIONS.find(o => o.key === objective)?.icon} {OBJECTIVE_OPTIONS.find(o => o.key === objective)?.label}
                       </span>
