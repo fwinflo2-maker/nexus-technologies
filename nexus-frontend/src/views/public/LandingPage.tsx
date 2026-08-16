@@ -5,6 +5,7 @@ import { TorusField } from '../../components/TorusField';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { ParticlesBackground } from '../../components/ParticlesBackground';
 import { EASE, AnimatedNumber } from '../../components/anim/Premium';
+import { GsapReveal, GsapParallax } from '../../components/anim/GsapReveal';
 import './LandingPage.css';
 
 const stagger = { hidden: {}, visible: { transition: { staggerChildren: 0.12 } } };
@@ -64,8 +65,8 @@ export function LandingPage({ onLogin, onRegister }: LandingPageProps) {
       {/* ── Hero ──────────────────────────────────────────────── */}
       <section className="hero-section">
         <div className="hero-grid" aria-hidden="true" />
-        <div className="hero-orb hero-orb-main" aria-hidden="true" />
-        <div className="hero-orb hero-orb-side" aria-hidden="true" />
+        <GsapParallax speed={0.12}><div className="hero-orb hero-orb-main" aria-hidden="true" /></GsapParallax>
+        <GsapParallax speed={0.22}><div className="hero-orb hero-orb-side" aria-hidden="true" /></GsapParallax>
         <div className="hero-torus" aria-hidden="true"><TorusField /></div>
 
         <motion.div
@@ -120,11 +121,11 @@ export function LandingPage({ onLogin, onRegister }: LandingPageProps) {
 
       {/* ── Comment ça marche ─────────────────────────────────── */}
       <section id="comment-ca-marche" className="section-block container">
-        <div className="section-heading">
+        <GsapReveal effect="blurIn"><div className="section-heading">
           <span className="section-kicker">{t('landing_steps_label')}</span>
           <h2>{t('landing_steps_title')}</h2>
           <p>{t('landing_steps_subtitle')}</p>
-        </div>
+        </div></GsapReveal>
         <motion.div
           className="steps-grid stagger"
           initial="hidden" whileInView="visible" viewport={{ once: true, margin: '-60px' }} variants={stagger}
@@ -148,10 +149,10 @@ export function LandingPage({ onLogin, onRegister }: LandingPageProps) {
 
       {/* ── Fonctionnalités ───────────────────────────────────── */}
       <section id="fonctionnalites" className="section-block container benefits-section">
-        <div className="section-heading">
+        <GsapReveal effect="blurIn"><div className="section-heading">
           <span className="section-kicker">{t('landing_features_label')}</span>
           <h2>{t('landing_features_title')}</h2>
-        </div>
+        </div></GsapReveal>
         <motion.div
           className="benefits-grid stagger"
           initial="hidden" whileInView="visible" viewport={{ once: true, margin: '-60px' }} variants={stagger}
@@ -174,11 +175,11 @@ export function LandingPage({ onLogin, onRegister }: LandingPageProps) {
       {/* ── Architecture ──────────────────────────────────────── */}
       <section id="architecture" className="arch-section">
         <div className="container">
-          <div className="arch-heading">
+          <GsapReveal effect="blurIn"><div className="arch-heading">
             <span className="section-kicker">{t('landing_arch_label')}</span>
             <h2>{t('landing_arch_title')}</h2>
             <p>{t('landing_arch_subtitle')}</p>
-          </div>
+          </div></GsapReveal>
 
           <motion.div
             className="arch-grid"
@@ -299,11 +300,8 @@ export function LandingPage({ onLogin, onRegister }: LandingPageProps) {
       </section>
 
       {/* ── CTA final ────────────────────────────────────────── */}
-      <motion.section
-        className="container final-cta"
-        initial="hidden" whileInView="visible" viewport={{ once: true, margin: '-60px' }} variants={stagger}
-      >
-        <motion.div className="glass-card final-cta-card" variants={cardVariant}>
+      <GsapReveal effect="clipReveal" as="section" className="container final-cta">
+        <div className="glass-card final-cta-card">
           <div>
             <span className="section-kicker">{t('landing_cta_section_title')}</span>
             <h2>{t('landing_cta_section_heading')}</h2>
@@ -318,8 +316,8 @@ export function LandingPage({ onLogin, onRegister }: LandingPageProps) {
             {t('landing_cta_button')}
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
           </motion.button>
-        </motion.div>
-      </motion.section>
+        </div>
+      </GsapReveal>
 
       {/* ── Footer ────────────────────────────────────────────── */}
       <footer className="site-footer">

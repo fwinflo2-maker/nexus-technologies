@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { ScrollReveal, TiltCard, EASE } from '../../components/anim/Premium';
 import {
   apiWalletsList,
   apiWalletRates,
@@ -225,41 +227,58 @@ export default function WalletPage() {
         </div>
       </div>
 
-      {/* KPIs : totaux par état */}
-      <div className="g4 animate-up delay-1" style={{ marginBottom: 24 }}>
+      {/* KPIs : totaux par état (staggered reveal + hover) */}
+      <motion.div
+        className="g4" style={{ marginBottom: 24 }}
+        initial="hidden" animate="visible"
+        variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.08 } } }}
+      >
         {[
           { label: 'Total portefeuille', raw: totals.total_ref, color: 'var(--cyan)', sub: 'Équivalent EUR' },
           { label: 'Disponible', raw: totals.available_ref, color: 'var(--green)', sub: 'Immédiatement disponible' },
           { label: 'En attente', raw: totals.pending_ref, color: 'var(--gold)', sub: 'Créancier — règlement ~24h' },
           { label: 'En transit', raw: totals.in_transit_ref, color: 'var(--violet)', sub: 'Vers / depuis un provider' },
         ].map((s) => (
-          <div key={s.label} className="card stat-card">
+          <motion.div
+            key={s.label}
+            className="card stat-card shine-sweep"
+            style={{ position: 'relative', overflow: 'hidden' }}
+            variants={{ hidden: { opacity: 0, y: 22, scale: 0.98 }, visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.5, ease: EASE } } }}
+            whileHover={{ y: -5, scale: 1.02 }}
+            transition={{ type: 'spring', stiffness: 260, damping: 18 }}
+          >
             <div className="stat-label">{s.label}</div>
             <div className="stat-value" style={{ fontSize: 24, color: s.color }}>
               <AnimatedCounter value={s.raw} format={(n) => formatCurrency(n, 'EUR')} />
             </div>
             <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>{s.sub}</div>
-          </div>
+          </motion.div>
         ))}
-      </div>
+      </motion.div>
 
-      {/* Onglets : Mes devises / Sources / Destinations */}
-      <div className="account-tabs animate-up delay-1" style={{ marginBottom: 20, width: 'fit-content' }}>
+      {/* Onglets : Mes devises / Sources / Destinations (layout animé) */}
+      <motion.div
+        className="account-tabs" style={{ marginBottom: 20, width: 'fit-content' }}
+        initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15, duration: 0.45, ease: EASE }}
+      >
         {([
           ['devises', '💱 Mes devises'],
           ['sources', '🏦 Sources de financement'],
           ['destinations', '📍 Destinations'],
         ] as const).map(([id, label]) => (
-          <button
+          <motion.button
             key={id}
             className={`account-tab ${tab === id ? 'active-personal' : ''}`}
             onClick={() => setTab(id)}
             style={{ fontSize: 11, fontWeight: 600 }}
+            layout
+            whileTap={{ scale: 0.96 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 18 }}
           >
             {label}
-          </button>
+          </motion.button>
         ))}
-      </div>
+      </motion.div>
 
       {tab === 'devises' && (
         <div className="animate-up delay-2">
@@ -363,14 +382,18 @@ export default function WalletPage() {
             </div>
           )}
 
-          {/* Grille des wallets par devise (selectionnables) */}
-          <div className="g3" style={{ gap: 14 }}>
+          {/* Grille des wallets par devise (selectionnables) — reveal + tilt */}
+          <motion.div
+            className="g3" style={{ gap: 14 }}
+            initial="hidden" animate="visible"
+            variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.06 } } }}
+          >
             {wallets.map((w) => {
               const meta = CURRENCY_META[w.currency] ?? { flag: '🌐', symbol: w.currency, label: w.currency };
               const pct = w.balance > 0 ? Math.min(100, Math.round((w.available / w.balance) * 100)) : 0;
               const isSelected = selected === w.currency;
               return (
-                <div
+                <motion.div
                   key={w.currency}
                   className="card"
                   onClick={() => handleSelect(w.currency)}
@@ -378,20 +401,13 @@ export default function WalletPage() {
                     padding: 18,
                     cursor: 'pointer',
                     borderColor: isSelected ? 'rgba(0,200,255,0.45)' : undefined,
-                    transition: 'border-color 0.2s, transform 0.2s',
+                    position: 'relative',
+                    overflow: 'hidden',
                   }}
-                  onMouseEnter={(e) => {
-                    if (!isSelected) {
-                      e.currentTarget.style.borderColor = 'rgba(0,200,255,0.2)';
-                      e.currentTarget.style.transform = 'translateY(-2px)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isSelected) {
-                      e.currentTarget.style.borderColor = '';
-                      e.currentTarget.style.transform = '';
-                    }
-                  }}
+                  variants={{ hidden: { opacity: 0, y: 20, scale: 0.98 }, visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.45, ease: EASE } } }}
+                  whileHover={isSelected ? {} : { y: -5, scale: 1.02, borderColor: 'rgba(0,200,255,0.25)' }}
+                  whileTap={{ scale: 0.98 }}
+                  transition={{ type: 'spring', stiffness: 260, damping: 18 }}
                 >
                   {/* Ligne supérieure : flag + badges */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
@@ -453,15 +469,15 @@ export default function WalletPage() {
                       {w.has_funds ? `≈ ${formatCurrency(w.ref_equivalent, 'EUR')}` : 'Sans fonds'}
                     </span>
                   </div>
-                </div>
+                </motion.div>
               );
             })}
-          </div>
+          </motion.div>
 
           {/* Aperçu du wallet sélectionné + historique rapide */}
-          <div className="g2 animate-up delay-3" style={{ alignItems: 'start', gap: 20, marginTop: 20 }}>
-            {/* ─── Aperçu ─── */}
-            <div className="card card-hi-c" style={{ padding: 22 }}>
+          <ScrollReveal className="g2" style={{ alignItems: 'start', gap: 20, marginTop: 20 }}>
+            {/* ─── Aperçu (tilt 3D) ─── */}
+            <TiltCard className="card card-hi-c" style={{ padding: 22, position: 'relative' }} max={6}>
               <div className="page-label" style={{ marginBottom: 12 }}>Wallet sélectionné — Aperçu</div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -519,7 +535,7 @@ export default function WalletPage() {
                   </span>
                 </div>
               )}
-            </div>
+            </TiltCard>
 
             {/* ─── Historique rapide ─── */}
             <div className="card" style={{ padding: 22 }}>
@@ -585,7 +601,7 @@ export default function WalletPage() {
                 </div>
               )}
             </div>
-          </div>
+          </ScrollReveal>
         </div>
       )}
 

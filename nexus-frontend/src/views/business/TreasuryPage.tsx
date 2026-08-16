@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { apiBusinessTreasury, type BusinessWallet } from '../../api/client';
 import { fmtMoney } from './ui';
 import { useDashT } from '../../data/dashboard-i18n';
+import { AnimatedNumber, TiltCard, EASE } from '../../components/anim/Premium';
 
 /** Trésorerie — multi-devises, liquidité, exposition FX (backend). */
 export default function TreasuryPage() {
@@ -43,14 +44,18 @@ export default function TreasuryPage() {
 
       {totals && (
         <div style={{ display: 'flex', gap: 14, marginBottom: 22, flexWrap: 'wrap' }}>
-          <div className="card" style={{ padding: 18, flex: 1, minWidth: 200 }}>
+          <TiltCard className="card" style={{ padding: 18, flex: 1, minWidth: 200, position: 'relative' }} max={6}>
             <div style={{ fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Liquidité totale</div>
-            <div className="mono" style={{ fontSize: 24, fontWeight: 800, color: 'var(--cyan)', marginTop: 6 }}>{fmtMoney(totals.total_assets, totals.ref_currency)}</div>
-          </div>
-          <div className="card" style={{ padding: 18, flex: 1, minWidth: 200 }}>
+            <div className="mono" style={{ fontSize: 24, fontWeight: 800, color: 'var(--cyan)', marginTop: 6 }}>
+              <AnimatedNumber value={totals.total_assets} format={(n) => fmtMoney(n, totals.ref_currency)} />
+            </div>
+          </TiltCard>
+          <TiltCard className="card" style={{ padding: 18, flex: 1, minWidth: 200, position: 'relative' }} max={6}>
             <div style={{ fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Disponible immédiatement</div>
-            <div className="mono" style={{ fontSize: 24, fontWeight: 800, color: 'var(--green)', marginTop: 6 }}>{fmtMoney(totals.available, totals.ref_currency)}</div>
-          </div>
+            <div className="mono" style={{ fontSize: 24, fontWeight: 800, color: 'var(--green)', marginTop: 6 }}>
+              <AnimatedNumber value={totals.available} format={(n) => fmtMoney(n, totals.ref_currency)} />
+            </div>
+          </TiltCard>
         </div>
       )}
 
@@ -63,25 +68,35 @@ export default function TreasuryPage() {
         <div className="card" style={{ padding: 20 }}>
           <div className="page-label" style={{ marginBottom: 14 }}>Positions par devise + exposition FX</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {wallets.map(w => (
-              <div key={w.currency} style={{ borderBottom: '1px solid var(--border)', paddingBottom: 14 }}>
+            {wallets.map((w, i) => (
+              <motion.div
+                key={w.currency}
+                style={{ borderBottom: '1px solid var(--border)', paddingBottom: 14 }}
+                initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15 + i * 0.08, duration: 0.45, ease: EASE }}
+                whileHover={{ x: 4, transition: { type: 'spring', stiffness: 260, damping: 20 } }}
+              >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                   <div>
                     <span style={{ fontWeight: 700, color: 'var(--text-bright)', fontSize: 15 }}>{w.currency}</span>
-                    <span style={{ fontSize: 11, color: 'var(--text-dim)', marginLeft: 8 }}>solde {fmtMoney(w.balance, w.currency)}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-dim)', marginLeft: 8 }}>solde <AnimatedNumber value={w.balance} /></span>
                   </div>
-                  <div className="mono" style={{ fontWeight: 700, color: 'var(--text-bright)' }}>≈ {fmtMoney(w.ref_value, 'EUR')}</div>
+                  <div className="mono" style={{ fontWeight: 700, color: 'var(--text-bright)' }}>≈ <AnimatedNumber value={w.ref_value} /> EUR</div>
                 </div>
                 <div style={{ display: 'flex', gap: 10, marginTop: 6, fontSize: 11, color: 'var(--text-dim)' }}>
-                  <span>dispo {fmtMoney(w.available, w.currency)}</span>
-                  {w.pending > 0 && <span>· en attente {fmtMoney(w.pending, w.currency)}</span>}
-                  {w.in_transit > 0 && <span>· en transit {fmtMoney(w.in_transit, w.currency)}</span>}
-                  {w.settlement > 0 && <span>· règlement {fmtMoney(w.settlement, w.currency)}</span>}
+                  <span>dispo <AnimatedNumber value={w.available} /></span>
+                  {w.pending > 0 && <span>· en attente <AnimatedNumber value={w.pending} /></span>}
+                  {w.in_transit > 0 && <span>· en transit <AnimatedNumber value={w.in_transit} /></span>}
+                  {w.settlement > 0 && <span>· règlement <AnimatedNumber value={w.settlement} /></span>}
                 </div>
                 <div style={{ marginTop: 8, height: 6, background: 'var(--panel2)', borderRadius: 3, overflow: 'hidden' }}>
-                  <div style={{ width: `${Math.round((w.ref_value / maxVal) * 100)}%`, height: '100%', background: 'linear-gradient(90deg, var(--cyan), var(--violet))' }} />
+                  <motion.div
+                    style={{ height: '100%', background: 'linear-gradient(90deg, var(--cyan), var(--violet))', borderRadius: 3 }}
+                    initial={{ width: 0 }} animate={{ width: `${Math.round((w.ref_value / maxVal) * 100)}%` }}
+                    transition={{ delay: 0.25 + i * 0.08, duration: 0.7, ease: EASE }}
+                  />
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
           <Link to="/convert" className="btn btn-ghost" style={{ marginTop: 16, fontSize: 11 }}>Convertir des devises →</Link>

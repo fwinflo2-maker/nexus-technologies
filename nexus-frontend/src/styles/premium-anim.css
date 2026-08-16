@@ -59,6 +59,14 @@
   100% { box-shadow: 0 0 0 0 transparent; }
 }
 
+/* ── Tilt 3D : reflet qui suit la souris ─────────────────────────────── */
+.tilt-glare {
+  position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 2;
+  background: radial-gradient(220px circle at var(--gx, 50%) var(--gy, 50%), rgba(255,255,255,0.10), transparent 65%);
+  opacity: 0; transition: opacity 0.3s ease;
+}
+.tilt-card:hover .tilt-glare { opacity: 1; }
+
 /* ── Reflet / shine qui balaie la carte au hover ──────────────────────── */
 .shine-sweep { position: relative; overflow: hidden; }
 .shine-sweep::before {
