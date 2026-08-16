@@ -6,7 +6,7 @@ import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import './AuthPages.css';
 import { useI18n } from '../../context/I18nContext';
 import { useAuth } from '../../context/AuthContext';
-import { apiLogin, apiMe, getHomePath } from '../../api/client';
+import { apiLogin } from '../../api/client';
 import { ParticlesBackground } from '../../components/ParticlesBackground';
 import { EASE } from '../../components/anim/Premium';
 
@@ -60,19 +60,21 @@ export function LoginPage({ onSwitchToRegister, onBackHome }: LoginPageProps) {
     if (method === 'phone' && phone.trim().length < 6) { setError(t('login_err_phone')); return; }
     setLoading(true);
     try {
-      // Appel direct à l'API backend — le token est stocké côté client par apiLogin
+      // Appel direct à l'API backend — le token et le user sont stockés côté client
       const resp = await apiLogin(identifier, password);
       if (!resp.success) {
         setError(resp.error ?? t('login_err_required'));
         return;
       }
-      // Revalide la session via /api/me pour que le contexte React mette à jour le user
+      // Le user est déjà retourné par /api/login (fiable, aucune re-requête).
+      // refreshSession() synchronise le contexte React avec ce même user.
       await refreshSession();
-      // Redirige vers le dashboard référent (superadmin → /admin, sinon le
-      // dashboard client personal/business → /dashboard).
-      const me = await apiMe().catch(() => null);
-      const target = getHomePath(me?.data?.user ?? {});
-      navigate(target, { replace: true });
+      // On navigue TOUJOURS vers /dashboard : c'est le point d'entrée universel
+      // qui existe dans tous les cas. La redirection finale vers /admin (pour
+      // un superadmin) est gérée par DashboardLayout, ce qui élimine toute
+      // course entre la navigation et la mise à jour de l'état React — résultat
+      // identique sur tous les navigateurs.
+      navigate('/dashboard', { replace: true });
     } catch {
       // Filet de sécurité : ne jamais laisser le formulaire bloqué en « envoi ».
       setError(t('login_err_required'));

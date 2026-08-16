@@ -96,6 +96,14 @@ function DashboardLayout() {
   const { user } = useAuth();
   const t = useDashT();
 
+  // Garde-fou : un superadmin atterrissant sur le dashboard client est
+  // redirigé vers son tableau de bord Super Admin. Centralisé ici, cela
+  // garantit que la redirection s'applique quel que soit le timing de
+  // navigation (résultat identique sur tous les navigateurs).
+  if (user?.platform_role === 'superadmin') {
+    return <Navigate to="/admin" replace />;
+  }
+
   // Le mode est FIXÉ par le type de compte : un compte personal est toujours
   // personal, un compte business toujours business. Pas de bascule P/B.
   const isPersonalAccount = user?.account_type === 'personal';

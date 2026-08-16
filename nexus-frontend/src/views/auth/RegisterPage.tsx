@@ -6,7 +6,7 @@ import './AuthPages.css';
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../../context/I18nContext';
 import { useAuth } from '../../context/AuthContext';
-import { apiRegister, apiMe, getHomePath } from '../../api/client';
+import { apiRegister } from '../../api/client';
 import { ParticlesBackground } from '../../components/ParticlesBackground';
 import { EASE } from '../../components/anim/Premium';
 
@@ -303,12 +303,12 @@ export function RegisterPage({ onSwitchToLogin, onBackHome }: RegisterPageProps)
         setError(resp.error ?? 'Erreur lors de l\'inscription.');
         return;
       }
-      // Revalide la session via /api/me pour que le contexte React mette à jour le user
+      // Revalide la session via le contexte React (le user est déjà retourné
+      // par /api/register — aucune re-requête, fiable sur tous les navigateurs).
       await refreshSession();
-      // Redirige vers le dashboard référent (superadmin → /admin, sinon /dashboard).
-      const me = await apiMe().catch(() => null);
-      const target = getHomePath(me?.data?.user ?? {});
-      navigate(target, { replace: true });
+      // Point d'entrée universel : la redirection finale (superadmin → /admin)
+      // est gérée par DashboardLayout, sans course de timing navigateur.
+      navigate('/dashboard', { replace: true });
     } catch {
       // Filet de sécurité : ne jamais laisser le formulaire bloqué en « envoi ».
       setError('Erreur lors de l\'inscription. Veuillez réessayer.');
