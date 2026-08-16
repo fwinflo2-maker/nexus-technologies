@@ -7,6 +7,7 @@ import { LandingPage } from './views/public/LandingPage';
 import { LoginPage } from './views/auth/LoginPage';
 import { RegisterPage } from './views/auth/RegisterPage';
 import ForgotPasswordPage from './views/auth/ForgotPasswordPage';
+import { PrivacyPage, TermsPage, DocumentationPage, SupportPage } from './views/public/InfoPages';
 import GearsBackground from './components/dashboard/GearsBackground';
 import { ParticlesBackground } from './components/ParticlesBackground';
 import Sidebar from './components/dashboard/Sidebar';
@@ -84,6 +85,10 @@ function PublicRouter() {
           }
         />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
+        <Route path="/terms" element={<TermsPage />} />
+        <Route path="/docs" element={<DocumentationPage />} />
+        <Route path="/support" element={<SupportPage />} />
         {/* Toute route inconnue ou protégée atteinte sans session (ex. juste
             après une déconnexion depuis /admin ou /dashboard) mène à la page
             de connexion, et non à la landing. */}

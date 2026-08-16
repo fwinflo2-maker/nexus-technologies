@@ -1,4 +1,5 @@
 import { type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useI18n } from '../../context/I18nContext';
 import { TorusField } from '../../components/TorusField';
@@ -327,10 +328,10 @@ export function LandingPage({ onLogin, onRegister }: LandingPageProps) {
             <span>NEXUS CORP TECHNOLOGIES</span>
           </div>
           <div className="footer-links">
-            <span>Documentation</span>
-            <span>{t('footer_privacy')}</span>
-            <span>{t('footer_terms')}</span>
-            <span>Support</span>
+            <Link to="/docs" className="footer-link">Documentation</Link>
+            <Link to="/privacy" className="footer-link">{t('footer_privacy')}</Link>
+            <Link to="/terms" className="footer-link">{t('footer_terms')}</Link>
+            <Link to="/support" className="footer-link">Support</Link>
           </div>
           <p className="footer-copy">{t('footer_copy')}</p>
         </div>

@@ -162,8 +162,8 @@
 .footer-inner { max-width: 1140px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 1.25rem; }
 .footer-brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 0.8125rem; color: var(--text-muted); letter-spacing: 0.08em; text-transform: uppercase; }
 .footer-links { display: flex; gap: 1.5rem; }
-.footer-links span { color: var(--text-faint); font-size: 0.8rem; cursor: pointer; transition: color 0.2s; }
-.footer-links span:hover { color: var(--text); }
+.footer-links span, .footer-links .footer-link { color: var(--text-faint); font-size: 0.8rem; cursor: pointer; transition: color 0.2s; text-decoration: none; }
+.footer-links span:hover, .footer-links .footer-link:hover { color: var(--text); }
 .footer-copy { font-size: 0.75rem; color: var(--text-faint); }
 
 /* ── Responsive ───────────────────────────────────────────────── */
