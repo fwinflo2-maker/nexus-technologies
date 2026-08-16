@@ -207,3 +207,13 @@
 .chat-bubble.internal { align-self: flex-start; background: rgba(148,163,184,0.12); border: 1px dashed rgba(148,163,184,0.4); border-bottom-left-radius: 4px; }
 .chat-internal-toggle { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-mid); cursor: pointer; white-space: nowrap; }
 .chat-internal-toggle input { accent-color: var(--cyan); }
+
+/* ── Quick replies (assistant « Fin ») ────────────────────────────────── */
+.chat-quick { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.chat-quick-btn {
+  background: rgba(59,130,246,0.14); color: var(--cyan); border: 1px solid rgba(59,130,246,0.35);
+  border-radius: 16px; padding: 6px 12px; font-size: 12px; cursor: pointer; font-weight: 600;
+  transition: all 0.15s ease;
+}
+.chat-quick-btn:hover { background: var(--cyan); color: #fff; transform: translateY(-1px); }
+.chat-quick-btn:active { transform: scale(0.96); }

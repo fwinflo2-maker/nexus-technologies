@@ -1582,6 +1582,8 @@ export interface SupportBotResult {
   escalate: boolean;
   category: string;
   subject: string;
+  intent?: string;
+  quick_replies?: string[];
 }
 
 export async function apiSupportBot(message: string): Promise<ApiResponse<SupportBotResult>> {

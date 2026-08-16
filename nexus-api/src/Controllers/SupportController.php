@@ -419,11 +419,15 @@ final class SupportController
         ], 201);
     }
 
-    // ─── Analyse du bot ───────────────────────────────────────────────────
+    // ─── Analyse du bot (système « Fin ») ─────────────────────────────────
 
     /**
      * Analyse un message et décide : réponse directe OU escalade.
-     * Retourne { reply, escalate, category, subject }.
+     * Retourne { reply, escalate, category, subject, quick_replies, intent }.
+     *
+     * Le bot façon « Fin » : détecte l'intention, répond, et propose des
+     * suggestions de réponses rapides (quick replies) pour guider l'utilisateur
+     * comme un assistant IA moderne (Intercom Fin / Revolut / Wise).
      */
     private static function analyzeBot(string $body): array
     {
@@ -442,45 +446,86 @@ final class SupportController
                     'escalate' => true,
                     'category' => 'other',
                     'subject'  => mb_substr($body, 0, 120),
+                    'intent'   => 'human',
+                    'quick_replies' => [],
                 ];
             }
         }
 
         $rules = [
-            'transfert|transfer|virement|envoi' => [
-                'reply' => "Pour un transfert : allez dans « Envoyer », choisissez la devise et le destinataire. "
-                    . "Les fonds partent généralement sous quelques minutes. Si votre transfert est bloqué, dites-le-moi : un agent vérifiera.",
+            'transfert|transfer|virement|envoi|envois|envoyer|argent|payer' => [
+                'reply' => "💸 **Transfert** : allez dans « Envoyer », choisissez la devise et le destinataire. "
+                    . "Les fonds partent généralement sous quelques minutes.\n\nSouhaitez-vous en savoir plus ?",
                 'category' => 'transfer',
                 'subject' => 'Question sur un transfert',
+                'intent' => 'transfer',
+                'quick_replies' => [
+                    'Mon transfert est bloqué',
+                    'Quels sont les délais ?',
+                    'Quelles devises sont supportées ?',
+                    'Parler à un agent',
+                ],
             ],
-            'solde|sold|balance|salaire|portefeuille' => [
-                'reply' => "Votre solde est visible dans « Portefeuille », avec la répartition disponible / en attente / en transit. "
-                    . "Si vous voyez un écart, un agent vérifiera le ledger.",
+            'solde|sold|balance|salaire|portefeuille|compte' => [
+                'reply' => "💰 **Votre solde** est visible dans « Portefeuille », avec la répartition disponible / en attente / en transit. "
+                    . "Vérifiez aussi vos notifications pour les opérations récentes.\n\nPuis-je vous aider autrement ?",
                 'category' => 'account',
-                'subject' => 'Question sur le solde',
+                'subject' => 'Question sur le solde / compte',
+                'intent' => 'account',
+                'quick_replies' => [
+                    'Je vois un écart sur mon solde',
+                    'Mon compte est bloqué',
+                    'Comment fonctionnent les wallets ?',
+                    'Parler à un agent',
+                ],
             ],
             'kyc|vérif|verif|identité|document|pièce' => [
-                'reply' => "Pour la vérification KYC, rendez-vous dans « KYC ». Il faut une pièce d'identité + un selfie. "
-                    . "Les dossiers sont traités sous 24-48h. Besoin d'aide ? Un agent peut suivre le dossier.",
+                'reply' => "🪪 **Vérification KYC** : rendez-vous dans « KYC » avec une pièce d'identité + un selfie. "
+                    . "Les dossiers sont traités sous 24-48h.\n\nBesoin d'aide sur votre dossier ?",
                 'category' => 'kyc',
                 'subject' => 'Vérification KYC',
+                'intent' => 'kyc',
+                'quick_replies' => [
+                    'Ma vérification est en attente',
+                    'Quels documents sont acceptés ?',
+                    'Mon dossier a été refusé',
+                    'Parler à un agent',
+                ],
             ],
-            'factur|frais|commission|tarif|coût' => [
-                'reply' => "Les frais sont calculés au moment de l'envoi selon le provider. "
-                    . "Vous voyez le total avant de confirmer. Pour le détail d'une opération précise, un agent peut vous aider.",
+            'factur|frais|commission|tarif|coût|coute' => [
+                'reply' => "🧾 **Frais & commissions** : les frais sont calculés au moment de l'envoi selon le provider, "
+                    . "et vous voyez le total avant de confirmer.\n\nSouhaitez-vous le détail ?",
                 'category' => 'billing',
                 'subject' => 'Question sur les frais',
+                'intent' => 'fees',
+                'quick_replies' => [
+                    'Détail des frais sur une opération',
+                    'Pourquoi des frais sont-ils prélevés ?',
+                    'Frais pour l’international',
+                    'Parler à un agent',
+                ],
             ],
-            'carte|card|plafond|limite|gel|bloqué|suspendu' => [
-                'reply' => "Geler une carte ou un compte est une opération sensible. Je transmets votre demande à un agent humain qui s'en occupe immédiatement.",
+            'carte|card|plafond|limite|gel|bloqué|suspendu|refus' => [
+                'reply' => "🔒 **Geler une carte ou un compte** est une opération sensible. "
+                    . "Je transmets immédiatement votre demande à un agent humain qui vérifiera votre situation.",
                 'category' => 'account',
                 'subject' => mb_substr($body, 0, 120),
+                'intent' => 'security',
                 'escalate' => true,
+                'quick_replies' => [],
             ],
-            'merci|ok|super|parfait|compris|d accord|ok merci' => [
-                'reply' => "Avec plaisir ! N'hésitez pas si vous avez d'autres questions. Un agent peut aussi vous aider si besoin.",
+            'merci|ok|super|parfait|compris|d accord|ok merci|merci beaucoup' => [
+                'reply' => "😊 Avec plaisir ! N'hésitez pas si vous avez d'autres questions. "
+                    . "Je suis là 24/7, et un agent peut aussi prendre le relais si besoin.",
                 'category' => 'other',
                 'subject' => 'Remerciement',
+                'intent' => 'thanks',
+                'quick_replies' => [
+                    'J’ai une autre question',
+                    'Comment voir mes transactions ?',
+                    'Comment changer mon mot de passe ?',
+                    'Parler à un agent',
+                ],
             ],
         ];
 
@@ -492,17 +537,48 @@ final class SupportController
                         'escalate' => $def['escalate'] ?? false,
                         'category' => $def['category'],
                         'subject'  => $def['subject'],
+                        'intent'   => $def['intent'],
+                        'quick_replies' => $def['quick_replies'],
                     ];
                 }
             }
         }
 
-        // 2. Aucun mot-clé → le bot ne sait pas répondre → escalade.
+        // 2. Salutation / menu d'aide.
+        if (preg_match('/\b(bonjour|bonsoir|salut|hello|hey|coucou|aide|help|menu)\b/', $text)) {
+            return [
+                'reply' => "👋 Bonjour ! Je suis l'assistant Nexus. Voici ce que je peux vous aider :\n"
+                    . "• 💸 Transferts & envois\n"
+                    . "• 💰 Solde & comptes\n"
+                    . "• 🪪 Vérification KYC\n"
+                    . "• 🧾 Frais & facturation\n"
+                    . "• 🔒 Carte, plafonds & sécurité\n\nChoisissez un sujet, ou écrivez « agent » pour parler à un conseiller.",
+                'escalate' => false,
+                'category' => 'other',
+                'subject' => 'Menu d\'aide',
+                'intent' => 'menu',
+                'quick_replies' => [
+                    'Je veux envoyer de l\'argent',
+                    'Question sur mon solde',
+                    'Vérification KYC',
+                    'Mes frais',
+                    'Geler ma carte',
+                    'Parler à un agent',
+                ],
+            ];
+        }
+
+        // 3. Aucun mot-clé → le bot ne sait pas répondre → escalade.
         return [
             'reply'    => null,
             'escalate' => true,
             'category' => 'other',
             'subject'  => mb_substr($body, 0, 120),
+            'intent'   => 'unknown',
+            'quick_replies' => [
+                'Réessayer ma question',
+                'Parler à un agent',
+            ],
         ];
     }
 

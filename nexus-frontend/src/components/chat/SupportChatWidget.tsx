@@ -7,7 +7,7 @@ import {
 } from '../../api/client';
 import { EASE } from '../anim/Premium';
 
-interface BotMsg { sender: 'customer' | 'bot'; body: string; }
+interface BotMsg { sender: 'customer' | 'bot'; body: string; quickReplies?: string[]; }
 
 /** Widget de chat support (client). Flux : d'abord un bot pré-ticket, qui
  * escalade vers un ticket + agent humain si le bot ne sait pas répondre ou si
@@ -69,6 +69,25 @@ export default function SupportChatWidget() {
     }
   }, [open]);
 
+  async function sendQuick(q: string) {
+    if (sending) return;
+    setDraft(q);
+    setSending(true);
+    const history = [...botHistory, { sender: 'customer' as const, body: q }];
+    setBotHistory(history);
+    const res = await apiSupportBot(q);
+    setSending(false);
+    if (!res.success || !res.data) return;
+    const r = res.data;
+    const botMsg = r.reply ?? (r.escalate ? 'Je transmets votre demande à un agent humain. 📨' : '');
+    if (botMsg) setBotHistory((h) => [...h, { sender: 'bot', body: botMsg, quickReplies: r.quick_replies ?? [] }]);
+    if (r.escalate) {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      const create = await apiSupportCreateConversation(r.subject || q, r.category, { history });
+      if (create.success && create.data) openConv(create.data.conversation.id, create.data.conversation);
+    }
+  }
+
   async function sendBot() {
     const text = draft.trim();
     if (!text || sending) return;
@@ -82,7 +101,7 @@ export default function SupportChatWidget() {
     const r = res.data;
     // Affiche la réponse du bot (même si escalate, on montre un message).
     const botMsg = r.reply ?? (r.escalate ? 'Je transmets votre demande à un agent humain. 📨' : '');
-    if (botMsg) setBotHistory((h) => [...h, { sender: 'bot', body: botMsg }]);
+    if (botMsg) setBotHistory((h) => [...h, { sender: 'bot', body: botMsg, quickReplies: r.quick_replies ?? [] }]);
     // Escalade → création du ticket avec tout l'historique.
     if (r.escalate) {
       await new Promise((resolve) => setTimeout(resolve, 600));
@@ -180,9 +199,16 @@ export default function SupportChatWidget() {
             <div className="chat-panel-body" ref={scrollRef}>
               {mode === 'bot' ? (
                 <div className="chat-thread">
-                  {[{ sender: 'bot', body: 'Bonjour 👋 Je suis l\'assistant Nexus. Décrivez votre besoin, ou écrivez « agent » pour être mis en relation avec un conseiller.' }, ...botHistory].map((m, i) => (
+                  {[{ sender: 'bot', body: '👋 Bonjour ! Je suis l\'assistant Nexus. Décrivez votre besoin, ou écrivez « agent » pour être mis en relation avec un conseiller.', quickReplies: ['Je veux envoyer de l\'argent', 'Question sur mon solde', 'Vérification KYC', 'Mes frais', 'Parler à un agent'] }, ...botHistory].map((m, i) => (
                     <div key={i} className={`chat-bubble ${m.sender === 'customer' ? 'mine' : 'bot'}`}>
                       <div className="chat-bubble-body">{m.body}</div>
+                      {m.sender === 'bot' && m.quickReplies && m.quickReplies.length > 0 && (
+                        <div className="chat-quick">
+                          {m.quickReplies.map((q, j) => (
+                            <button key={j} className="chat-quick-btn" onClick={() => sendQuick(q)}>{q}</button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
