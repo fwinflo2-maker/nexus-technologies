@@ -1511,3 +1511,54 @@ export async function apiResetPassword(token: string, newPassword: string, confi
 export function getHomePath(user: { platform_role?: string }): string {
   return user.platform_role === 'superadmin' ? '/admin' : '/dashboard';
 }
+
+// --- Support chat (tickets / conversations) --------------------------------
+
+export interface SupportConversation {
+  id: number;
+  subject: string;
+  category: string | null;
+  status: string;
+  priority: string;
+  assigned_to: number | null;
+  created_at: string;
+  updated_at: string;
+  // côté agent
+  client_name?: string;
+  client_email?: string;
+  unread?: number;
+}
+
+export interface SupportMessage {
+  id: number;
+  conversation_id: number;
+  customer_id: number | null;
+  agent_id: number | null;
+  is_bot: boolean;
+  body: string;
+  read_at: string | null;
+  created_at: string;
+  customer_name: string | null;
+  agent_name: string | null;
+}
+
+export async function apiSupportConversations(): Promise<ApiResponse<{ items: SupportConversation[]; total: number }>> {
+  return request('GET', '/support/conversations');
+}
+
+export async function apiSupportCreateConversation(subject: string, category: string): Promise<ApiResponse<{ conversation: SupportConversation; bot_reply: string }>> {
+  return request('POST', '/support/conversations', { subject, category });
+}
+
+export async function apiSupportMessages(id: number, afterId?: number): Promise<ApiResponse<{ items: SupportMessage[] }>> {
+  const q = afterId ? `?after_id=${afterId}` : '';
+  return request('GET', `/support/conversations/${id}/messages${q}`);
+}
+
+export async function apiSupportSendMessage(id: number, body: string): Promise<ApiResponse<{ bot_reply: string | null }>> {
+  return request('POST', `/support/conversations/${id}/messages`, { body });
+}
+
+export async function apiSupportSetStatus(id: number, status: string): Promise<ApiResponse<{ status: string }>> {
+  return request('PATCH', `/support/conversations/${id}/status`, { status });
+}

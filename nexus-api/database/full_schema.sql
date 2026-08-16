@@ -432,6 +432,46 @@ CREATE TABLE `revoked_tokens` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `support_conversations` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `user_id` bigint(20) unsigned NOT NULL COMMENT 'Client propriÃ©taire du ticket.',
+  `subject` varchar(190) NOT NULL DEFAULT '',
+  `category` varchar(60) DEFAULT NULL COMMENT 'ex : compte, transfert, kyc, facturation, autre',
+  `status` enum('open','waiting','resolved','closed') NOT NULL DEFAULT 'open',
+  `priority` enum('low','normal','high','urgent') NOT NULL DEFAULT 'normal',
+  `assigned_to` bigint(20) unsigned DEFAULT NULL COMMENT 'EmployÃ©/agent assignÃ© (nullable).',
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_supconv_user` (`user_id`),
+  KEY `idx_supconv_status` (`status`),
+  KEY `idx_supconv_assigned` (`assigned_to`),
+  CONSTRAINT `fk_supconv_agent` FOREIGN KEY (`assigned_to`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_supconv_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `support_messages` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `conversation_id` bigint(20) unsigned NOT NULL,
+  `customer_id` bigint(20) unsigned DEFAULT NULL COMMENT 'Auteur = client (NULL si non-client).',
+  `agent_id` bigint(20) unsigned DEFAULT NULL COMMENT 'Auteur = agent/employÃ© (NULL sinon).',
+  `is_bot` tinyint(1) NOT NULL DEFAULT 0 COMMENT '1 si message gÃ©nÃ©rÃ© par le bot auto.',
+  `body` text NOT NULL,
+  `read_at` datetime DEFAULT NULL COMMENT 'Lecture par l''autre partie.',
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_supmsg_conv` (`conversation_id`,`created_at`),
+  KEY `idx_supmsg_customer` (`customer_id`),
+  KEY `idx_supmsg_agent` (`agent_id`),
+  CONSTRAINT `fk_supmsg_agent` FOREIGN KEY (`agent_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_supmsg_conv` FOREIGN KEY (`conversation_id`) REFERENCES `support_conversations` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_supmsg_customer` FOREIGN KEY (`customer_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
 CREATE TABLE `team_members` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `business_user_id` bigint(20) unsigned NOT NULL,

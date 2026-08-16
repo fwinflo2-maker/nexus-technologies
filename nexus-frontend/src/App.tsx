@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-route
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { I18nProvider } from './context/I18nContext';
 import { NotificationsProvider } from './context/NotificationsContext';
+import SupportChatWidget from './components/chat/SupportChatWidget';
 import { LandingPage } from './views/public/LandingPage';
 import { LoginPage } from './views/auth/LoginPage';
 import { RegisterPage } from './views/auth/RegisterPage';
@@ -155,6 +156,9 @@ function DashboardLayout() {
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </div>
+
+        {/* Widget chat support (tous les dashboards client) */}
+        <SupportChatWidget />
       </NotificationsProvider>
     </div>
   );

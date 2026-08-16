@@ -24,6 +24,7 @@ use Nexus\Controllers\PaymentController;
 use Nexus\Controllers\ProviderCredentialController;
 use Nexus\Controllers\QuoteController;
 use Nexus\Controllers\ReconciliationController;
+use Nexus\Controllers\SupportController;
 use Nexus\Controllers\TeamController;
 use Nexus\Controllers\TransferController;
 use Nexus\Controllers\UserController;
@@ -235,6 +236,13 @@ $router->put('/team/{id}', [TeamController::class, 'update']);
 $router->delete('/team/{id}', [TeamController::class, 'remove']);
 
 // --- Business : rapprochement (protégé) -------------------------------------
+// --- Support chat (tickets / conversations) --------------------------------
+$router->get('/support/conversations', [SupportController::class, 'conversations']);
+$router->post('/support/conversations', [SupportController::class, 'createConversation']);
+$router->get('/support/conversations/{id}/messages', [SupportController::class, 'messages']);
+$router->post('/support/conversations/{id}/messages', [SupportController::class, 'sendMessage']);
+$router->patch('/support/conversations/{id}/status', [SupportController::class, 'setStatus']);
+
 $router->get('/reconciliation', [ReconciliationController::class, 'index']);
 $router->post('/reconciliation', [ReconciliationController::class, 'upsert']);
 $router->post('/reconciliation/{id}/resolve', [ReconciliationController::class, 'resolve']);
