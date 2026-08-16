@@ -248,8 +248,8 @@ export default function ConvertPage() {
                 </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 12, color: 'var(--text-mid)' }}>Provider</span>
-                <span style={{ fontSize: 12, color: 'var(--text-bright)' }}>{quote.routes[0]?.provider}</span>
+                <span style={{ fontSize: 12, color: 'var(--text-mid)' }}>Délai estimé</span>
+                <span style={{ fontSize: 12, color: 'var(--text-bright)' }}>{quote.routes[0]?.delay}</span>
               </div>
             </div>
 

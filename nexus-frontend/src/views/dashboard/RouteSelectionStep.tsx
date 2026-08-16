@@ -64,46 +64,24 @@ function formatCountdown(s: number): string {
 
 // ─── Composants ─────────────────────────────────────────────────────────────
 
-/** Pipeline animé — chaque étape s'allume en séquence pendant le chargement. */
-function EnginePipeline({ loaded, activeCount }: { loaded: boolean; activeCount: number }) {
-  const displayedCount = loaded ? PIPELINE.length : activeCount;
+/** Panneau « sécurisation » : message utilisateur, sans révéler les moteurs internes. */
+function SecureBadge({ loaded }: { loaded: boolean }) {
   return (
-    <div className="card" style={{ padding: 18 }}>
-      <div className="page-label" style={{ marginBottom: 12 }}>
-        Pipeline d'exécution
-        {!loaded && <span style={{ color: 'var(--cyan)', marginLeft: 8 }}>● EN COURS</span>}
-        {loaded && <span style={{ color: 'var(--green)', marginLeft: 8 }}>✓ TERMINÉ</span>}
+    <div className="card" style={{ padding: 16 }}>
+      <div className="page-label" style={{ marginBottom: 10 }}>
+        {loaded ? '✓ Votre envoi est sécurisé' : 'Sécurisation de votre envoi…'}
       </div>
-      <div className="se-pipeline">
-        {PIPELINE.map((s, i) => {
-          const done = i < displayedCount - (loaded ? 0 : 0);
-          const isActive = !loaded && i === displayedCount;
-          return (
-            <div key={i}>
-              <motion.div
-                className={`se-pipe-step ${isActive ? 'se-pipe-active' : ''} ${done && displayedCount >= PIPELINE.length ? 'se-pipe-done' : ''}`}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.25, delay: loaded ? 0 : i * 0.18 }}
-              >
-                <div className="se-pipe-dot" />
-                <span className="se-pipe-name">{s.label}</span>
-                <span className="se-pipe-state" style={{ color: done && displayedCount >= PIPELINE.length ? s.color : undefined }}>
-                  {done && displayedCount >= PIPELINE.length ? '✓' : isActive ? '●' : '○'}
-                </span>
-              </motion.div>
-              {i < PIPELINE.length - 1 && (
-                <div className={`se-pipe-conn ${done && displayedCount >= PIPELINE.length ? 'se-pipe-conn-done' : ''}`} />
-              )}
-            </div>
-          );
-        })}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: 'var(--text-mid)', lineHeight: 1.5 }}>
+        <span style={{ fontSize: 18 }}>🔒</span>
+        <span>
+          Nous vérifions le meilleur itinéraire pour votre transfert : montant reçu maximum, frais réduits et délai le plus court. Vos informations restent confidentielles.
+        </span>
       </div>
     </div>
   );
 }
 
-/** Carte de route animée. */
+/** Carte de route animée — présentation 100% utilisateur, sans mention de provider ni de mécanisme. */
 function RouteCard({
   route,
   selected,
@@ -133,8 +111,7 @@ function RouteCard({
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-bright)' }}>
-          ROUTE {route.id}
-          {recommended && <span style={{ fontSize: 9, color: 'var(--cyan)', marginLeft: 6 }}>(recommandée)</span>}
+          {recommended ? <span style={{ color: 'var(--green)' }}>⭐ Recommandée</span> : 'Option de réception'}
         </div>
         <span className={`pill ${route.badgeCls}`} style={{ fontSize: 8 }}>{route.badge}</span>
       </div>
@@ -158,13 +135,6 @@ function RouteCard({
             </div>
           ))}
         </div>
-      </div>
-
-      <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center' }}>
-        <span className="mono" style={{ fontSize: 10, color: 'var(--text-dim)' }}>{route.provider}</span>
-        <span style={{ fontSize: 10, color: 'var(--text-mid)' }}>·</span>
-        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-bright)' }}>{route.method}</span>
-        <span style={{ marginLeft: 'auto', fontSize: 9, color: 'var(--text-dim)' }}>spread {route.spread}</span>
       </div>
     </motion.div>
   );
@@ -286,7 +256,7 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
             <div className="card card-hi-c" style={{ padding: 30 }}>
               <div className="se-boot">
                 <div className="se-boot-ring"><div className="se-boot-core" /></div>
-                <div className="se-boot-log">Analyse des corridors et calcul des routes…</div>
+                <div className="se-boot-log">Recherche de la meilleure option pour votre envoi…</div>
               </div>
               {/* Progress bar */}
               <div style={{ marginTop: 16 }}>
@@ -299,19 +269,16 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
                     transition={{ duration: 0.3, ease: 'easeOut' }}
                   />
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
                   <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                    Étape {Math.min(pipeStep, PIPELINE.length)}/{PIPELINE.length}
-                  </span>
-                  <span style={{ fontSize: 9, color: 'var(--cyan)', fontFamily: 'var(--font-mono)' }}>
-                    {pipeStep < PIPELINE.length ? PIPELINE[Math.min(pipeStep, PIPELINE.length - 1)]?.label : 'Terminé'}
+                    {pipeStep < PIPELINE.length ? 'Optimisation en cours…' : 'Terminé'}
                   </span>
                 </div>
               </div>
             </div>
           </div>
           <aside className="se-rail">
-            <EnginePipeline loaded={false} activeCount={pipeStep} />
+            <SecureBadge loaded={false} />
           </aside>
         </div>
       </div>
@@ -373,7 +340,7 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
               ['Frais', executedTx.fee != null ? `${executedTx.fee.toLocaleString('fr-FR')} ${executedTx.fee_currency ?? executedTx.currency}` : '—'],
               ['Montant reçu', executedTx.dest_amount != null ? `${executedTx.dest_amount.toLocaleString('fr-FR')} ${executedTx.dest_currency ?? ''}` : '—'],
               ['Taux FX', executedTx.fx_rate != null ? executedTx.fx_rate.toLocaleString('fr-FR', { maximumFractionDigits: 4 }) : '—'],
-              ['Provider', executedTx.provider ?? '—'],
+              ['Statut', executedTx.status ?? '—'],
               ['Route', executedTx.route_id ?? '—'],
               ['Destination', executedTx.destination ?? '—'],
             ] as [string, string][]).map(([k, v]) => (
@@ -469,7 +436,7 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
 
         {/* Pipeline */}
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-          <EnginePipeline loaded={true} activeCount={PIPELINE.length} />
+          <SecureBadge loaded={true} />
         </motion.div>
       </div>
 
@@ -478,7 +445,7 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
 
         {/* Header routes + countdown */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div className="page-label">Routes disponibles</div>
+          <div className="page-label">Options de réception</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>⏱</span>
@@ -517,18 +484,15 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 12, borderBottom: '1px solid var(--border)' }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-bright)' }}>
-                Route {selected} sélectionnée
+                Option sélectionnée
               </div>
-              <div className="mono" style={{ fontSize: 10, color: 'var(--text-dim)' }}>Quote #{quote?.id ?? '—'}</div>
-            </div>
+                          </div>
             <div style={{ marginTop: 10 }}>
               {[
                 ['Envoyé', `\u20AC ${amountSent.toLocaleString('fr-FR')},00`, 'var(--white)'],
                 ['Reçu (estimé)', selectedRoute.received, 'var(--green)'],
                 ['Frais total', selectedRoute.fees, 'var(--text-bright)'],
-                ['Provider', selectedRoute.provider, 'var(--cyan)'],
-                ['Méthode', selectedRoute.method, 'var(--text-bright)'],
-                ['Expiration', `\u23F1 ${formatCountdown(remaining)} restantes`, countdownColor],
+                                                ['Expiration', `\u23F1 ${formatCountdown(remaining)} restantes`, countdownColor],
               ].map(([k, v, col]) => (
                 <div key={k as string} className="trow">
                   <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{k}</div>
@@ -554,9 +518,9 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
           <div className="quote quote-v" style={{ padding: '10px 14px' }}>
             <div className="quote-text" style={{ fontSize: 11, fontStyle: 'normal', fontWeight: 500 }}>
               {selectedRoute ? (
-                <>La Route {selected} est recommandée pour le mode «{MODE_LABELS[objective] ?? objective}». Spread de {selectedRoute.spread}, fiabilité historique {(selectedRoute.reliabilityNum * 100).toFixed(0)}%. Les moteurs déterministes vérifient — vous décidez.</>
+                <>Cette option est recommandée pour le mode «{MODE_LABELS[objective] ?? objective}» : meilleur équilibre entre montant reçu, frais et délai. Fiabilité historique {(selectedRoute.reliabilityNum * 100).toFixed(0)}%.</>
               ) : (
-                <>Analyse des routes en cours…</>
+                <>Analyse de la meilleure option en cours…</>
               )}
             </div>
           </div>

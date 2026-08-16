@@ -520,7 +520,7 @@ export default function SendPage() {
         </div>
         <div className="se-boot">
           <div className="se-boot-ring"><div className="se-boot-core" /></div>
-          <div className="se-boot-log">Chargement des providers et corridors…</div>
+          <div className="se-boot-log">Recherche des options disponibles…</div>
         </div>
         <div className="shimmer-bg" style={{ height: 80, borderRadius: 16, marginTop: 20 }} />
         <div className="shimmer-bg" style={{ height: 400, borderRadius: 16, marginTop: 16 }} />
@@ -720,11 +720,6 @@ export default function SendPage() {
                             >
                               <span className="se-method-icon">{m.icon}</span>
                               <span style={{ fontSize: 10, fontWeight: 600, color: receivingMethod === m.type ? 'var(--cyan)' : 'var(--text-bright)' }}>{m.label}</span>
-                              {m.providers.length > 0 && (
-                                <span style={{ fontSize: 8, color: 'var(--text-dim)' }}>
-                                  {m.providers.length} provider{m.providers.length > 1 ? 's' : ''}
-                                </span>
-                              )}
                             </motion.button>
                           ))}
                         </div>

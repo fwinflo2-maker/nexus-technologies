@@ -237,7 +237,7 @@ export default function WalletPage() {
           { label: 'Total portefeuille', raw: totals.total_ref, color: 'var(--cyan)', sub: 'Équivalent EUR' },
           { label: 'Disponible', raw: totals.available_ref, color: 'var(--green)', sub: 'Immédiatement disponible' },
           { label: 'En attente', raw: totals.pending_ref, color: 'var(--gold)', sub: 'Créancier — règlement ~24h' },
-          { label: 'En transit', raw: totals.in_transit_ref, color: 'var(--violet)', sub: 'Vers / depuis un provider' },
+          { label: 'En transit', raw: totals.in_transit_ref, color: 'var(--violet)', sub: 'En cours de traitement' },
         ].map((s) => (
           <motion.div
             key={s.label}
@@ -581,7 +581,7 @@ export default function WalletPage() {
                           <div className="tx-name">{tx.label}</div>
                           <div className="tx-meta">
                             {formatRelativeTime(tx.created_at)}
-                            {tx.provider ? ` · ${tx.provider}` : ''}
+                            
                           </div>
                         </div>
                         <div style={{ textAlign: 'right' }}>

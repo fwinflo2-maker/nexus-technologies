@@ -257,7 +257,7 @@ export default function HistoryPage() {
                 </div>
                 <div className="tx-meta" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {typeLabel(tx.type)} · {formatDate(tx.created_at)}
-                  {tx.provider && ` · ${tx.provider}`}
+                  
                 </div>
               </div>
 
@@ -321,9 +321,7 @@ export default function HistoryPage() {
                   ['Type', typeLabel(selected.type)],
                   ['Statut', statusLabel(selected.status).replace(/^[✓⏳⚙✕]+\s*/, '')],
                   ['Devise', `${selected.currency}`],
-                  ['Provider', selected.provider || '—'],
                   ['Destination', selected.destination || '—'],
-                  ['Réf. route', selected.route_id ? `route ${selected.route_id}` : '—'],
                   ['Date', new Date(selected.created_at).toLocaleString('fr-FR')],
                   selected.dest_amount != null ? ['Montant reçu', `${selected.dest_amount.toLocaleString('fr-FR')} ${selected.dest_currency || ''}`] : null,
                   selected.fx_rate != null ? ['Taux FX', selected.fx_rate.toFixed(4)] : null,
