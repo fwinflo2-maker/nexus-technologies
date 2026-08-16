@@ -1,3 +1,4 @@
+import { safeStorage } from '../../lib/safeStorage';
 import { useState, useEffect } from 'react';
 import { apiGetUserProfile, apiUpdateProfile, apiUpdatePassword, apiGetSessions, apiRevokeSession, type UserProfile, type UserSession } from '../../api/client';
 
@@ -545,7 +546,7 @@ export default function SettingsPage() {
           <button
             className="btn btn-primary"
             onClick={() => {
-              localStorage.setItem('nexus_preferences', JSON.stringify(preferences));
+              safeStorage.set('local', 'nexus_preferences', JSON.stringify(preferences));
               setSuccess('Préférences enregistrées localement.');
               setTimeout(() => setSuccess(null), 3000);
             }}

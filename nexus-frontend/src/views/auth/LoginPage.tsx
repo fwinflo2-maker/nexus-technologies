@@ -59,17 +59,23 @@ export function LoginPage({ onSwitchToRegister, onBackHome }: LoginPageProps) {
     if (method === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier)) { setError(t('login_err_email')); return; }
     if (method === 'phone' && phone.trim().length < 6) { setError(t('login_err_phone')); return; }
     setLoading(true);
-    // Appel direct à l'API backend — le token est stocké côté client par apiLogin
-    const resp = await apiLogin(identifier, password);
-    setLoading(false);
-    if (!resp.success) {
-      setError(resp.error ?? t('login_err_required'));
-      return;
+    try {
+      // Appel direct à l'API backend — le token est stocké côté client par apiLogin
+      const resp = await apiLogin(identifier, password);
+      if (!resp.success) {
+        setError(resp.error ?? t('login_err_required'));
+        return;
+      }
+      // Revalide la session via /api/me pour que le contexte React mette à jour le user
+      await refreshSession();
+      // Navigation SPA vers le dashboard (pas de reload)
+      navigate('/dashboard', { replace: true });
+    } catch {
+      // Filet de sécurité : ne jamais laisser le formulaire bloqué en « envoi ».
+      setError(t('login_err_required'));
+    } finally {
+      setLoading(false);
     }
-    // Revalide la session via /api/me pour que le contexte React mette à jour le user
-    await refreshSession();
-    // Navigation SPA vers le dashboard (pas de reload)
-    navigate('/dashboard', { replace: true });
   }
 
   const strength = password.length === 0 ? 0 : password.length < 8 ? 1 : password.length < 14 ? 2 : 3;

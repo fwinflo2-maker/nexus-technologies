@@ -10,22 +10,18 @@
 // Prefixe standard pour toutes les routes backend
 const API_PREFIX = '/api';
 
+import { safeStorage, isTokenExpired } from '../lib/safeStorage';
+
 /**
- * Récupère le token JWT depuis sessionStorage.
+ * Récupère le token JWT depuis le stockage sûr.
  * Retourne null si absent ou périmé.
  */
 function getToken(): string | null {
-  const token = sessionStorage.getItem('nexus_token');
+  const token = safeStorage.get('session', 'nexus_token');
   if (!token) return null;
-  // Optionnel : vérifier expiration JWT côté client
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    if (payload.exp && Date.now() >= payload.exp * 1000) {
-      sessionStorage.removeItem('nexus_token');
-      return null;
-    }
-  } catch {
-    sessionStorage.removeItem('nexus_token');
+  // Vérifier l'expiration JWT côté client (sans lever d'exception).
+  if (isTokenExpired(token)) {
+    safeStorage.remove('session', 'nexus_token');
     return null;
   }
   return token;
@@ -37,9 +33,9 @@ function getToken(): string | null {
  */
 function setToken(token: string | null): void {
   if (token) {
-    sessionStorage.setItem('nexus_token', token);
+    safeStorage.set('session', 'nexus_token', token);
   } else {
-    sessionStorage.removeItem('nexus_token');
+    safeStorage.remove('session', 'nexus_token');
   }
 }
 
@@ -829,7 +825,7 @@ async function request<T = unknown>(
     // Si 401 → session expirée/falsifiée → nettoyage
     if (resp.status === 401) {
       setToken(null);
-      localStorage.removeItem('nexus_user');
+      safeStorage.remove('local', 'nexus_user');
     }
 
     return json;
@@ -866,7 +862,7 @@ export async function apiRegister(payload: {
   const data = await request<{ token: string; user: ApiUser }>('POST', '/register', payload as Record<string, unknown>);
   if (data.success && data.data) {
     setToken(data.data.token);
-    localStorage.setItem('nexus_user', JSON.stringify(data.data.user));
+    safeStorage.set('local', 'nexus_user', JSON.stringify(data.data.user));
   }
   return data;
 }
@@ -876,7 +872,7 @@ export async function apiLogin(identifier: string, password: string): Promise<Ap
   const data = await request<{ token: string; user: ApiUser }>('POST', '/login', { identifier, password });
   if (data.success && data.data) {
     setToken(data.data.token);
-    localStorage.setItem('nexus_user', JSON.stringify(data.data.user));
+    safeStorage.set('local', 'nexus_user', JSON.stringify(data.data.user));
   }
   return data;
 }
@@ -885,7 +881,7 @@ export async function apiLogin(identifier: string, password: string): Promise<Ap
 export async function apiMe(): Promise<ApiResponse<{ user: ApiUser }>> {
   const data = await request<{ user: ApiUser }>('GET', '/me');
   if (data.success && data.data) {
-    localStorage.setItem('nexus_user', JSON.stringify(data.data.user));
+    safeStorage.set('local', 'nexus_user', JSON.stringify(data.data.user));
   }
   return data;
 }
@@ -894,7 +890,7 @@ export async function apiMe(): Promise<ApiResponse<{ user: ApiUser }>> {
 export async function apiLogout(): Promise<void> {
   await request('POST', '/logout');
   setToken(null);
-  localStorage.removeItem('nexus_user');
+  safeStorage.remove('local', 'nexus_user');
 }
 
 /** Résumé complet du dashboard (GET /api/dashboard/summary). */

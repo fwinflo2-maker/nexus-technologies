@@ -1,3 +1,4 @@
+import { safeStorage } from '../lib/safeStorage';
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 
 type Theme = 'dark' | 'light';
@@ -11,12 +12,12 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(() => {
-    const saved = localStorage.getItem('nexus_theme');
+    const saved = safeStorage.get('local', 'nexus_theme');
     return (saved as Theme) || 'dark';
   });
 
   useEffect(() => {
-    localStorage.setItem('nexus_theme', theme);
+    safeStorage.set('local', 'nexus_theme', theme);
     if (theme === 'light') {
       document.documentElement.classList.add('light-mode');
       document.documentElement.classList.remove('dark-mode');

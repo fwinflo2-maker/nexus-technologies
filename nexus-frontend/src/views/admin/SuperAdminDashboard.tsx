@@ -14,6 +14,7 @@ import AdminSupport from './AdminSupport';
 import { VolumeAreaChart, TransactionsStackChart, AssetDonut, StatusDonut, ProviderTopChart, AuditBarChart } from './CockpitCharts';
 import { Row, Panel, fmtMoney } from './adminUi';
 import { motion } from 'framer-motion';
+import { getToken } from '../../api/client';
 import { HoverCard, AnimatedNumber, SectionTransition, RevealGroup, AnimatedTitle, LivePulse } from '../../components/anim/Premium';
 
 interface AdminOverview {
@@ -64,7 +65,7 @@ export default function SuperAdminDashboard() {
     setState('loading');
     try {
       const res = await fetch('/api/admin/overview', {
-        headers: { Authorization: `Bearer ${sessionStorage.getItem('nexus_token')}` },
+        headers: { Authorization: `Bearer ${getToken() ?? ''}` },
       }).then((r) => r.json());
       if (res.success && res.data) { setOv(res.data); setState('ready'); } else setState('error');
     } catch { setState('error'); }

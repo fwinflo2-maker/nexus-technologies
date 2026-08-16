@@ -1,3 +1,4 @@
+import { safeStorage } from '../lib/safeStorage';
 /**
  * i18n des dashboards Personal & Business — 7 langues (fr, en, es, pt, de, ar, zh).
  *
@@ -420,7 +421,7 @@ export function useDashT(): (key: string) => string {
 export function dashTranslate(key: string): string {
   let lang: LangCode = 'fr';
   try {
-    const saved = localStorage.getItem('nexus_lang') as LangCode | null;
+    const saved = safeStorage.get('local', 'nexus_lang') as LangCode | null;
     if (saved && saved in DICTS) lang = saved;
   } catch {
     // SSR / sandbox : fr par défaut.

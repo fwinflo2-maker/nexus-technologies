@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useMemo, type ReactNode } from 'react';
 import { translations, type LangCode } from '../data/translations';
+import { safeStorage } from '../lib/safeStorage';
 
 interface I18nContextValue {
   lang: LangCode;
@@ -15,7 +16,7 @@ const I18nContext = createContext<I18nContextValue>({
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [lang, setLang] = useState<LangCode>(() => {
-    const saved = localStorage.getItem('nexus_lang') as LangCode | null;
+    const saved = safeStorage.get('local', 'nexus_lang') as LangCode | null;
     return saved && translations[saved] ? saved : 'fr';
   });
 
@@ -30,7 +31,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     const t = (key: string) => dict[key] ?? translations.fr[key] ?? key;
     const setLangFn = (l: LangCode) => {
       setLang(l);
-      localStorage.setItem('nexus_lang', l);
+      safeStorage.set('local', 'nexus_lang', l);
     };
     return { lang, setLang: setLangFn, t };
   }, [lang]);
