@@ -101,6 +101,15 @@ final class KycController
             // Approche basée sur le risque : level low/medium/high persisté
             // avant le démarrage (déterministe, auditable).
             KycService::persistRiskLevel($pdo, (int) $user['id'], $user);
+        } else {
+            // KYC : on pré-remplit les données d'identité individuelles pour la
+            // vérification croisée (fixedInfo firstName/lastName/dob/country).
+            $profile = array_merge($profile, [
+                'full_name'  => $user['full_name'] ?? null,
+                'birth_date' => $user['birth_date'] ?? null,
+                'country'    => $user['country_of_residence'] ?? null,
+                'gender'     => $user['gender'] ?? null,
+            ]);
         }
 
         try {

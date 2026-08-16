@@ -98,6 +98,17 @@ final class AuthController
             Response::badRequest('Numéro de téléphone invalide (20 caractères maximum).');
         }
 
+        // --- KYC : date de naissance requise et valide pour une personne ----
+        // La vérification d'identité (Sumsub) exige une date de naissance et la
+        // majorité. On valide côté serveur (défense en profondeur) même si le
+        // formulaire impose déjà le champ.
+        if ($accountType === 'personal') {
+            $birthError = self::validateBirthDate($birthDate);
+            if ($birthError !== null) {
+                Response::badRequest($birthError);
+            }
+        }
+
         $pdo = Database::getConnection();
 
         // --- Email unique -----------------------------------------------------
@@ -457,6 +468,45 @@ final class AuthController
         $remote = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
 
         return filter_var($remote, FILTER_VALIDATE_IP) ? $remote : '0.0.0.0';
+    }
+
+    /**
+     * Valide une date de naissance pour un compte personnel (KYC).
+     *
+     * Retourne un message d'erreur, ou null si la date est valide :
+     *   - format strict AAAA-MM-JJ (pas d'approximation, pas de date future) ;
+     *   - majorité : au moins 18 ans à la date du jour.
+     */
+    private static function validateBirthDate(string $birthDate): ?string
+    {
+        if ($birthDate === '') {
+            return 'La date de naissance est requise pour un compte personnel (vérification d\'identité).';
+        }
+
+        $date = \DateTimeImmutable::createFromFormat('Y-m-d', $birthDate);
+        $errors = \DateTimeImmutable::getLastErrors();
+
+        if ($date === false
+            || ($errors !== false && ($errors['warning_count'] > 0 || $errors['error_count'] > 0))
+            || $date->format('Y-m-d') !== $birthDate) {
+            return 'Date de naissance invalide (format attendu : AAAA-MM-JJ).';
+        }
+
+        // Normalisation à minuit : createFromFormat conserve sinon l'heure
+        // courante, ce qui fausse le calcul d'âge (17 ans 11 mois au lieu de 18).
+        $date  = $date->setTime(0, 0, 0);
+        $today = (new \DateTimeImmutable('today'))->setTime(0, 0, 0);
+
+        if ($date > $today) {
+            return 'Date de naissance invalide (date future).';
+        }
+
+        $age = (int) $date->diff($today)->y;
+        if ($age < 18) {
+            return 'Vous devez avoir au moins 18 ans pour créer un compte.';
+        }
+
+        return null;
     }
 
     /** Durée de vie d'un jeton de réinitialisation (secondes). */

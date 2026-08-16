@@ -464,6 +464,97 @@ final class SumsubKycTest extends TestCase
         self::assertArrayNotHasKey('type', $captured, 'Pas de type company pour un individu.');
     }
 
+    public function test_create_applicant_individual_envoie_les_donnees_d_identite(): void
+    {
+        $captured = null;
+        $adapter = new SumsubAdapter(function (string $m, string $u, string $b, array $h) use (&$captured): array {
+            $captured = json_decode($b, true);
+            return ['status' => 201, 'body' => json_encode(['id' => 'appl_kyc_2'])];
+        });
+
+        $adapter->createApplicant('42', KycSubjectType::INDIVIDUAL, [
+            'full_name'  => 'Jean de La Fontaine',
+            'birth_date' => '1990-05-14',
+            'country'    => 'FR',
+            'gender'     => 'M',
+        ]);
+
+        $fixedInfo = $captured['fixedInfo'] ?? [];
+        self::assertSame('Jean', $fixedInfo['firstName'] ?? null);
+        self::assertSame('Fontaine', $fixedInfo['lastName'] ?? null);
+        self::assertSame('de La', $fixedInfo['middleName'] ?? null, 'Les mots intermédiaires vont dans middleName.');
+        self::assertSame('1990-05-14', $fixedInfo['dob'] ?? null);
+        self::assertSame('FRA', $fixedInfo['country'] ?? null, 'Pays converti en alpha-3.');
+        self::assertSame('M', $fixedInfo['gender'] ?? null);
+    }
+
+    public function test_create_applicant_individual_sans_donnees_n_envoie_pas_de_fixed_info(): void
+    {
+        $captured = null;
+        $adapter = new SumsubAdapter(function (string $m, string $u, string $b, array $h) use (&$captured): array {
+            $captured = json_decode($b, true);
+            return ['status' => 201, 'body' => json_encode(['id' => 'appl_kyc_3'])];
+        });
+
+        $adapter->createApplicant('42', KycSubjectType::INDIVIDUAL, ['email' => 'a@b.test']);
+
+        self::assertArrayNotHasKey('fixedInfo', $captured);
+    }
+
+    public function test_normalisation_genre(): void
+    {
+        foreach ([['MALE' => 'M'], ['FEMALE' => 'F'], ['m' => 'M'], ['F' => 'F'], ['autre' => null]] as $case) {
+            $input = array_key_first($case);
+            $expected = $case[$input];
+
+            $captured = null;
+            $adapter = new SumsubAdapter(function (string $m, string $u, string $b, array $h) use (&$captured): array {
+                $captured = json_decode($b, true);
+                return ['status' => 201, 'body' => json_encode(['id' => 'x'])];
+            });
+            $adapter->createApplicant('42', KycSubjectType::INDIVIDUAL, ['gender' => $input]);
+
+            $fixedInfo = $captured['fixedInfo'] ?? [];
+            if ($expected === null) {
+                self::assertArrayNotHasKey('gender', $fixedInfo, "Le genre « {$input} » ne doit pas être transmis.");
+            } else {
+                self::assertSame($expected, $fixedInfo['gender'] ?? null);
+            }
+        }
+    }
+
+    public function test_split_full_name_deux_mots(): void
+    {
+        self::assertSame(
+            ['firstName' => 'John', 'lastName' => 'Doe'],
+            SumsubAdapter::splitFullName('John Doe')
+        );
+    }
+
+    public function test_split_full_name_avec_deuxieme_prenom(): void
+    {
+        self::assertSame(
+            ['firstName' => 'John', 'lastName' => 'Doe', 'middleName' => 'Fitzgerald'],
+            SumsubAdapter::splitFullName('  John  Fitzgerald   Doe  ')
+        );
+    }
+
+    public function test_split_full_name_un_seul_mot(): void
+    {
+        self::assertSame(
+            ['firstName' => 'Madonna', 'lastName' => ''],
+            SumsubAdapter::splitFullName('Madonna')
+        );
+    }
+
+    public function test_split_full_name_vide(): void
+    {
+        self::assertSame(
+            ['firstName' => '', 'lastName' => ''],
+            SumsubAdapter::splitFullName('   ')
+        );
+    }
+
     // ── Codes pays (alpha-2 → alpha-3) ─────────────────────────────────────
 
     public function test_conversion_alpha2_vers_alpha3(): void

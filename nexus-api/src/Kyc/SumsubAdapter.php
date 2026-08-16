@@ -128,6 +128,40 @@ final class SumsubAdapter implements KycProvider
         return hash_hmac('sha256', $timestamp . strtoupper($method) . $path . $body, $secret);
     }
 
+    /**
+     * Découpe un nom complet (« John Fitzgerald Doe ») en prénom / nom / éventuel
+     * deuxième prénom, attendus séparément par Sumsub (fixedInfo.firstName /
+     * lastName / middleName).
+     *
+     * Règle pragmatique (utilisée par les fintechs ne stockant qu'un full_name) :
+     *   - premier mot  → prénom ;
+     *   - dernier mot  → nom ;
+     *   - mots intermédiaires → middleName (facultatif).
+     *
+     * @return array{firstName: string, lastName: string, middleName?: string}
+     */
+    public static function splitFullName(string $fullName): array
+    {
+        $parts = preg_split('/\s+/', trim($fullName));
+        $parts = is_array($parts) ? array_values(array_filter($parts, static fn ($p) => $p !== '')) : [];
+        $count = count($parts);
+
+        if ($count === 0) {
+            return ['firstName' => '', 'lastName' => ''];
+        }
+        if ($count === 1) {
+            return ['firstName' => $parts[0], 'lastName' => ''];
+        }
+
+        $firstName  = $parts[0];
+        $lastName   = $parts[$count - 1];
+        $middleName = $count > 2 ? implode(' ', array_slice($parts, 1, $count - 2)) : '';
+
+        return $middleName !== ''
+            ? ['firstName' => $firstName, 'lastName' => $lastName, 'middleName' => $middleName]
+            : ['firstName' => $firstName, 'lastName' => $lastName];
+    }
+
     public function createApplicant(string $externalUserId, KycSubjectType $type, array $profile = []): string
     {
         $level = $this->levelName($type);
@@ -170,6 +204,49 @@ final class SumsubAdapter implements KycProvider
 
             if ($companyInfo !== []) {
                 $payload['fixedInfo'] = ['companyInfo' => $companyInfo];
+            }
+        } else {
+            // KYC : le sujet est une personne physique. On pré-remplit les
+            // données d'identité (fixedInfo) pour la vérification croisée avec
+            // les documents d'identité (voir doc officielle : create applicant,
+            // fixedInfo.firstName/lastName/dob/country).
+            $fixedInfo = [];
+
+            if (isset($profile['full_name']) && is_string($profile['full_name']) && $profile['full_name'] !== '') {
+                $names = self::splitFullName($profile['full_name']);
+                if ($names['firstName'] !== '') {
+                    $fixedInfo['firstName'] = $names['firstName'];
+                }
+                if ($names['lastName'] !== '') {
+                    $fixedInfo['lastName'] = $names['lastName'];
+                }
+                if (($names['middleName'] ?? '') !== '') {
+                    $fixedInfo['middleName'] = $names['middleName'];
+                }
+            }
+            if (isset($profile['birth_date']) && is_string($profile['birth_date']) && $profile['birth_date'] !== '') {
+                $fixedInfo['dob'] = $profile['birth_date'];
+            }
+            $countryAlpha3 = CountryCodes::alpha2ToAlpha3(
+                isset($profile['country']) && is_string($profile['country']) ? $profile['country'] : null
+            );
+            if ($countryAlpha3 !== null) {
+                $fixedInfo['country'] = $countryAlpha3;
+            }
+            if (isset($profile['gender']) && is_string($profile['gender']) && $profile['gender'] !== '') {
+                // Sumsub attend 'M' ou 'F' : normalisation des libellés admis.
+                $gender = strtoupper(trim($profile['gender']));
+                if ($gender === 'MALE') {
+                    $fixedInfo['gender'] = 'M';
+                } elseif ($gender === 'FEMALE') {
+                    $fixedInfo['gender'] = 'F';
+                } elseif ($gender === 'M' || $gender === 'F') {
+                    $fixedInfo['gender'] = $gender;
+                }
+            }
+
+            if ($fixedInfo !== []) {
+                $payload['fixedInfo'] = $fixedInfo;
             }
         }
 
