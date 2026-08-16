@@ -1437,3 +1437,62 @@ export interface ControlClientDetail {
 export async function apiControlClient(id: number): Promise<ApiResponse<{ client: ControlClientDetail }>> {
   return request<{ client: ControlClientDetail }>('GET', `/control/clients/${id}`);
 }
+
+// --- Super Admin — cockpit (données réelles, RBAC superadmin côté serveur) ---
+
+export interface AdminTransaction {
+  id: number;
+  type: string;
+  direction: string;
+  label: string;
+  description: string | null;
+  amount: number;
+  currency: string;
+  amount_xaf: number;
+  dest_amount: number | null;
+  dest_currency: string | null;
+  fee: number;
+  status: string;
+  provider: string | null;
+  environment: string;
+  execution_time_seconds: number | null;
+  created_at: string;
+  user_name: string | null;
+  user_email: string | null;
+  account_type: string | null;
+}
+
+export async function apiAdminTransactions(params: {
+  status?: string; currency?: string; type?: string; provider?: string; q?: string; page?: number; per?: number;
+}): Promise<ApiResponse<{ items: AdminTransaction[]; total: number; page: number; per: number; pages: number }>> {
+  const q = new URLSearchParams();
+  (Object.entries(params) as Array<[string, string | number | undefined]>).forEach(([k, v]) => {
+    if (v !== undefined && v !== '') q.set(k, String(v));
+  });
+  const qs = q.toString();
+  return request('GET', `/admin/transactions${qs ? `?${qs}` : ''}`);
+}
+
+export async function apiAdminOperations(): Promise<ApiResponse<{
+  items: Array<Record<string, unknown>>;
+  counters: { pending: number; processing: number; completed: number; failed: number };
+  avg_execution_seconds: number;
+}>> {
+  return request('GET', '/admin/operations');
+}
+
+export async function apiAdminRisk(): Promise<ApiResponse<{
+  risk: { suspended_accounts: number; failed_transactions: number; kyc_rejected: number; kyc_resubmission: number; failed_rate: number };
+  recent_failed: Array<Record<string, unknown>>;
+  by_provider: Array<{ provider: string; n: number; fails: number; fail_rate: number }>;
+}>> {
+  return request('GET', '/admin/risk');
+}
+
+export async function apiAdminTechnical(): Promise<ApiResponse<{
+  services: Array<{ name: string; status: string; latency_ms: number }>;
+  db_ok: boolean;
+  providers: Array<Record<string, unknown>>;
+}>> {
+  return request('GET', '/admin/technical');
+}

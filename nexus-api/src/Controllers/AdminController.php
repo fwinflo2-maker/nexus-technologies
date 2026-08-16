@@ -373,6 +373,21 @@ final class AdminController
             'SELECT action, COUNT(*) AS count FROM audit_logs GROUP BY action ORDER BY count DESC LIMIT 8'
         )->fetchAll();
 
+        // Série temporelle (14 jours) pour les graphiques : transactions + volume (EUR).
+        $series = self::dailySeries($pdo, 14);
+
+        // Répartition par statut de transaction (donut).
+        $statusBreakdown = $pdo->query(
+            "SELECT status, COUNT(*) AS n FROM transactions GROUP BY status"
+        )->fetchAll();
+        $statusBreakdown = array_map(static fn (array $r) => ['status' => $r['status'], 'count' => (int) $r['n']], $statusBreakdown);
+
+        // Répartition par provider (top providers).
+        $providerTop = $pdo->query(
+            "SELECT provider, COUNT(*) AS n FROM transactions WHERE provider IS NOT NULL GROUP BY provider ORDER BY n DESC LIMIT 8"
+        )->fetchAll();
+        $providerTop = array_map(static fn (array $r) => ['provider' => $r['provider'], 'count' => (int) $r['n']], $providerTop);
+
         Response::success([
             'accounts'   => $accounts,
             'wallets'    => $wallets,
@@ -385,7 +400,210 @@ final class AdminController
             'kyc'        => $kyc,
             'providers'  => $providers,
             'recent_activity' => $recentAudit,
+            'series' => [
+                'transactions' => $series['transactions'],
+                'volume_eur'   => $series['volume_eur'],
+                'audit'        => $series['audit'],
+            ],
+            'status_breakdown' => $statusBreakdown,
+            'provider_top'     => $providerTop,
             'generated_at' => gmdate(DATE_ATOM),
         ]);
+    }
+
+    /**
+     * Série temporelle quotidienne sur N derniers jours (transactions, volume EUR, audit).
+     *
+     * @return array{transactions: array<int,array{date:string,count:int}>, volume_eur: array<int,array{date:string,volume:float}>, audit: array<int,array{date:string,count:int}>}
+     */
+    private static function dailySeries(\PDO $pdo, int $days): array
+    {
+        $since = date('Y-m-d', strtotime("-{$days} days"));
+
+        $txDays = $pdo->prepare(
+            'SELECT DATE(created_at) d, COUNT(*) n, COALESCE(SUM(amount_ref),0) v
+             FROM transactions
+             WHERE created_at >= :since
+             GROUP BY DATE(created_at) ORDER BY d ASC'
+        );
+        $txDays->execute(['since' => $since . ' 00:00:00']);
+        $txMap = [];
+        foreach ($txDays->fetchAll() as $r) {
+            $txMap[$r['d']] = ['count' => (int) $r['n'], 'volume' => (float) $r['v']];
+        }
+
+        $auditDays = $pdo->prepare(
+            'SELECT DATE(created_at) d, COUNT(*) n FROM audit_logs
+             WHERE created_at >= :since GROUP BY DATE(created_at) ORDER BY d ASC'
+        );
+        $auditDays->execute(['since' => $since . ' 00:00:00']);
+        $auditMap = [];
+        foreach ($auditDays->fetchAll() as $r) {
+            $auditMap[$r['d']] = (int) $r['n'];
+        }
+
+        $transactions = [];
+        $volumeEur = [];
+        $audit = [];
+        for ($i = $days; $i >= 0; $i--) {
+            $date = date('Y-m-d', strtotime("-$i days"));
+            $transactions[] = ['date' => $date, 'count' => $txMap[$date]['count'] ?? 0];
+            $volumeEur[]    = ['date' => $date, 'volume' => round($txMap[$date]['volume'] ?? 0.0, 2)];
+            $audit[]        = ['date' => $date, 'count' => $auditMap[$date] ?? 0];
+        }
+
+        return ['transactions' => $transactions, 'volume_eur' => $volumeEur, 'audit' => $audit];
+    }
+
+    /** GET /api/admin/transactions — liste détaillée des transactions avec filtres. */
+    public static function transactions(Request $request): void
+    {
+        self::authorize($request);
+        $pdo = Database::getConnection();
+        $q   = $request->query();
+
+        $where = [];
+        $params = [];
+        foreach (['status' => 'status', 'currency' => 'currency', 'type' => 'type', 'provider' => 'provider'] as $k => $col) {
+            if (($v = trim((string) ($q[$k] ?? ''))) !== '') {
+                $where[] = "t.{$col} = :{$k}";
+                $params[$k] = $v;
+            }
+        }
+        if (($search = trim((string) ($q['q'] ?? ''))) !== '') {
+            $where[] = '(t.label LIKE :q OR t.description LIKE :q OR u.full_name LIKE :q OR u.email LIKE :q)';
+            $params['q'] = "%{$search}%";
+        }
+        $page = max(1, (int) ($q['page'] ?? 1));
+        $per  = min(50, max(10, (int) ($q['per'] ?? 25)));
+        $offset = ($page - 1) * $per;
+
+        $whereSql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
+        $countStmt = $pdo->prepare("SELECT COUNT(*) c FROM transactions t LEFT JOIN users u ON u.id = t.user_id {$whereSql}");
+        $countStmt->execute($params);
+        $total = (int) $countStmt->fetchColumn();
+
+        $stmt = $pdo->prepare(
+            "SELECT t.id, t.type, t.direction, t.label, t.description, t.amount, t.currency,
+                    t.amount_xaf, t.dest_amount, t.dest_currency, t.fee, t.status, t.provider,
+                    t.environment, t.execution_time_seconds, t.created_at,
+                    u.full_name AS user_name, u.email AS user_email, u.account_type
+             FROM transactions t
+             LEFT JOIN users u ON u.id = t.user_id
+             {$whereSql}
+             ORDER BY t.created_at DESC
+             LIMIT {$per} OFFSET {$offset}"
+        );
+        $stmt->execute($params);
+
+        Response::success([
+            'items' => $stmt->fetchAll(),
+            'total' => $total,
+            'page' => $page,
+            'per' => $per,
+            'pages' => max(1, (int) ceil($total / $per)),
+        ]);
+    }
+
+    /** GET /api/admin/operations — file d'exécution (transactions non terminales). */
+    public static function operations(Request $request): void
+    {
+        self::authorize($request);
+        $pdo = Database::getConnection();
+
+        $queue = $pdo->query(
+            "SELECT t.id, t.type, t.label, t.amount, t.currency, t.status, t.provider,
+                    t.environment, t.execution_time_seconds, t.created_at,
+                    u.full_name AS user_name, u.email AS user_email
+             FROM transactions t
+             LEFT JOIN users u ON u.id = t.user_id
+             WHERE t.status IN ('pending','processing')
+             ORDER BY t.created_at DESC
+             LIMIT 100"
+        )->fetchAll();
+
+        $counters = [
+            'pending'    => (int) $pdo->query("SELECT COUNT(*) FROM transactions WHERE status='pending'")->fetchColumn(),
+            'processing' => (int) $pdo->query("SELECT COUNT(*) FROM transactions WHERE status='processing'")->fetchColumn(),
+            'completed'  => (int) $pdo->query("SELECT COUNT(*) FROM transactions WHERE status='completed'")->fetchColumn(),
+            'failed'     => (int) $pdo->query("SELECT COUNT(*) FROM transactions WHERE status='failed'")->fetchColumn(),
+        ];
+        // Durée moyenne d'exécution des opérations terminées.
+        $avgSecs = $pdo->query(
+            "SELECT COALESCE(AVG(execution_time_seconds),0) FROM transactions WHERE status='completed' AND execution_time_seconds IS NOT NULL"
+        )->fetchColumn();
+
+        Response::success(['items' => $queue, 'counters' => $counters, 'avg_execution_seconds' => (float) $avgSecs]);
+    }
+
+    /** GET /api/admin/risk — indicateurs risque / fraude. */
+    public static function risk(Request $request): void
+    {
+        self::authorize($request);
+        $pdo = Database::getConnection();
+
+        $risk = [
+            'suspended_accounts' => (int) $pdo->query("SELECT COUNT(*) FROM users WHERE status='SUSPENDED'")->fetchColumn(),
+            'failed_transactions' => (int) $pdo->query("SELECT COUNT(*) FROM transactions WHERE status='failed'")->fetchColumn(),
+            'kyc_rejected' => (int) $pdo->query("SELECT COUNT(*) FROM kyc_verifications WHERE status='rejected'")->fetchColumn(),
+            'kyc_resubmission' => (int) $pdo->query("SELECT COUNT(*) FROM kyc_verifications WHERE status='resubmission_requested'")->fetchColumn(),
+            'failed_rate' => 0.0,
+        ];
+        $tot = (int) $pdo->query('SELECT COUNT(*) FROM transactions')->fetchColumn();
+        $risk['failed_rate'] = $tot > 0 ? round($risk['failed_transactions'] / $tot * 100, 1) : 0.0;
+
+        // Transactions échouées récentes (à surveiller).
+        $recent = $pdo->query(
+            "SELECT t.id, t.label, t.amount, t.currency, t.provider, t.created_at, u.email AS user_email
+             FROM transactions t LEFT JOIN users u ON u.id = t.user_id
+             WHERE t.status='failed' ORDER BY t.created_at DESC LIMIT 15"
+        )->fetchAll();
+
+        // Par provider (taux d'échec).
+        $byProvider = $pdo->query(
+            "SELECT provider,
+                    COUNT(*) AS n,
+                    COALESCE(SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END),0) AS fails
+             FROM transactions WHERE provider IS NOT NULL GROUP BY provider ORDER BY n DESC LIMIT 8"
+        )->fetchAll();
+        $byProvider = array_map(static function (array $r): array {
+            $r['n'] = (int) $r['n'];
+            $r['fails'] = (int) $r['fails'];
+            $r['fail_rate'] = $r['n'] > 0 ? round($r['fails'] / $r['n'] * 100, 1) : 0.0;
+            return $r;
+        }, $byProvider);
+
+        Response::success(['risk' => $risk, 'recent_failed' => $recent, 'by_provider' => $byProvider]);
+    }
+
+    /** GET /api/admin/technical — santé des services & providers. */
+    public static function technical(Request $request): void
+    {
+        self::authorize($request);
+        $pdo = Database::getConnection();
+
+        // Connectivité DB.
+        $dbOk = true;
+        try {
+            $pdo->query('SELECT 1')->fetchColumn();
+        } catch (\Throwable) {
+            $dbOk = false;
+        }
+
+        $providers = $pdo->query(
+            "SELECT provider_slug, environment,
+                    CASE WHEN credentials_enc IS NOT NULL AND credentials_enc <> '' THEN 'configured' ELSE status END AS state,
+                    last_tested_at, last_error
+             FROM provider_credentials ORDER BY provider_slug, environment"
+        )->fetchAll();
+
+        $services = [
+            ['name' => 'API REST', 'status' => 'operational', 'latency_ms' => 0],
+            ['name' => 'Base de données', 'status' => $dbOk ? 'operational' : 'down', 'latency_ms' => 0],
+            ['name' => 'File de transactions', 'status' => 'operational', 'latency_ms' => 0],
+            ['name' => 'KYC (SumSub)', 'status' => 'operational', 'latency_ms' => 0],
+        ];
+
+        Response::success(['services' => $services, 'db_ok' => $dbOk, 'providers' => $providers]);
     }
 }

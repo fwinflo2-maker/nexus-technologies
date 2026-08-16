@@ -2,8 +2,18 @@ import { useCallback, useEffect, useState } from 'react';
 import AdminLayout from './AdminLayout';
 import ProviderKeys from './ProviderKeys';
 import AdminAccounts from './AdminAccounts';
+import AdminTransactions from './AdminTransactions';
+import AdminCompliance from './AdminCompliance';
+import AdminAudit from './AdminAudit';
+import AdminOperations from './AdminOperations';
+import AdminRisk from './AdminRisk';
+import AdminTechnical from './AdminTechnical';
+import AdminTreasury from './AdminTreasury';
+import AdminSecurity from './AdminSecurity';
+import AdminSupport from './AdminSupport';
+import { VolumeAreaChart, TransactionsStackChart, AssetDonut, StatusDonut, ProviderTopChart, AuditBarChart } from './CockpitCharts';
+import { Row, Panel, fmtMoney } from './adminUi';
 
-/** Données agrégées du Super Admin (GET /api/admin/overview). */
 interface AdminOverview {
   accounts: { total: number; personal: number; business: number; active: number; pending: number; suspended: number; connect: number };
   wallets: number;
@@ -12,31 +22,28 @@ interface AdminOverview {
   kyc: { total: number; pending: number; approved: number; rejected: number };
   providers: { total: number; configured: number };
   recent_activity: Array<{ action: string; count: number }>;
+  series: {
+    transactions: Array<{ date: string; count: number }>;
+    volume_eur: Array<{ date: string; volume: number }>;
+    audit: Array<{ date: string; count: number }>;
+  };
+  status_breakdown: Array<{ status: string; count: number }>;
+  provider_top: Array<{ provider: string; count: number }>;
   generated_at: string;
 }
 
-function money(n: number): string {
-  return n.toLocaleString('fr-FR');
+function money(n: number): string { return n.toLocaleString('fr-FR'); }
+function Num({ v, suffix = '', c, size = 26 }: { v: number; suffix?: string; c?: string; size?: number }) {
+  return <div style={{ fontSize: size, fontWeight: 800, color: c || 'var(--text-bright)', fontFamily: 'var(--font-mono)' }}>{money(v)}{suffix}</div>;
 }
-
-function Card({ title, icon, children, tone = 'c' }: { title: string; icon?: string; children: React.ReactNode; tone?: string }) {
-  const cls = { c: 'card-hi-c', g: 'card-hi-g', gr: 'card-hi-gr', v: 'card-hi-v' }[tone] ?? 'card-hi-c';
+function Card({ title, icon, children }: { title: string; icon?: string; children: React.ReactNode }) {
   return (
-    <div className={`card ${cls}`} style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-        {icon && <span style={{ fontSize: 16 }}>{icon}</span>}
+    <div className="card" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {icon && <span style={{ fontSize: 15 }}>{icon}</span>}
         <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-bright)', letterSpacing: 0.3 }}>{title}</span>
       </div>
       {children}
-    </div>
-  );
-}
-
-function Row({ k, v, tone }: { k: string; v: React.ReactNode; tone?: string }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '5px 0', borderBottom: '1px solid var(--border-soft)', fontSize: 12.5 }}>
-      <span style={{ color: 'var(--text-dim)' }}>{k}</span>
-      <span style={{ color: tone || 'var(--text-bright)', fontWeight: 600, textAlign: 'right' }}>{v}</span>
     </div>
   );
 }
@@ -52,13 +59,16 @@ export default function SuperAdminDashboard() {
       const res = await fetch('/api/admin/overview', {
         headers: { Authorization: `Bearer ${sessionStorage.getItem('nexus_token')}` },
       }).then((r) => r.json());
-      if (res.success && res.data) { setOv(res.data); setState('ready'); }
-      else setState('error');
-    } catch {
-      setState('error');
-    }
+      if (res.success && res.data) { setOv(res.data); setState('ready'); } else setState('error');
+    } catch { setState('error'); }
   }, []);
   useEffect(() => { void load(); }, [load]);
+
+  const assetDonut = ov ? [
+    { name: 'EUR', value: Number(ov.assets.EUR), color: 'var(--cyan)' },
+    { name: 'USD', value: Number(ov.assets.USD), color: 'var(--cyan2)' },
+    { name: 'XAF', value: Number(ov.assets.XAF), color: 'var(--violet)' },
+  ] : [];
 
   return (
     <AdminLayout active={section} onNavigate={setSection}>
@@ -67,55 +77,45 @@ export default function SuperAdminDashboard() {
 
       {state === 'ready' && ov && (
         <div className="page">
-          {/* ── Vue d'ensemble ── */}
+          {/* ═══ VUE D'ENSEMBLE — cockpit ═══ */}
           {section === 'overview' && (
             <>
-              <Header title="Vue d’ensemble" desc="Activité globale de Nexus Technologies en temps réel." />
-              <div className="page-label" style={{ marginBottom: 10 }}>Comptes</div>
+              <Header title="Vue d'ensemble" desc="Cockpit temps réel de Nexus Technologies — activité, liquidité et santé de la plateforme." />
+
               <div className="g4">
-                <Card title="Total comptes" icon="👥"><Num v={ov.accounts.total} /></Card>
-                <Card title="Personnel" icon="👤"><Num v={ov.accounts.personal} /></Card>
-                <Card title="Business" icon="🏢"><Num v={ov.accounts.business} /></Card>
-                <Card title="Connect" icon="🔌"><Num v={ov.accounts.connect} /></Card>
-              </div>
-              <div className="g4" style={{ marginTop: 12 }}>
-                <Card title="Actifs" icon="✅" tone="gr"><Num v={ov.accounts.active} c="var(--green)" /></Card>
-                <Card title="En attente" icon="⏳" tone="g"><Num v={ov.accounts.pending} c="var(--gold)" /></Card>
-                <Card title="Suspendus" icon="⛔" tone="v"><Num v={ov.accounts.suspended} c="var(--red)" /></Card>
-                <Card title="Wallets" icon="💳"><Num v={ov.wallets} /></Card>
+                <Card title="Total comptes" icon="👥"><Num v={ov.accounts.total} /><div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{ov.accounts.active} actifs · {ov.accounts.pending} en attente</div></Card>
+                <Card title="Personnel / Business" icon="🏢"><Num v={ov.accounts.personal + ov.accounts.business} /><div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{ov.accounts.personal} personnel · {ov.accounts.business} business</div></Card>
+                <Card title="Connect (B2B)" icon="🔌"><Num v={ov.accounts.connect} /><div style={{ fontSize: 11, color: 'var(--text-dim)' }}>comptes API connectés</div></Card>
+                <Card title="Volume traité" icon="💰"><Num v={ov.transactions.volume_xaf} suffix=" FCFA" c="var(--cyan)" size={22} /><div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{ov.transactions.total} transactions · {ov.wallets} wallets</div></Card>
               </div>
 
-              <div className="page-label" style={{ marginTop: 28, marginBottom: 10 }}>Actifs (wallets)</div>
-              <div className="g3">
-                <Card title="EUR" icon="🇪🇺"><Num v={Number(ov.assets.EUR)} suffix=" €" /></Card>
-                <Card title="USD" icon="🇺🇸"><Num v={Number(ov.assets.USD)} suffix=" $" /></Card>
-                <Card title="XAF" icon="🌍"><Num v={Number(ov.assets.XAF)} suffix=" XAF" /></Card>
+              <div className="g2" style={{ marginTop: 16, alignItems: 'stretch' }}>
+                <VolumeAreaChart data={ov.series.volume_eur} />
+                <TransactionsStackChart data={ov.series.transactions} />
               </div>
 
-              <div className="g2" style={{ marginTop: 28, alignItems: 'start' }}>
-                <div>
-                  <div className="page-label" style={{ marginBottom: 10 }}>Transactions</div>
-                  <div className="g3">
-                    <Card title="Total" icon="🔄"><Num v={ov.transactions.total} /></Card>
-                    <Card title="Terminées" icon="✅" tone="gr"><Num v={ov.transactions.completed} c="var(--green)" /></Card>
-                    <Card title="En cours" icon="⚙️" tone="g"><Num v={ov.transactions.processing} c="var(--gold)" /></Card>
-                  </div>
-                  <div className="g3" style={{ marginTop: 12 }}>
-                    <Card title="Échouées" icon="❌" tone="v"><Num v={ov.transactions.failed} c={ov.transactions.failed > 0 ? 'var(--red)' : undefined} /></Card>
-                    <Card title="Volume (XAF)" icon="💰"><Num v={ov.transactions.volume_xaf} /></Card>
-                    <Card title="En attente" icon="⏳"><Num v={ov.transactions.pending} /></Card>
-                  </div>
-                </div>
-                <div>
-                  <div className="page-label" style={{ marginBottom: 10 }}>KYC & Providers</div>
-                  <div className="g2">
-                    <Card title="Dossiers KYC" icon="🛡️"><Num v={ov.kyc.total} /><Row k="En attente" v={ov.kyc.pending} /><Row k="Validés" v={ov.kyc.approved} /><Row k="Rejetés" v={ov.kyc.rejected} /></Card>
-                    <Card title="Providers" icon="🔌"><Num v={ov.providers.total} /><Row k="Configurés" v={ov.providers.configured} /></Card>
-                  </div>
-                </div>
+              <div className="g3" style={{ marginTop: 16, alignItems: 'stretch' }}>
+                <AssetDonut data={assetDonut} />
+                <StatusDonut data={ov.status_breakdown} />
+                <ProviderTopChart data={ov.provider_top} />
               </div>
 
-              <div className="page-label" style={{ marginTop: 28, marginBottom: 10 }}>Activité récente (audit)</div>
+              <div className="g2" style={{ marginTop: 16, alignItems: 'stretch' }}>
+                <AuditBarChart data={ov.series.audit} />
+                <Panel title="Indicateurs clés" icon="🎯">
+                  <Row k="Comptes actifs" v={<span style={{ color: 'var(--green)' }}>{ov.accounts.active}</span>} />
+                  <Row k="Comptes suspendus" v={<span style={{ color: 'var(--red)' }}>{ov.accounts.suspended}</span>} />
+                  <Row k="Taux de succès" v={<span style={{ color: 'var(--green)' }}>{ov.transactions.total > 0 ? Math.round((ov.transactions.completed / ov.transactions.total) * 100) : 0}%</span>} />
+                  <Row k="Dossiers KYC" v={ov.kyc.total} />
+                  <Row k="KYC en attente" v={<span style={{ color: 'var(--gold)' }}>{ov.kyc.pending}</span>} />
+                  <Row k="Providers" v={`${ov.providers.configured}/${ov.providers.total} configurés`} />
+                  <Row k="Liquidité EUR" v={fmtMoney(Number(ov.assets.EUR), '€')} />
+                  <Row k="Liquidité USD" v={fmtMoney(Number(ov.assets.USD), '$')} />
+                  <Row k="Liquidité XAF" v={fmtMoney(Number(ov.assets.XAF), 'FCFA')} />
+                </Panel>
+              </div>
+
+              <div className="page-label" style={{ marginTop: 26, marginBottom: 10 }}>Activité récente (audit)</div>
               <div className="card" style={{ padding: 12 }}>
                 {ov.recent_activity.length === 0 ? (
                   <div style={{ fontSize: 12, color: 'var(--text-dim)', padding: 12 }}>Aucune activité enregistrée.</div>
@@ -129,10 +129,10 @@ export default function SuperAdminDashboard() {
             </>
           )}
 
-          {/* ── Comptes : liste riche classée par secteur + popup détail ── */}
+          {/* ═══ COMPTES ═══ */}
           {section === 'accounts' && (
             <>
-              <Header title="Comptes" desc="Tous les clients Nexus classés par secteur (Personnel / Business). Cliquez sur un compte pour voir le détail complet." />
+              <Header title="Comptes" desc="Tous les clients Nexus classés par secteur (Personnel / Business). Cliquez sur un compte pour le détail complet." />
               <div className="g4" style={{ marginBottom: 20 }}>
                 <Card title="Total" icon="👥"><Num v={ov.accounts.total} /></Card>
                 <Card title="Personnel" icon="👤"><Num v={ov.accounts.personal} /></Card>
@@ -143,42 +143,98 @@ export default function SuperAdminDashboard() {
             </>
           )}
 
-          {/* ── Transactions ── */}
+          {/* ═══ TRANSACTIONS ═══ */}
           {section === 'transactions' && (
             <>
-              <Header title="Transactions" desc="Volume et état des opérations Nexus." />
-              <div className="g4">
+              <Header title="Transactions" desc="Registre détaillé des opérations avec filtres (statut, devise, type, recherche)." />
+              <div className="g4" style={{ marginBottom: 20 }}>
                 <Card title="Total" icon="🔄"><Num v={ov.transactions.total} /></Card>
-                <Card title="Terminées" icon="✅" tone="gr"><Num v={ov.transactions.completed} c="var(--green)" /></Card>
-                <Card title="En cours" icon="⚙️" tone="g"><Num v={ov.transactions.processing} c="var(--gold)" /></Card>
-                <Card title="Échouées" icon="❌" tone="v"><Num v={ov.transactions.failed} c={ov.transactions.failed > 0 ? 'var(--red)' : undefined} /></Card>
-              </div>
-              <div className="g3" style={{ marginTop: 12 }}>
-                <Card title="En attente" icon="⏳"><Num v={ov.transactions.pending} /></Card>
                 <Card title="Volume (XAF)" icon="💰"><Num v={ov.transactions.volume_xaf} /></Card>
-                <Card title="Taux de succès" icon="📈" tone="gr"><Num v={ov.transactions.total > 0 ? Math.round((ov.transactions.completed / ov.transactions.total) * 100) : 0} suffix="%" c="var(--green)" /></Card>
+                <Card title="Taux de succès" icon="📈"><Num v={ov.transactions.total > 0 ? Math.round((ov.transactions.completed / ov.transactions.total) * 100) : 0} suffix="%" c="var(--green)" /></Card>
+                <Card title="En cours" icon="⚙️"><Num v={ov.transactions.processing + ov.transactions.pending} c="var(--gold)" /></Card>
               </div>
+              <AdminTransactions />
             </>
           )}
 
-          {/* ── Autres sections (placeholders données réelles quand disponibles) ── */}
-          {['operations', 'treasury', 'compliance', 'risk', 'support', 'security', 'technical', 'audit'].includes(section) && (
-            <SectionPlaceholder section={section} ov={ov} />
+          {/* ═══ OPÉRATIONS ═══ */}
+          {section === 'operations' && (
+            <>
+              <Header title="Opérations" desc="File d'exécution des transactions non terminales et performance des traitements." />
+              <AdminOperations />
+            </>
           )}
 
-          {/* ── Providers : vue d'ensemble + clés API/publiques ── */}
+          {/* ═══ TRÉSORERIE ═══ */}
+          {section === 'treasury' && (
+            <>
+              <Header title="Trésorerie" desc="Liquidité et actifs par devise, évolution du volume traité." />
+              <AdminTreasury assets={ov.assets} series={ov.series} />
+            </>
+          )}
+
+          {/* ═══ COMPLIANCE / KYC ═══ */}
+          {section === 'compliance' && (
+            <>
+              <Header title="Compliance / KYC" desc="Dossiers de vérification d'identité (KYC/KYB) issus du provider SumSub." />
+              <AdminCompliance />
+            </>
+          )}
+
+          {/* ═══ RISQUE / FRAUDE ═══ */}
+          {section === 'risk' && (
+            <>
+              <Header title="Risque / Fraude" desc="Indicateurs de risque, taux d'échec par provider et transactions échouées à surveiller." />
+              <AdminRisk />
+            </>
+          )}
+
+          {/* ═══ PROVIDERS ═══ */}
           {section === 'providers' && (
             <>
-              <Header title="Providers" desc="Réseau de providers et clés API / publiques associées." />
+              <Header title="Providers" desc="Réseau de providers, credentials et clés API / publiques associées." />
               <div className="g3" style={{ marginBottom: 20 }}>
                 <Card title="Total providers" icon="🔌"><Num v={ov.providers.total} /></Card>
-                <Card title="Configurés" icon="✅" tone="gr"><Num v={ov.providers.configured} c="var(--green)" /></Card>
-                <Card title="État" icon="📡"><div style={{ fontSize: 18, fontWeight: 700, color: 'var(--gold)' }}>À configurer</div></Card>
+                <Card title="Configurés" icon="✅"><Num v={ov.providers.configured} c="var(--green)" /></Card>
+                <Card title="Clés actives" icon="🗝️"><Num v={ov.provider_top.length} c="var(--cyan)" /></Card>
               </div>
               <ProviderKeys />
             </>
           )}
 
+          {/* ═══ SUPPORT ═══ */}
+          {section === 'support' && (
+            <>
+              <Header title="Support" desc="Activité support et état de la base clients." />
+              <AdminSupport />
+            </>
+          )}
+
+          {/* ═══ SÉCURITÉ ═══ */}
+          {section === 'security' && (
+            <>
+              <Header title="Sécurité" desc="Événements de sécurité, connexions et alertes." />
+              <AdminSecurity />
+            </>
+          )}
+
+          {/* ═══ TECHNIQUE ═══ */}
+          {section === 'technical' && (
+            <>
+              <Header title="Technique" desc="Santé des services internes et état des credentials providers." />
+              <AdminTechnical />
+            </>
+          )}
+
+          {/* ═══ AUDIT ═══ */}
+          {section === 'audit' && (
+            <>
+              <Header title="Audit" desc="Journal d'activité complet et traçabilité des actions." />
+              <AdminAudit />
+            </>
+          )}
+
+          {/* ═══ PARAMÈTRES ═══ */}
           {section === 'settings' && (
             <>
               <Header title="Paramètres" desc="Configuration de la plateforme Nexus." />
@@ -203,40 +259,5 @@ function Header({ title, desc }: { title: string; desc: string }) {
       <div className="page-title">{title}</div>
       <p style={{ marginTop: 6, fontSize: 13, color: 'var(--text-mid)', maxWidth: 760 }}>{desc}</p>
     </div>
-  );
-}
-
-function Num({ v, suffix = '', c }: { v: number; suffix?: string; c?: string }) {
-  return <div style={{ fontSize: 26, fontWeight: 800, color: c || 'var(--text-bright)', fontFamily: 'var(--font-mono)' }}>{money(v)}{suffix}</div>;
-}
-
-/** Sections dont les données détaillées arrivent au fur et à mesure. */
-function SectionPlaceholder({ section, ov }: { section: string; ov: AdminOverview }) {
-  const meta: Record<string, { icon: string; label: string; desc: string; rows: Array<[string, string | number]> }> = {
-    operations: { icon: '⚙️', label: 'Opérations', desc: 'Transactions en cours, retries, routing et incidents.', rows: [['En cours', ov.transactions.processing], ['En attente', ov.transactions.pending], ['Terminées', ov.transactions.completed]] },
-    treasury: { icon: '💰', label: 'Trésorerie', desc: 'Liquidité et actifs par devise.', rows: [['EUR', money(Number(ov.assets.EUR)) + ' €'], ['USD', money(Number(ov.assets.USD)) + ' $'], ['XAF', money(Number(ov.assets.XAF)) + ' XAF']] },
-    compliance: { icon: '🛡️', label: 'Compliance / KYC', desc: 'Dossiers de vérification d’identité.', rows: [['Dossiers KYC', ov.kyc.total], ['En attente', ov.kyc.pending], ['Validés', ov.kyc.approved], ['Rejetés', ov.kyc.rejected]] },
-    risk: { icon: '📊', label: 'Risque / Fraude', desc: 'Alertes et comportements à risque.', rows: [['Comptes suspendus', ov.accounts.suspended], ['Transactions échouées', ov.transactions.failed]] },
-    providers: { icon: '🔌', label: 'Providers', desc: 'État du réseau de providers.', rows: [['Total', ov.providers.total], ['Configurés', ov.providers.configured]] },
-    support: { icon: '🧑‍💻', label: 'Support', desc: 'Clients et activité de support.', rows: [['Comptes total', ov.accounts.total], ['Comptes actifs', ov.accounts.active]] },
-    security: { icon: '🔐', label: 'Sécurité', desc: 'Événements et accès.', rows: [['Événements d’audit', ov.recent_activity.reduce((s, a) => s + a.count, 0)]] },
-    technical: { icon: '🛠️', label: 'Technique', desc: 'État des services et de l’API.', rows: [['API', 'Opérationnelle'], ['Providers', ov.providers.total]] },
-    audit: { icon: '📜', label: 'Audit', desc: 'Journal d’activité.', rows: ov.recent_activity.slice(0, 6).map((a) => [a.action, a.count] as [string, number]) },
-  };
-  const m = meta[section];
-  return (
-    <>
-      <Header title={m.label} desc={m.desc} />
-      <div className="card card-hi-c" style={{ padding: 18, maxWidth: 560 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-          <span style={{ fontSize: 18 }}>{m.icon}</span>
-          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-bright)' }}>{m.label}</span>
-        </div>
-        {m.rows.map(([k, v], i) => <Row key={i} k={String(k)} v={String(v)} />)}
-        <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 12 }}>
-          Les données détaillées de cette section seront enrichies progressivement.
-        </div>
-      </div>
-    </>
   );
 }
