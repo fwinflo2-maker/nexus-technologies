@@ -407,6 +407,7 @@ export default function SendPage() {
   const [completedSteps, setCompletedSteps] = useState<Step[]>([]);
 
   const [amount, setAmount] = useState('');
+  const [fundingType, setFundingType] = useState<'wallet' | 'provider'>('wallet');
   const [sourceCurrency, setSourceCurrency] = useState('');
   const [originCountry, setOriginCountry] = useState('');
   const [destCountry, setDestCountry] = useState('');
@@ -486,8 +487,11 @@ export default function SendPage() {
     if (step === 1) {
       const num = parseFloat(amount);
       if (!amount || isNaN(num) || num <= 0) errors.amount = 'Le montant doit être supérieur à 0.';
-      if (!sourceCurrency) errors.sourceCurrency = 'Sélectionnez une devise d\'envoi.';
-      if (!originCountry) errors.originCountry = 'Sélectionnez un pays d\'origine des fonds.';
+      if (fundingType === 'wallet') {
+        if (!sourceCurrency) errors.sourceCurrency = 'Sélectionnez une devise de votre wallet.';
+      } else {
+        if (!originCountry) errors.originCountry = 'Sélectionnez une proposition du provider.';
+      }
       if (!destCountry) errors.destCountry = 'Sélectionnez un pays de destination.';
       if (destCountry && !destCurrency) errors.destCurrency = 'Sélectionnez une devise de réception.';
       if (destCountry && destCurrency && !receivingMethod) errors.receivingMethod = 'Sélectionnez un mode de réception.';
@@ -498,7 +502,7 @@ export default function SendPage() {
       }
     }
     return errors;
-  }, [step, amount, sourceCurrency, originCountry, destCountry, destCurrency, receivingMethod, beneficiary]);
+  }, [step, amount, fundingType, sourceCurrency, originCountry, destCountry, destCurrency, receivingMethod, beneficiary]);
 
   const [errors, setErrors] = useState<FormErrors>({});
 
@@ -606,87 +610,108 @@ export default function SendPage() {
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-                    {/* Montant + devise (source = devise du wallet) */}
+                    {/* Source des fonds : wallet OU proposition du provider */}
                     <motion.div {...stagger(0)}>
                       <div className="se-field-label">Source des fonds</div>
-                      <div className="se-amount">
-                        <select
-                          value={sourceCurrency || (sourceCurrencies[0] ?? '')}
-                          onChange={e => setSourceCurrency(e.target.value)}
-                          style={{ padding: '11px 10px', background: 'var(--panel2)', color: 'var(--cyan)', fontWeight: 700, fontSize: 12, outline: 'none', border: 'none', borderRight: '1px solid var(--border)', cursor: 'pointer' }}
+
+                      {/* Toggle Wallet / Provider */}
+                      <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+                        <button
+                          onClick={() => { setFundingType('wallet'); setOriginCountry(''); }}
+                          className={`se-chip ${fundingType === 'wallet' ? 'se-chip-selected' : ''}`}
+                          style={{ flex: 1, padding: '9px 12px' }}
                         >
-                          {sourceCurrencies.map(c => {
-                            const w = wallets.find(x => x.currency === c);
-                            return <option key={c} value={c}>{w && (w.available > 0 || w.has_funds) ? `${c} · ${formatCurrencyDisplay(w.available, c)} dispo` : c}</option>;
-                          })}
-                        </select>
-                        <input type="text" value={amount} onChange={e => setAmount(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="0.00" />
+                          💼 Mon wallet
+                        </button>
+                        <button
+                          onClick={() => { setFundingType('provider'); setSourceCurrency(''); }}
+                          className={`se-chip ${fundingType === 'provider' ? 'se-chip-selected' : ''}`}
+                          style={{ flex: 1, padding: '9px 12px' }}
+                        >
+                          🏦 Proposition du provider
+                        </button>
                       </div>
-                      {wallets.length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-                          {wallets.filter(w => w.available > 0 || w.has_funds).map(w => (
-                            <button
-                              key={w.currency}
-                              onClick={() => setSourceCurrency(w.currency)}
-                              className={`se-chip ${sourceCurrency === w.currency ? 'se-chip-selected' : ''}`}
-                              style={{ fontSize: 10, padding: '5px 10px' }}
+
+                      {fundingType === 'wallet' ? (
+                        <>
+                          <div className="se-amount">
+                            <select
+                              value={sourceCurrency || (sourceCurrencies[0] ?? '')}
+                              onChange={e => setSourceCurrency(e.target.value)}
+                              style={{ padding: '11px 10px', background: 'var(--panel2)', color: 'var(--cyan)', fontWeight: 700, fontSize: 12, outline: 'none', border: 'none', borderRight: '1px solid var(--border)', cursor: 'pointer' }}
                             >
-                              {w.currency} · {formatCurrencyDisplay(w.available, w.currency)}
-                            </button>
-                          ))}
-                        </div>
+                              {sourceCurrencies.map(c => {
+                                const w = wallets.find(x => x.currency === c);
+                                return <option key={c} value={c}>{w && (w.available > 0 || w.has_funds) ? `${c} · ${formatCurrencyDisplay(w.available, c)} dispo` : c}</option>;
+                              })}
+                            </select>
+                            <input type="text" value={amount} onChange={e => setAmount(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="0.00" />
+                          </div>
+                          {wallets.length > 0 && (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                              {wallets.filter(w => w.available > 0 || w.has_funds).map(w => (
+                                <button
+                                  key={w.currency}
+                                  onClick={() => setSourceCurrency(w.currency)}
+                                  className={`se-chip ${sourceCurrency === w.currency ? 'se-chip-selected' : ''}`}
+                                  style={{ fontSize: 10, padding: '5px 10px' }}
+                                >
+                                  {w.currency} · {formatCurrencyDisplay(w.available, w.currency)}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          {errors.sourceCurrency && <ErrorText>{errors.sourceCurrency}</ErrorText>}
+                        </>
+                      ) : (
+                        <>
+                          {authorizedOrigins?.country_of_residence && (
+                            <div className="se-residence" style={{ marginBottom: 8 }}>
+                              <span style={{ fontSize: 9, color: 'var(--text-dim)' }}>Résidence KYC :</span>
+                              <strong>{authorizedOrigins.country_of_residence}</strong>
+                              <span className="se-lock">🔒 non modifiable</span>
+                            </div>
+                          )}
+
+                          {authorizedOrigins && authorizedOrigins.origins.length === 0 ? (
+                            <div style={{
+                              padding: '12px 14px', background: 'rgba(255,100,100,0.04)',
+                              border: '1px solid rgba(255,100,100,0.2)', borderRadius: 10,
+                              fontSize: 11, color: 'var(--red)',
+                            }}>
+                              Aucune source de financement vérifiée. Ajoutez et vérifiez un moyen de paiement pour envoyer des fonds.
+                            </div>
+                          ) : authorizedOrigins && authorizedOrigins.origins.length === 1 ? (
+                            <div className="se-chip se-chip-locked">
+                              <span style={{ fontSize: 16 }}>{authorizedOrigins.origins[0].flag}</span>
+                              <span>{authorizedOrigins.origins[0].countryName}</span>
+                              <span className="se-chip-sub">{authorizedOrigins.origins[0].sources[0]?.kindLabel}</span>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                              {authorizedOrigins?.origins.map((origin, i) => (
+                                <motion.button
+                                  key={origin.country}
+                                  className={`se-chip ${originCountry === origin.country ? 'se-chip-selected' : ''}`}
+                                  onClick={() => { setOriginCountry(origin.country); if (origin.currency) setSourceCurrency(origin.currency); }}
+                                  {...stagger(i, 0.05)}
+                                >
+                                  <span style={{ fontSize: 14 }}>{origin.flag}</span>
+                                  <span>{origin.countryName}</span>
+                                  {origin.sources.length > 0 && (
+                                    <span className="se-chip-sub">{origin.sources[0].kindLabel}</span>
+                                  )}
+                                  {originCountry === origin.country && (
+                                    <span className="pill p-c" style={{ fontSize: 7, marginLeft: 'auto' }}>✓</span>
+                                  )}
+                                </motion.button>
+                              ))}
+                            </div>
+                          )}
+                          {errors.originCountry && <ErrorText>{errors.originCountry}</ErrorText>}
+                        </>
                       )}
                       {errors.amount && <ErrorText>{errors.amount}</ErrorText>}
-                    </motion.div>
-
-                    {/* Origine des fonds */}
-                    <motion.div {...stagger(1)}>
-                      <div className="se-field-label">Origine des fonds</div>
-
-                      {authorizedOrigins?.country_of_residence && (
-                        <div className="se-residence" style={{ marginBottom: 8 }}>
-                          <span style={{ fontSize: 9, color: 'var(--text-dim)' }}>Résidence KYC :</span>
-                          <strong>{authorizedOrigins.country_of_residence}</strong>
-                          <span className="se-lock">🔒 non modifiable</span>
-                        </div>
-                      )}
-
-                      {authorizedOrigins && authorizedOrigins.origins.length === 0 ? (
-                        <div style={{
-                          padding: '12px 14px', background: 'rgba(255,100,100,0.04)',
-                          border: '1px solid rgba(255,100,100,0.2)', borderRadius: 10,
-                          fontSize: 11, color: 'var(--red)',
-                        }}>
-                          Aucune source de financement vérifiée. Ajoutez et vérifiez un moyen de paiement pour envoyer des fonds.
-                        </div>
-                      ) : authorizedOrigins && authorizedOrigins.origins.length === 1 ? (
-                        <div className="se-chip se-chip-locked">
-                          <span style={{ fontSize: 16 }}>{authorizedOrigins.origins[0].flag}</span>
-                          <span>{authorizedOrigins.origins[0].countryName}</span>
-                          <span className="se-chip-sub">{authorizedOrigins.origins[0].sources[0]?.kindLabel}</span>
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                          {authorizedOrigins?.origins.map((origin, i) => (
-                            <motion.button
-                              key={origin.country}
-                              className={`se-chip ${originCountry === origin.country ? 'se-chip-selected' : ''}`}
-                              onClick={() => setOriginCountry(origin.country)}
-                              {...stagger(i, 0.05)}
-                            >
-                              <span style={{ fontSize: 14 }}>{origin.flag}</span>
-                              <span>{origin.countryName}</span>
-                              {origin.sources.length > 0 && (
-                                <span className="se-chip-sub">{origin.sources[0].kindLabel}</span>
-                              )}
-                              {originCountry === origin.country && (
-                                <span className="pill p-c" style={{ fontSize: 7, marginLeft: 'auto' }}>✓</span>
-                              )}
-                            </motion.button>
-                          ))}
-                        </div>
-                      )}
-                      {errors.originCountry && <ErrorText>{errors.originCountry}</ErrorText>}
                     </motion.div>
 
                     {/* Estimation conversion */}
@@ -861,7 +886,9 @@ export default function SendPage() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
                     {[
                       ['Vous envoyez', formatCurrencyDisplay(parseFloat(amount) || 0, sourceCurrency), 'var(--white)', true],
-                      ['Origine des fonds', `${selectedOrigin?.flag ?? ''} ${selectedOrigin?.countryName ?? originCountry}`, 'var(--green)', false],
+                      ['Source des fonds', fundingType === 'wallet'
+                        ? `💼 Wallet ${sourceCurrency}`
+                        : `🏦 ${selectedOrigin?.flag ?? ''} ${selectedOrigin?.countryName ?? originCountry}`, 'var(--green)', false],
                       ['Destination', `${selectedCountry?.flag ?? ''} ${selectedCountry?.name ?? destCountry}`, 'var(--text-bright)', false],
                       ['Devise reçue', destCurrency, 'var(--cyan)', true],
                       ['Mode de réception', `${selectedMethod?.icon ?? ''} ${selectedMethod?.label ?? ''}${beneficiary.operator ? ` — ${beneficiary.operator}` : ''}`, 'var(--text-bright)', false],
