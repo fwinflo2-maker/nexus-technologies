@@ -29,8 +29,6 @@ export default function Topbar({ mode, title, subtitle }: { mode: Mode; title: s
       </div>
 
       <div className="topbar-right">
-        <div className="pill p-c topbar-pill">EUR → XAF Pilote</div>
-
         {/* Centre de notifications */}
         <NotificationBell />
 
