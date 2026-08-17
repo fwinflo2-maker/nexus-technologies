@@ -707,7 +707,8 @@ final class WalletService
      * Orchestration (Phase D, Option B) :
      *   1. validation des montants, devises et wallets ;
      *   2. idempotence via IdempotencyService (check/start/complete/fail) ;
-     *   3. résolution du taux via FXService (FXService → FXRateCache → ManualRateProvider) ;
+     *   3. résolution du taux via FXService (FXService → FXRateCache, source
+     *      FX réelle uniquement — refus explicite sans taux configuré) ;
      *   4. calcul du montant destination en BCMath, arrondi HALF_UP à 8 décimales ;
      *   5. UNE seule wallet_operations + DEUX ledger_entries (debit/credit)
      *      liées au même operation_id, via LedgerService::transfer() ;
@@ -818,6 +819,16 @@ final class WalletService
         // ──────────────────────────────────────────────────────────────────
         // 3. Résolution du taux FX
         // ──────────────────────────────────────────────────────────────────
+        // ── 3bis. Taux VERROUILLÉ par une quote (optionnel) ──────
+        // Une quote de conversion est un engagement : le taux affiché à
+        // l'utilisateur (garanti, TTL) doit être celui de l'exécution. Un
+        // `fxRate` verrouillé par le contrôleur (issu de la route de la quote,
+        // elle-même calculée avec la source FX réelle) prend la main sur la
+        // résolution courante — jamais l'inverse. Sans taux verrouillé, le
+        // taux courant est résolu dans l'environnement de l'opération : une
+        // conversion sandbox ne consomme pas un taux de production, ni
+        // l'inverse.
+        $lockedRate = $req->getFxRate();
         if (strtoupper($sourceCurrency) === strtoupper($destCurrency)) {
             // Devises identiques : taux identité, aucune résolution nécessaire.
             $rate = new FXRate(
@@ -830,10 +841,22 @@ final class WalletService
                 (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->modify('+24 hours')
             );
             $destAmount = $sourceAmount;
+        } elseif ($lockedRate !== null && $lockedRate !== '') {
+            // Le taux garanti de la quote s'applique tel quel (déjà vérifié
+            // par le contrôleur : quote valide, non expirée, au bon montant).
+            self::assertRate($lockedRate);
+            $rate = new FXRate(
+                $sourceCurrency,
+                $destCurrency,
+                $lockedRate,
+                '0.0000',
+                $req->getFxSource() ?? 'convert_quote',
+                new \DateTimeImmutable('now', new \DateTimeZone('UTC')),
+                (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->modify('+24 hours')
+            );
+            $destAmount = FXService::convert($sourceAmount, $rate);
         } else {
-            // Le taux est résolu DANS l'environnement de l'opération : une
-            // conversion sandbox ne doit pas consommer un taux de production,
-            // ni l'inverse.
+            // Le taux est résolu DANS l'environnement de l'opération.
             $fxEnvironment = $context?->environment
                 ?? ExecutionEnvironment::fromString(ProviderConfig::defaultEnvironment());
             $rate       = FXService::resolve($sourceCurrency, $destCurrency, $fxEnvironment);
@@ -995,6 +1018,18 @@ final class WalletService
                 422,
                 sprintf('Devise non supportée : %s. Supportées : %s.', $currency, implode(', ', self::SUPPORTED_CURRENCIES)),
                 'CURRENCY_NOT_SUPPORTED'
+            );
+        }
+    }
+
+    /**
+     * Validation d'un taux verrouillé : décimal strictement positif (8 dp).
+     */
+    private static function assertRate(string $rate): void
+    {
+        if ($rate === '' || !preg_match('/^\d+(\.\d+)?$/', $rate) || bccomp($rate, '0', 8) <= 0) {
+            throw new RuntimeException(
+                sprintf('Taux verrouillé invalide : "%s". Format attendu : décimal positif.', $rate)
             );
         }
     }

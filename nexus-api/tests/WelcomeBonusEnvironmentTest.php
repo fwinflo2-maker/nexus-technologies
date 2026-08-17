@@ -164,20 +164,27 @@ final class WelcomeBonusEnvironmentTest extends TestCase
     }
 
     /**
-     * L'appelant réel — l'inscription — fournit bien ce contexte.
+     * L'inscription ne crédite PLUS aucun bonus de bienvenue.
      *
-     * Complète le test de comportement : la brique respecte le contexte, et
-     * le seul chemin qui crédite un bonus le renseigne.
+     * Le bonus fictif de 2500 EUR a été supprimé avec le mode démo : un
+     * solde créé sans argent réel serait une fausse donnée financière (§9
+     * du brief), même marqué sandbox. L'inscription ne crée donc plus
+     * aucune écriture ledger.
      */
-    public function test_l_inscription_fournit_un_contexte_sandbox_au_bonus(): void
+    public function test_l_inscription_ne_credite_plus_aucun_bonus(): void
     {
         $source = file_get_contents(__DIR__ . '/../src/Controllers/AuthController.php');
         self::assertIsString($source);
 
-        self::assertMatchesRegularExpression(
-            '/welcome_bonus.{0,600}ExecutionEnvironment::SANDBOX/s',
+        self::assertStringNotContainsString(
+            'welcome_bonus',
             $source,
-            'Le crédit du bonus de bienvenue doit passer un ExecutionContext sandbox explicite.'
+            'Le bonus de bienvenue a été supprimé : l\'inscription ne doit plus créditer de fonds fictifs.'
+        );
+        self::assertStringNotContainsString(
+            '2500',
+            $source,
+            'Aucun montant de bonus ne doit subsister dans le chemin d\'inscription.'
         );
     }
 

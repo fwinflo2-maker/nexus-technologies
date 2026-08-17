@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import {
   apiWalletsList,
   apiIntentCoverage,
-  apiCreateQuote,
+  apiCreateConvertQuote,
   apiWalletConvert,
   apiWalletRates,
   type WalletState,
@@ -13,6 +13,8 @@ import {
   type WalletRatesData,
 } from '../../api/client';
 import AnimatedCounter from '../../components/AnimatedCounter';
+import { useI18n } from '../../context/I18nContext';
+import { useDashT, localeFor, dashError } from '../../data/dashboard-i18n';
 
 const CURRENCY_META: Record<string, { flag: string; symbol: string; label: string }> = {
   EUR:  { flag: '🇪🇺', symbol: '€', label: 'Euro' },
@@ -24,6 +26,9 @@ const CURRENCY_META: Record<string, { flag: string; symbol: string; label: strin
 };
 
 export default function ConvertPage() {
+  const t = useDashT();
+  const { lang } = useI18n();
+  const locale = localeFor(lang);
   const [wallets, setWallets] = useState<WalletState[]>([]);
   const [, setCoverage] = useState<IntentCoverageData | null>(null);
   const [rates, setRates] = useState<WalletRatesData | null>(null);
@@ -32,6 +37,7 @@ export default function ConvertPage() {
   const [amount, setAmount] = useState<string>('');
   const [quote, setQuote] = useState<QuoteData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
   const [converting, setConverting] = useState(false);
   const [countdown, setCountdown] = useState<number>(0);
   const [convertError, setConvertError] = useState<string | null>(null);
@@ -66,23 +72,37 @@ export default function ConvertPage() {
   const handleGetQuote = async () => {
     if (!amount || parseFloat(amount) <= 0) return;
     setLoading(true);
-    const resp = await apiCreateQuote({
+    setQuoteError(null);
+    setConvertError(null);
+    // Quote du rail INTERNE (wallet→wallet) : le taux réel est résolu et
+    // verrouillé côté serveur. Sans source FX pour la paire, le backend
+    // répond FX_RATE_UNAVAILABLE (503) — jamais de taux inventé (§7).
+    const resp = await apiCreateConvertQuote({
       amount: parseFloat(amount),
       sourceCurrency: fromCurrency,
-      originCountry: 'FR',
-      destCountry: 'CG',
       destCurrency: toCurrency,
-      receivingMethod: 'wallet_internal',
-      objective: 'optimized',
     });
     if (resp.success && resp.data) {
       setQuote(resp.data);
       const expires = new Date(resp.data.expires_at).getTime();
       const now = Date.now();
-      setCountdown(Math.floor((expires - now) / 1000));
+      setCountdown(Math.max(0, Math.floor((expires - now) / 1000)));
+    } else {
+      setQuote(null);
+      setQuoteError(dashError(resp.code, resp.error ?? t('convert.refused')));
     }
     setLoading(false);
   };
+
+  // La quote expire : on la retire de l'écran et on invite à relancer.
+  // Laisser la carte avec 0:00 et le bouton actif prétendrait qu'un taux
+  // périmé est encore garanti.
+  useEffect(() => {
+    if (countdown === 0 && quote) {
+      setQuote(null);
+      setQuoteError(t('convert.quoteExpired'));
+    }
+  }, [countdown, quote, t]);
 
   const handleConvert = async () => {
     // Cette fonction exécutait un setTimeout de deux secondes puis vidait le
@@ -102,18 +122,30 @@ export default function ConvertPage() {
       source_currency: fromCurrency,
       dest_currency: toCurrency,
       idempotency_key: idempotencyKey,
+      // L'exécution honore le taux VERROUILLÉ de la quote (taux vu = taux
+      // appliqué) et marque la quote EXECUTED — elle ne peut plus être
+      // ré-exécutée.
+      quote_id: quote?.id,
+      route_id: quote?.routes[0]?.id,
     });
 
     setConverting(false);
 
     if (!res.success) {
-      // Le message du backend est affiché tel quel : il porte le motif exact
-      // du refus (solde insuffisant, devise non supportée, environnement).
-      setConvertError(res.error ?? 'La conversion a échoué.');
+      // Le code d'erreur backend est mappé vers i18n ; le message brut ne sert
+      // que de dernier recours (§7).
+      setConvertError(dashError(res.code, res.error ?? t('convert.failed')));
       return;
     }
 
-    setConvertDone(`Conversion effectuée : ${amount} ${fromCurrency} → ${toCurrency}.`);
+    // Succès RÉEL : les montants viennent de la réponse du moteur (le wallet
+    // destination a été crédité du montant indiqué, au taux de la quote).
+    const conv = res.data?.conversion;
+    const destAmount = conv ? Number(conv.dest_amount).toLocaleString(locale, { minimumFractionDigits: 2 }) : null;
+    const rate = conv ? Number(conv.fx_rate).toLocaleString(locale, { maximumFractionDigits: 6 }) : null;
+    setConvertDone(destAmount && rate
+      ? t('convert.doneDetail', { destAmount, from: fromCurrency, to: toCurrency, rate })
+      : t('convert.done', { amount, from: fromCurrency, to: toCurrency }));
     setAmount('');
     setQuote(null);
     void fetchData(); // recharge les soldes réels
@@ -127,9 +159,9 @@ export default function ConvertPage() {
         animate={{ opacity: 1, y: 0 }}
       >
         <div className="page-label">NEXUS FX</div>
-        <div className="page-title">Convertir des <span className="gc">devises</span></div>
-        <p style={{ marginTop: 10, fontSize: 13, color: 'var(--text-mid)' }}>
-          Convertissez instantanément entre vos devises aux meilleurs taux.
+        <div className="page-title">{t('convert.title')}</div>
+        <p style={{ marginTop: 10, fontSize: 13, color: 'var(--text-mid)', maxWidth: 640 }}>
+          {t('convert.subtitle')}
         </p>
       </motion.div>
 
@@ -138,10 +170,10 @@ export default function ConvertPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
         {/* Devises */}
         <motion.div className="card" style={{ padding: 20 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-          <div className="page-label" style={{ marginBottom: 12 }}>Devises</div>
+          <div className="page-label" style={{ marginBottom: 12 }}>{t('form.currency')}</div>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
             <div style={{ flex: 1 }}>
-              <label style={{ fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Vous donnez</label>
+              <label style={{ fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase' }}>{t('convert.give')}</label>
               <select
                 value={fromCurrency}
                 onChange={(e) => setFromCurrency(e.target.value)}
@@ -155,7 +187,7 @@ export default function ConvertPage() {
             </div>
             <div style={{ fontSize: 24, color: 'var(--cyan)' }}>⇄</div>
             <div style={{ flex: 1 }}>
-              <label style={{ fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Vous recevez</label>
+              <label style={{ fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase' }}>{t('convert.receive')}</label>
               <select
                 value={toCurrency}
                 onChange={(e) => setToCurrency(e.target.value)}
@@ -172,7 +204,7 @@ export default function ConvertPage() {
 
         {/* Montant */}
         <motion.div className="card" style={{ padding: 20 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }}>
-          <div className="page-label" style={{ marginBottom: 12 }}>Montant</div>
+          <div className="page-label" style={{ marginBottom: 12 }}>{t('convert.amount')}</div>
           <input
             type="number"
             value={amount}
@@ -183,10 +215,24 @@ export default function ConvertPage() {
           />
           {wallets.find(w => w.currency === fromCurrency) && (
             <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-mid)' }}>
-              Solde disponible : {wallets.find(w => w.currency === fromCurrency)?.available.toLocaleString('fr-FR')} {fromCurrency}
+              {t('convert.availableBalance', {
+                amount: wallets.find(w => w.currency === fromCurrency)?.available.toLocaleString(locale) ?? '0',
+                currency: fromCurrency,
+              })}
             </div>
           )}
         </motion.div>
+
+        {/* Erreur de quote (taux indisponible, quote expirée…) */}
+        {quoteError && !quote && (
+          <div
+            className="card"
+            style={{ padding: 14, borderColor: 'var(--danger, #e5484d)', color: 'var(--danger, #e5484d)', fontSize: 13 }}
+            role="alert"
+          >
+            {quoteError}
+          </div>
+        )}
 
         {/* Bouton Obtenir un taux */}
         {!quote && (
@@ -199,7 +245,7 @@ export default function ConvertPage() {
             transition={{ delay: 0.2 }}
             style={{ width: '100%' }}
           >
-            {loading ? 'Calcul en cours...' : 'Obtenir un taux'}
+            {loading ? t('convert.calculating') : t('convert.getQuote')}
           </motion.button>
         )}
 
@@ -212,56 +258,63 @@ export default function ConvertPage() {
             animate={{ opacity: 1, scale: 1 }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-              <span className="page-label">Taux garanti</span>
+              <span className="page-label">{t('convert.guaranteedRate')}</span>
               <span className={`pill ${countdown < 10 ? 'p-r' : 'p-g'}`}>
                 ⏱ {Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}
               </span>
             </div>
 
             <div style={{ textAlign: 'center', marginBottom: 20 }}>
-              <div style={{ fontSize: 13, color: 'var(--text-mid)' }}>Vous donnez</div>
+              <div style={{ fontSize: 13, color: 'var(--text-mid)' }}>{t('convert.give')}</div>
               <div className="mono" style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-bright)' }}>
-                {parseFloat(amount).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} {fromCurrency}
+                {parseFloat(amount).toLocaleString(locale, { minimumFractionDigits: 2 })} {fromCurrency}
               </div>
             </div>
 
             <div style={{ fontSize: 32, color: 'var(--cyan)', textAlign: 'center', marginBottom: 20 }}>↓</div>
 
             <div style={{ textAlign: 'center', marginBottom: 20 }}>
-              <div style={{ fontSize: 13, color: 'var(--text-mid)' }}>Vous recevez</div>
+              <div style={{ fontSize: 13, color: 'var(--text-mid)' }}>{t('convert.receive')}</div>
               <div className="mono" style={{ fontSize: 28, fontWeight: 700, color: 'var(--green)' }}>
-                {quote.routes[0]?.receivedNum.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} {toCurrency}
+                {quote.routes[0]?.receivedNum.toLocaleString(locale, { minimumFractionDigits: 2 })} {toCurrency}
               </div>
             </div>
 
             <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 8, padding: 12, marginBottom: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                <span style={{ fontSize: 12, color: 'var(--text-mid)' }}>Taux de change</span>
-                <span className="mono" style={{ fontSize: 12, color: 'var(--text-bright)' }}>
-                  1 {fromCurrency} = {(quote.routes[0]?.receivedNum / parseFloat(amount)).toFixed(4)} {toCurrency}
-                </span>
+                <span style={{ fontSize: 12, color: 'var(--text-mid)' }}>{t('convert.rateLocked', { from: fromCurrency, rate: (quote.routes[0]?.rate ?? 0).toLocaleString(locale, { maximumFractionDigits: 6 }), to: toCurrency })}</span>
+                <span className="mono" style={{ fontSize: 12, color: 'var(--green)' }}>{t('convert.guaranteedRate')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                <span style={{ fontSize: 12, color: 'var(--text-mid)' }}>Frais</span>
+                <span style={{ fontSize: 12, color: 'var(--text-mid)' }}>{t('convert.spread')}</span>
+                <span className="mono" style={{ fontSize: 12, color: 'var(--text-bright)' }}>{quote.routes[0]?.spread}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                <span style={{ fontSize: 12, color: 'var(--text-mid)' }}>{t('convert.fees')}</span>
                 <span className="mono" style={{ fontSize: 12, color: 'var(--text-bright)' }}>
                   {quote.routes[0]?.fees}
                 </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 12, color: 'var(--text-mid)' }}>Délai estimé</span>
+                <span style={{ fontSize: 12, color: 'var(--text-mid)' }}>{t('convert.delay')}</span>
                 <span style={{ fontSize: 12, color: 'var(--text-bright)' }}>{quote.routes[0]?.delay}</span>
               </div>
+              {quote.routes[0]?.rateSource && (
+                <div style={{ fontSize: 9, color: 'var(--text-dim)', marginTop: 8, fontFamily: 'var(--font-mono)' }}>
+                  {t('convert.rateSource', { source: quote.routes[0].rateSource })}
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'flex', gap: 8 }}>
-              <button className="btn btn-outline" onClick={() => setQuote(null)} style={{ flex: 1 }}>Annuler</button>
+              <button className="btn btn-outline" onClick={() => setQuote(null)} style={{ flex: 1 }}>{t('common.cancel')}</button>
               <button 
                 className="btn btn-green" 
                 onClick={handleConvert}
                 disabled={converting}
                 style={{ flex: 1 }}
               >
-                {converting ? 'Conversion...' : 'Confirmer la conversion'}
+                {converting ? t('convert.converting') : t('convert.confirm')}
               </button>
             </div>
           </motion.div>
@@ -294,24 +347,31 @@ export default function ConvertPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
         {/* Solde total */}
         <motion.div className="card card-hi-c" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
-          <div className="page-label" style={{ marginBottom: 10 }}>Patrimoine</div>
+          <div className="page-label" style={{ marginBottom: 10 }}>{t('convert.wealth')}</div>
           <div className="mono" style={{ fontSize: 30, fontWeight: 800, color: 'var(--white)', letterSpacing: '-1px' }}>
-            <AnimatedCounter
-              value={wallets.reduce((s, w) => s + w.ref_equivalent, 0)}
-              format={(n) => n.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}
-            />
+            {(() => {
+              // Sans taux réel pour une devise financée, le total serait
+              // inventé : on affiche « indisponible » (§9).
+              const funded = wallets.filter(w => w.has_funds);
+              const complete = funded.every(w => w.ref_equivalent != null);
+              if (funded.length === 0 || !complete) {
+                return <span style={{ fontSize: 14, color: 'var(--text-dim)' }}>{t('wallet.equivalent.unavailable')}</span>;
+              }
+              const total = wallets.reduce((s, w) => s + (w.ref_equivalent ?? 0), 0);
+              return <AnimatedCounter value={total} format={(n) => n.toLocaleString(locale, { style: 'currency', currency: 'EUR' })} />;
+            })()}
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>
-            {wallets.filter(w => w.has_funds).length} devises actives · équivalent EUR
+            {t('convert.currenciesActive', { n: wallets.filter(w => w.has_funds).length })}
           </div>
         </motion.div>
 
         {/* Soldes par devise */}
         <motion.div className="card" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.22 }}>
-          <div className="page-label" style={{ marginBottom: 12 }}>Vos devises</div>
+          <div className="page-label" style={{ marginBottom: 12 }}>{t('convert.yourCurrencies')}</div>
           {wallets.length === 0 ? (
             <div style={{ fontSize: 12, color: 'var(--text-dim)', padding: 12, textAlign: 'center' }}>
-              Aucun wallet disponible.
+              {t('convert.noWallet')}
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -326,7 +386,7 @@ export default function ConvertPage() {
                         <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-bright)' }}>{w.currency}</span>
                       </div>
                       <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-main)' }}>
-                        {w.available.toLocaleString('fr-FR')} {w.currency}
+                        {w.available.toLocaleString(locale)} {w.currency}
                       </span>
                     </div>
                     <div style={{ height: 5, background: 'var(--panel2)', borderRadius: 3, overflow: 'hidden' }}>
@@ -338,22 +398,26 @@ export default function ConvertPage() {
             </div>
           )}
           <Link to="/wallet" className="btn btn-ghost" style={{ width: '100%', marginTop: 12, fontSize: 11, textDecoration: 'none' }}>
-            Gérer mon portefeuille →
+            {t('convert.manage')}
           </Link>
         </motion.div>
 
         {/* Taux de référence */}
         {rates && (
           <motion.div className="card" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-            <div className="page-label" style={{ marginBottom: 12 }}>Taux de référence</div>
+            <div className="page-label" style={{ marginBottom: 12 }}>{t('convert.refRates')}</div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: 12, color: 'var(--text-mid)' }}>{rates.base} → XAF</span>
               <span className="mono" style={{ fontSize: 14, fontWeight: 700, color: 'var(--gold)' }}>
-                1 {rates.base} = {rates.fx_rate_xaf.toLocaleString('fr-FR', { maximumFractionDigits: 3 })} XAF
+                {rates.fx_rate_xaf !== null && rates.fx_rate_xaf > 0
+                  ? t('dash.rates.one', { base: rates.base, rate: rates.fx_rate_xaf.toLocaleString(locale, { maximumFractionDigits: 3 }) })
+                  : t('wallet.rateUnavailable')}
               </span>
             </div>
             <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 8, fontFamily: 'var(--font-mono)' }}>
-              Source : marché · mis à jour {new Date(rates.updated_at).toLocaleTimeString('fr-FR')}
+              {rates.updated_at
+                ? t('convert.source', { time: new Date(rates.updated_at).toLocaleTimeString(locale) })
+                : t('dash.rates.unavailable')}
             </div>
           </motion.div>
         )}
@@ -362,11 +426,10 @@ export default function ConvertPage() {
         <motion.div className="card card-hi-v" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.38 }}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
             <div className="ib ib-v" style={{ width: 28, height: 28, borderRadius: 8, fontSize: 14 }}>🤖</div>
-            <span style={{ fontSize: 10, color: 'var(--violet)', fontFamily: 'var(--font-mono)', letterSpacing: '0.12em' }}>NEXUS FX INTELLIGENCE</span>
+            <span style={{ fontSize: 10, color: 'var(--violet)', fontFamily: 'var(--font-mono)', letterSpacing: '0.12em' }}>{t('convert.intel')}</span>
           </div>
           <p style={{ fontSize: 12, color: 'var(--text-mid)', lineHeight: 1.6 }}>
-            Nexus compare les taux, frais et délais pour sélectionner le meilleur
-            chemin de conversion. Le taux affiché est <strong style={{ color: 'var(--text-bright)' }}>garanti</strong> pendant sa période de validité.
+            {t('convert.intel.text1')} <strong style={{ color: 'var(--text-bright)' }}>{t('convert.guaranteed')}</strong> {t('convert.intel.text2')}
           </p>
         </motion.div>
         </div>

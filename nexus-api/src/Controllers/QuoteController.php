@@ -17,6 +17,8 @@ use Nexus\Services\FundingSourceEngine;
 use Nexus\Services\IntentParser;
 use Nexus\Services\PolicyEngine;
 use Nexus\Services\QuoteEngine;
+use Nexus\Services\QuotePricing;
+use Nexus\Services\QuoteRateUnavailable;
 use Nexus\Services\RoutingEngine;
 
 /**
@@ -101,11 +103,17 @@ final class QuoteController
         $providers = CapabilityEngine::findEligible($intent, $context->environment, $isSuperAdmin);
 
         // ── 3. Policy Engine : vérification avant quotes ────────
-        // Conversion du montant source en EUR pour comparer aux plafonds
-        // Les taux signifient « 1 EUR = X unités de devise »
-        // Pour convertir VERS EUR : on DIVISE par le taux
-        $sourceToEur = self::rateToEur($intent['sourceCurrency']);
-        $amountRef   = $intent['amount'] / $sourceToEur;
+        // Conversion du montant source en EUR pour comparer aux plafonds.
+        // Taux RÉEL (source FX) : « 1 EUR = X unités de devise ». Pour
+        // convertir VERS EUR, on DIVISE. Sans taux, le plafond n'est pas
+        // évaluable : refus explicite (§7).
+        try {
+            $sourceToEur = self::rateToEur($intent['sourceCurrency'], $context->environment);
+        } catch (\Nexus\Services\QuoteRateUnavailable $e) {
+            Response::error($e->getMessage(), 503, \Nexus\Services\QuoteRateUnavailable::ERROR_CODE);
+            return;
+        }
+        $amountRef   = $sourceToEur > 0.0 ? $intent['amount'] / $sourceToEur : 0.0;
 
         PolicyEngine::evaluate($user, $intent, $amountRef, $context->environment);
 
@@ -162,6 +170,157 @@ final class QuoteController
             'intent'     => $intent,
             'created_at' => gmdate('c', $now),
         ]);
+    }
+
+    /**
+     * POST /api/quotes/convert
+     *
+     * Quote de conversion interne wallet→wallet. Contrairement à un envoi,
+     * aucune source de financement externe ni aucun provider n'est requis :
+     * le rail est interne (ledger Nexus). Le pipeline reste fidèle à la
+     * philosophie : Intent → Quote (taux RÉEL) → Execute au taux VERROUILLÉ.
+     *
+     * Le taux vient de la MÊME source de vérité que les envois
+     * (QuotePricing → fx_rates_cache) : sans taux réel pour la paire, la
+     * quote est refusée (FX_UNAVAILABLE) — aucun taux inventé n'est annoncé.
+     * La quote est persistée (quotes, receiving_method=wallet_internal) avec
+     * un TTL de 5 minutes ; l'exécution (POST /api/wallets/convert avec
+     * quote_id) honorera le taux garanti et marquera la quote EXECUTED.
+     *
+     * @body{amount, sourceCurrency, destCurrency}
+     */
+    public static function createConvert(Request $request): void
+    {
+        $request = AuthMiddleware::handle($request);
+        $user    = $request->attribute('user');
+        $userId  = (int) $user['id'];
+        $context = ExecutionContext::fromRequest($request, $user);
+
+        $amount         = trim((string) $request->input('amount', ''));
+        $sourceCurrency = strtoupper(trim((string) $request->input('sourceCurrency', '')));
+        $destCurrency   = strtoupper(trim((string) $request->input('destCurrency', '')));
+
+        // ── Validation d'entrée : 422, jamais 500 ──────────────
+        if ($sourceCurrency === '' || $destCurrency === '') {
+            Response::error('Les devises source et destination sont requises.', 422, 'CURRENCY_REQUIRED');
+        }
+        if ($sourceCurrency === $destCurrency) {
+            Response::error(
+                'Les devises source et destination doivent être différentes.',
+                422,
+                'SAME_CURRENCY'
+            );
+        }
+        if ($amount === '' || !is_numeric($amount) || (float) $amount <= 0) {
+            Response::error('Le montant doit être un nombre strictement positif.', 422, 'INVALID_AMOUNT');
+        }
+
+        // ── Taux RÉEL : même source de vérité que les envois ──
+        $pricing = QuotePricing::resolveRate($sourceCurrency, $destCurrency, $context->environment);
+        if ($pricing['status'] !== QuotePricing::RESOLVED || $pricing['rate'] === null) {
+            Response::error(
+                (string) ($pricing['reason'] ?? 'Taux de change indisponible pour cette paire de devises.'),
+                503,
+                QuoteRateUnavailable::ERROR_CODE
+            );
+        }
+
+        $baseRate    = (float) $pricing['rate'];
+        $spreadPct   = (float) $pricing['spread_pct'];
+        $effectiveRate = $baseRate * (1 - $spreadPct);
+        // Le taux VERROUILLÉ (8 décimales) est celui que l'exécution honorera.
+        $lockedRate  = number_format($effectiveRate, 8, '.', '');
+
+        // ── Montant reçu ───────────────────────────────────────
+        // Conversion interne : aucun tiers externe, frais barème = 0 EUR ; la
+        // marge est le spread déclaré par la source de taux (exposé à
+        // l'utilisateur). Le montant crédité réel (8 dp) est calculé par le
+        // moteur à l'exécution sur le taux verrouillé.
+        $fees     = 0.0;
+        $received = round((float) $amount * $effectiveRate, 2);
+
+        // ── Quote persistée (rail interne) ─────────────────────
+        $quoteId   = self::generateQuoteId();
+        $now       = time();
+        $expiresAt = gmdate('Y-m-d H:i:s', $now + self::QUOTE_TTL_SECONDS);
+
+        $intent = [
+            'amount'          => (float) $amount,
+            'sourceCurrency'  => $sourceCurrency,
+            'destCurrency'    => $destCurrency,
+            'receivingMethod' => 'wallet_internal',
+            'objective'       => 'optimized',
+            // Aucun corridor pays : la conversion est interne (métadonnée).
+            'destCountry'     => 'ZZ',
+        ];
+
+        $route = self::internalConvertRoute($sourceCurrency, $destCurrency, $amount, $received, $lockedRate, $spreadPct, $pricing);
+
+        self::persistQuote($quoteId, $userId, $intent, [$route], $expiresAt, 'ZZ', $context);
+
+        Response::success([
+            'id'          => $quoteId,
+            'routes'      => [$route],
+            'expires_at'  => gmdate('c', $now + self::QUOTE_TTL_SECONDS),
+            'ttl_seconds' => self::QUOTE_TTL_SECONDS,
+            'intent'      => $intent,
+            'created_at'  => gmdate('c', $now),
+        ]);
+    }
+
+    /**
+     * Route unique du rail interne, avec la MÊME forme que les routes
+     * provider (RoutingEngine) pour que les interfaces se comportent à
+     * l'identique — plus les champs d'exécution (`locked_rate`).
+     */
+    private static function internalConvertRoute(
+        string $sourceCurrency,
+        string $destCurrency,
+        string $amount,
+        float $received,
+        string $lockedRate,
+        float $spreadPct,
+        array $pricing
+    ): array {
+        return [
+            'id'                 => 'INT',
+            'badge'              => 'INTERNE',
+            'badgeCls'           => 'p-c',
+            'provider'           => 'Nexus (conversion interne)',
+            'providerSlug'       => 'nexus_internal',
+            'method'             => '⇄ Conversion',
+            'methodIcon'         => '⇄',
+            'received'           => number_format($received, 0, ',', ' ') . ' ' . $destCurrency,
+            'receivedNum'        => $received,
+            'fees'               => number_format(0.0, 2, ',', ' ') . ' EUR',
+            'feesNum'            => 0.0,
+            'delay'              => 'Instantané',
+            'delayMinutes'       => 0,
+            'delayStatus'        => 'measured',
+            'delayMeasured'      => true,
+            'delayObs'           => 0,
+            'reliability'        => 'Interne',
+            'reliabilityNum'     => 1.0,
+            'reliabilityColor'   => 'var(--green)',
+            'reliabilityStatus'  => 'measured',
+            'reliabilityMeasured' => true,
+            'reliabilityObs'     => 0,
+            'recommended'        => true,
+            'spread'             => number_format($spreadPct * 100, 2) . '%',
+            'rate'               => (float) $lockedRate,
+            'rateSource'         => $pricing['source'] ?? null,
+            'rateFetchedAt'      => $pricing['fetched_at'] ?? null,
+            'rateExpiresAt'      => $pricing['expires_at'] ?? null,
+            'feeSource'          => 'nexus_schedule',
+            'kind'               => 'internal',
+            // Champ d'exécution : le taux EXACT que POST /api/wallets/convert
+            // appliquera (garantie « taux vu = taux appliqué »).
+            'locked_rate'        => $lockedRate,
+            'fx_rate'            => $lockedRate,
+            'source_currency'    => $sourceCurrency,
+            'dest_currency'      => $destCurrency,
+            'amount_sent'        => $amount,
+        ];
     }
 
     /**
@@ -300,16 +459,26 @@ final class QuoteController
     }
 
     /**
-     * Taux EUR vers une devise (cohérent avec QuoteEngine).
+     * Taux EUR vers une devise (1 EUR = X), RÉEL.
+     *
+     * La conversion des plafonds Policy Engine n'utilise plus de tableau de
+     * taux statique (§7) : elle interroge la source FX réelle de
+     * l'environnement d'exécution. EUR→EUR est l'identité (1.0).
+     *
+     * @throws \Nexus\Services\QuoteRateUnavailable si aucun taux n'est disponible
      */
-    private static function rateToEur(string $currency): float
+    private static function rateToEur(string $currency, \Nexus\Execution\ExecutionEnvironment $environment): float
     {
-        $rates = [
-            'EUR' => 1.0, 'USD' => 1.0870, 'GBP' => 0.8550,
-            'XAF' => 655.957, 'XOF' => 655.957,
-            'USDT' => 1.0870, 'USDC' => 1.0870,
-        ];
-        return $rates[$currency] ?? 1.0;
+        $pricing = \Nexus\Services\QuotePricing::resolveRate('EUR', strtoupper($currency), $environment);
+        if ($pricing['status'] === \Nexus\Services\QuotePricing::RESOLVED && $pricing['rate'] !== null) {
+            return (float) $pricing['rate'];
+        }
+
+        throw new \Nexus\Services\QuoteRateUnavailable(
+            'EUR',
+            $currency,
+            sprintf('Aucun taux de change disponible pour EUR → %s : plafond non évaluable.', $currency)
+        );
     }
 
     /**

@@ -29,33 +29,6 @@ final class NotificationController
     private const MAX_PER_PAGE = 50;
 
     /**
-     * Notifications de démonstration insérées au premier login
-     * (KYC en attente, bienvenue, quote expirée).
-     *
-     * @var list<array{type: string, title: string, message: string, minutes_ago: int}>
-     */
-    private const DEMO_NOTIFICATIONS = [
-        [
-            'type'        => 'systeme',
-            'title'       => 'Bienvenue sur NEXUS',
-            'message'     => 'Vos wallets de démonstration multidevises (EUR, USD, GBP, XAF, USDT, USDC) ont été crédités. Bonne découverte !',
-            'minutes_ago' => 5,
-        ],
-        [
-            'type'        => 'quote',
-            'title'       => 'Devis EUR → XAF expirée',
-            'message'     => 'Votre devis de conversion a atteint sa date d\'expiration. Générez-en un nouveau depuis le Routing Engine pour verrouiller un meilleur taux.',
-            'minutes_ago' => 60,
-        ],
-        [
-            'type'        => 'kyc',
-            'title'       => 'Vérification d\'identité requise',
-            'message'     => 'Complétez votre KYC pour débloquer tous les corridors (SEPA, Mobile Money, FX) et relever vos plafonds de transaction.',
-            'minutes_ago' => 1560, // 26 h → groupe « Hier » pour montrer le groupement par date.
-        ],
-    ];
-
-    /**
      * GET /api/notifications
      *
      * Paramètres de requête :
@@ -208,44 +181,6 @@ final class NotificationController
             'updated'      => (int) $stmt->rowCount(),
             'unread_count' => 0,
         ]);
-    }
-
-    // --- Helpers publics -------------------------------------------------------
-
-    /**
-     * Insère les notifications de démonstration au premier login.
-     *
-     * Idempotent : si l'utilisateur possède déjà une notification, rien n'est
-     * inséré. Appelé depuis AuthController (connexion, registre).
-     */
-    public static function seedDemoNotificationsIfEmpty(\PDO $pdo, int $userId): void
-    {
-        // §29 : jamais de données de démonstration en production.
-        if (!\Nexus\Core\DemoMode::seedingAllowed()) {
-            return;
-        }
-
-        $stmt = $pdo->prepare('SELECT COUNT(*) FROM notifications WHERE user_id = :uid');
-        $stmt->execute(['uid' => $userId]);
-
-        if ((int) $stmt->fetchColumn() > 0) {
-            return;
-        }
-
-        $insert = $pdo->prepare(
-            'INSERT INTO notifications (user_id, type, title, message, created_at)
-             VALUES (:uid, :type, :title, :message, :created_at)'
-        );
-
-        foreach (self::DEMO_NOTIFICATIONS as $demo) {
-            $insert->execute([
-                'uid'        => $userId,
-                'type'       => $demo['type'],
-                'title'      => $demo['title'],
-                'message'    => $demo['message'],
-                'created_at' => gmdate('Y-m-d H:i:s', time() - ((int) $demo['minutes_ago'] * 60)),
-            ]);
-        }
     }
 
     // --- Helpers privés --------------------------------------------------------

@@ -22,6 +22,7 @@ use Nexus\Controllers\KycController;
 use Nexus\Controllers\NotificationController;
 use Nexus\Controllers\PaymentController;
 use Nexus\Controllers\ProviderCredentialController;
+use Nexus\Controllers\ProviderWebhookController;
 use Nexus\Controllers\QuoteController;
 use Nexus\Controllers\ReconciliationController;
 use Nexus\Controllers\SupportController;
@@ -156,6 +157,8 @@ $router->get('/providers/credentials', [ProviderCredentialController::class, 'li
 $router->put('/providers/{slug}/credentials', [ProviderCredentialController::class, 'upsert']);
 $router->delete('/providers/{slug}/credentials', [ProviderCredentialController::class, 'delete']);
 $router->post('/providers/{slug}/test', [ProviderCredentialController::class, 'test']);
+// webhook provider : route PUBLIQUE — authentifiée par SIGNATURE HMAC (§13).
+$router->post('/providers/webhook/{slug}', [ProviderWebhookController::class, 'handle']);
 
 // --- NEXUS CONTROL CENTER : plan de contrôle de l'infrastructure -----------
 // Accès restreint côté SERVEUR (l'UI n'est jamais une couche de sécurité).
@@ -204,6 +207,7 @@ $router->get('/intent/authorized-origins', [IntentController::class, 'authorized
 
 // --- Quote & Routing Engine : devises multi-providers (protégé) ----------
 $router->post('/quotes', [QuoteController::class, 'create']);
+$router->post('/quotes/convert', [QuoteController::class, 'createConvert']);
 $router->get('/quotes/{id}', [QuoteController::class, 'get']);
 
 // --- Transfer Execution : saga réelle (protégé) -----------------------------

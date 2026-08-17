@@ -6,8 +6,8 @@ namespace Nexus\Services;
 
 use Nexus\Execution\ExecutionEnvironment;
 
-use Nexus\Core\Currency;
 use Nexus\Core\Crypto;
+use Nexus\Core\Currency;
 use Nexus\Core\Database;
 use Nexus\Core\HttpException;
 use Nexus\Execution\ExecutionContext;
@@ -194,8 +194,12 @@ final class BusinessService
     /**
      * @return array<string,mixed> Overview Business : actifs, flux, KPIs, exposure FX.
      */
-    public static function overview(int $businessUserId): array
+    public static function overview(int $businessUserId, ?ExecutionEnvironment $environment = null): array
     {
+        // À défaut de contexte, on suit le défaut du déploiement, jamais une
+        // sandbox en dur.
+        $environment ??= ExecutionEnvironment::fromString(\Nexus\Providers\ProviderConfig::defaultEnvironment());
+
         $pdo      = Database::getConnection();
         $balances = WalletService::getAllBalances($businessUserId);
 
@@ -203,12 +207,16 @@ final class BusinessService
         $inTransitRef = 0.0; $settlementRef = 0.0;
         $wallets = [];
         foreach ($balances as $w) {
-            $rate = Currency::rateToRef((string) $w['currency']);
-            $totalRef      += (float) $w['balance'] * $rate;
-            $availableRef  += (float) $w['available_balance'] * $rate;
-            $pendingRef    += (float) $w['pending_balance'] * $rate;
-            $inTransitRef  += (float) $w['in_transit_balance'] * $rate;
-            $settlementRef += (float) $w['settlement_balance'] * $rate;
+            // Équivalent EUR : taux RÉEL de l'environnement, ou null si
+            // indisponible — jamais une valeur inventée (§7, §9).
+            $rate = FXService::rateToRef((string) $w['currency'], $environment);
+            if ($rate !== null && $rate > 0.0) {
+                $totalRef      += (float) $w['balance'] / $rate;
+                $availableRef  += (float) $w['available_balance'] / $rate;
+                $pendingRef    += (float) $w['pending_balance'] / $rate;
+                $inTransitRef  += (float) $w['in_transit_balance'] / $rate;
+                $settlementRef += (float) $w['settlement_balance'] / $rate;
+            }
             $wallets[] = [
                 'currency'   => (string) $w['currency'],
                 'balance'    => (float) $w['balance'],
@@ -216,7 +224,9 @@ final class BusinessService
                 'pending'    => (float) $w['pending_balance'],
                 'in_transit' => (float) $w['in_transit_balance'],
                 'settlement' => (float) $w['settlement_balance'],
-                'ref_value'  => round((float) $w['balance'] * $rate, 2),
+                'ref_value'  => $rate !== null && $rate > 0.0
+                    ? round((float) $w['balance'] / $rate, 2)
+                    : null,
             ];
         }
 
@@ -240,7 +250,10 @@ final class BusinessService
         $stmt->execute(['uid' => $businessUserId, 'since' => $since]);
         $feesRef = 0.0;
         foreach ($stmt->fetchAll() as $row) {
-            $feesRef += (float) $row['fee'] * Currency::rateToRef((string) $row['fee_currency']);
+            $rate = FXService::rateToRef((string) $row['fee_currency'], $environment);
+            if ($rate !== null && $rate > 0.0) {
+                $feesRef += (float) $row['fee'] / $rate;
+            }
         }
 
         // Temps moyen d'exécution.

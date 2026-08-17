@@ -209,6 +209,20 @@ final class DashboardControllerTest extends TestCase
 
     public function test_summary_retourne_les_bonnes_devises_et_totaux(): void
     {
+        // Source FX réelle : 1 EUR = 1.087 USD (table fx_rates_cache).
+        $stmt = $this->pdo->prepare(
+            'INSERT INTO fx_rates_cache (base_currency, quote_currency, rate, spread_pct, source, fetched_at, expires_at)
+             VALUES (:b, :q, :r, :s, :src, NOW(), DATE_ADD(NOW(), INTERVAL 1 DAY))'
+        );
+        $stmt->execute([
+            'b'   => 'EUR',
+            'q'   => 'USD',
+            'r'   => '1.08700000',
+            's'   => '0.0000',
+            'src' => 'fx_provider_test',
+        ]);
+        $fxRow = (int) $this->pdo->lastInsertId();
+
         $u = $this->createUser($this->uniqueSuffix());
         $this->createWallet($u, 'EUR', '100.00');
         $this->createWallet($u, 'USD', '100.00'); // 0.92 EUR
@@ -225,6 +239,9 @@ final class DashboardControllerTest extends TestCase
         $this->assertSame(100.0, $byCurrency['EUR']['balance']);
         $this->assertSame(100.0, $byCurrency['USD']['balance']);
         $this->assertSame(192.0, $response['totals']['total_ref']);
+
+        // Nettoyage du taux de test.
+        $this->pdo->prepare('DELETE FROM fx_rates_cache WHERE id = ?')->execute([$fxRow]);
     }
 
     public function test_summary_available_balance_est_balance_moins_hold(): void

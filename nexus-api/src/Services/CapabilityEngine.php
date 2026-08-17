@@ -91,7 +91,8 @@ final class CapabilityEngine
         // Catégories de providers compatibles avec le mode de réception
         $validCategories = self::METHOD_TO_CATEGORIES[$methodType] ?? [];
 
-        $eligible = [];
+        $eligible   = [];
+        $candidates = 0;
 
         foreach (ProviderCatalog::all() as $slug => $provider) {
             // ── Filtre 1 : catégorie compatible ──────────────────
@@ -110,13 +111,19 @@ final class CapabilityEngine
                 }
             }
 
-            // ── Filtre 3 : disponibilité réelle (§12, §13) ────────
-            // En mode démo (aucun provider configuré via l'environnement),
-            // tous les providers du catalogue restent éligibles (comportement
-            // historique). Dès qu'au moins un provider est réellement configuré
-            // (mode strict), seuls les providers CONFIGURÉS participent au
-            // routing : un provider désactivé ou sans credentials est ignoré,
-            // et ne casse jamais le Core.
+            // Un provider couvre ce corridor par le catalogue : c'est un
+            // candidat. S'il n'est pas réellement configuré, il est exclu —
+            // mais le distinguer du « corridor non couvert » permet au client
+            // de comprendre la vraie raison du refus (§10).
+            $candidates++;
+
+            // ── Filtre 3 : disponibilité réelle (§10, §12, §13) ──
+            // Catalogue ≠ opérationnel : seuls les providers CONFIGURÉS
+            // (env scopé ou credentials plateforme en base) participent au
+            // routing. Le mode démo — tout le catalogue éligible tant qu'aucun
+            // provider n'était configuré — est supprimé : un provider
+            // désactivé ou sans credentials est ignoré, et ne casse jamais le
+            // Core.
             if (!ProviderRegistry::isAvailableForRouting($slug)) {
                 continue;
             }
@@ -143,6 +150,19 @@ final class CapabilityEngine
         }
 
         if (empty($eligible)) {
+            if ($candidates > 0) {
+                // Des providers couvrent le corridor mais aucun n'est
+                // configuré : refus opérationnel, distinct d'un manque de
+                // couverture (§6, §10).
+                throw new HttpException(
+                    409,
+                    "Aucun provider configuré n'est disponible pour le corridor " .
+                    "{$intent['sourceCurrency']}→{$destCurrency} ({$countryCode}) via {$methodType}. " .
+                    'Configurez d\'abord les credentials du provider dans la console d\'administration.',
+                    'NO_AVAILABLE_PROVIDER'
+                );
+            }
+
             throw new HttpException(
                 400,
                 "Aucun provider ne couvre le corridor {$intent['sourceCurrency']}→{$destCurrency} ({$countryCode}) " .

@@ -6,6 +6,8 @@ import {
 } from '../../api/client';
 import { useNotifications } from '../../context/NotificationsContext';
 import { NOTIFICATION_TYPES, notificationMeta } from '../../data/notifications';
+import { useDashT, localeFor } from '../../data/dashboard-i18n';
+import { useI18n } from '../../context/I18nContext';
 
 /**
  * Centre de notifications (/notifications).
@@ -16,38 +18,18 @@ import { NOTIFICATION_TYPES, notificationMeta } from '../../data/notifications';
  *   « Tout marquer comme lu ».
  * - Le compteur de la cloche se met à jour instantanément via
  *   NotificationsContext, sans rechargement de la page.
+ * - Tous les textes visibles passent par l'i18n (dashTranslate).
  */
 
 type Filter = 'all' | NotificationType;
 
 const PAGE_SIZE = 15;
 
-/** Libellé de groupe de date en français. */
-function groupLabel(dateKey: string): string {
-  const today = new Date();
-  const todayKey = today.toISOString().slice(0, 10);
-
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
-  const yesterdayKey = yesterday.toISOString().slice(0, 10);
-
-  if (dateKey === todayKey) return "Aujourd'hui";
-  if (dateKey === yesterdayKey) return 'Hier';
-
-  return new Date(dateKey + 'T00:00:00').toLocaleDateString('fr-FR', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
-}
-
-/** Heure locale courte (ex. « 14:05 »). */
-function formatTime(isoString: string): string {
-  return new Date(isoString).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-}
-
 export default function NotificationsPage() {
   const { unreadCount, markRead, markAllRead } = useNotifications();
+  const t = useDashT();
+  const { lang } = useI18n();
+  const locale = localeFor(lang);
 
   const [filter, setFilter] = useState<Filter>('all');
   const [items, setItems] = useState<ApiNotification[]>([]);
@@ -58,6 +40,35 @@ export default function NotificationsPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [markingAll, setMarkingAll] = useState(false);
+
+  /** Libellé de groupe de date, localisé. */
+  const groupLabel = useCallback(
+    (dateKey: string): string => {
+      const today = new Date();
+      const todayKey = today.toISOString().slice(0, 10);
+
+      const yesterday = new Date(today);
+      yesterday.setDate(today.getDate() - 1);
+      const yesterdayKey = yesterday.toISOString().slice(0, 10);
+
+      if (dateKey === todayKey) return t('notifications.groupToday');
+      if (dateKey === yesterdayKey) return t('notifications.groupYesterday');
+
+      return new Date(dateKey + 'T00:00:00').toLocaleDateString(locale, {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      });
+    },
+    [t, locale]
+  );
+
+  /** Heure locale courte (ex. « 14:05 »). */
+  const formatTime = useCallback(
+    (isoString: string): string =>
+      new Date(isoString).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }),
+    [locale]
+  );
 
   /** Charge une page (remplacement ou ajout selon `append`). */
   const fetchPage = useCallback(async (type: Filter, p: number, append: boolean) => {
@@ -75,7 +86,7 @@ export default function NotificationsPage() {
     });
 
     if (!resp.success || !resp.data) {
-      setError(resp.error || 'Erreur lors du chargement des notifications.');
+      setError(resp.error || t('notifications.loadError'));
       setLoading(false);
       setLoadingMore(false);
       return;
@@ -88,7 +99,7 @@ export default function NotificationsPage() {
     setTotal(data.total);
     setLoading(false);
     setLoadingMore(false);
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     fetchPage(filter, 1, false);
@@ -107,7 +118,7 @@ export default function NotificationsPage() {
       }
     }
     return groups;
-  }, [items]);
+  }, [items, groupLabel]);
 
   const hasUnread = items.some((n) => !n.is_read);
 
@@ -144,9 +155,9 @@ export default function NotificationsPage() {
     return (
       <div className="page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
         <div className="card card-hi-c" style={{ padding: 40, textAlign: 'center', maxWidth: 440 }}>
-          <h2 style={{ color: 'var(--text-bright)', marginBottom: 10 }}>Impossible de charger les notifications</h2>
+          <h2 style={{ color: 'var(--text-bright)', marginBottom: 10 }}>{t('notifications.loadError')}</h2>
           <p style={{ color: 'var(--text-mid)', marginBottom: 20 }}>{error}</p>
-          <button className="btn btn-cyan" onClick={() => fetchPage(filter, 1, false)}>↻ Réessayer</button>
+          <button className="btn btn-cyan" onClick={() => fetchPage(filter, 1, false)}>↻ {t('common.retry')}</button>
         </div>
       </div>
     );
@@ -156,57 +167,56 @@ export default function NotificationsPage() {
     <div className="page">
       {/* En-tête */}
       <div className="page-header animate-up">
-        <div className="page-label">Nexus — Centre de notifications</div>
+        <div className="page-label">Nexus — {t('notifications.pageLabel')}</div>
         <div className="page-title">
-          Notifications <span className="gc">centralisées.</span>
+          {t('page.notifications')} <span className="gc">{t('notifications.title')}</span>
         </div>
         <p style={{ marginTop: 8, fontSize: 13, color: 'var(--text-mid)', maxWidth: 520 }}>
-          Transferts, devis, KYC, sécurité, business et système : tout ce qui
-          mérite votre attention, regroupé par date.
+          {t('notifications.subtitle')}
         </p>
       </div>
 
       {/* Statistique + action globale */}
       <div className="g4 animate-up delay-1" style={{ marginBottom: 20 }}>
         <div className="card stat-card">
-          <div className="stat-label">Non lues</div>
+          <div className="stat-label">{t('notifications.unread')}</div>
           <div className="stat-value" style={{ color: 'var(--red)' }}>{unreadCount}</div>
-          <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>🔔 En attente d'action</div>
+          <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>{t('notifications.unreadSub')}</div>
         </div>
         <div className="card stat-card">
-          <div className="stat-label">Total</div>
+          <div className="stat-label">{t('notifications.total')}</div>
           <div className="stat-value" style={{ color: 'var(--cyan)' }}>{total}</div>
-          <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>{filter === 'all' ? 'Tous types' : 'Filtre actif'}</div>
+          <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>{filter === 'all' ? t('notifications.allTypes') : t('notifications.filterActive')}</div>
         </div>
         <div className="card card-hi-gr" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 10 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-bright)' }}>Tout marquer comme lu</div>
-          <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>Passe toutes les notifications en lecture.</div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-bright)' }}>{t('notifications.markAll')}</div>
+          <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>{t('notifications.markAll.sub')}</div>
           <button className="btn btn-ghost" style={{ fontSize: 10, alignSelf: 'flex-start' }} disabled={!hasUnread || markingAll} onClick={handleMarkAllRead}>
-            {markingAll ? '…' : '✓ Tout marquer comme lu'}
+            {markingAll ? '…' : t('notifications.markAll.btn')}
           </button>
         </div>
       </div>
 
       {/* Filtre par type */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-        <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-dim)', letterSpacing: '2px', textTransform: 'uppercase' }}>Filtrer :</div>
+        <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-dim)', letterSpacing: '2px', textTransform: 'uppercase' }}>{t('notifications.filter')}</div>
         <div className="mode-toggle" style={{ flexWrap: 'wrap' }}>
           <button
             className={`mode-btn ${filter === 'all' ? 'active' : ''}`}
             onClick={() => setFilter('all')}
           >
-            Tous
+            {t('notifications.all')}
           </button>
-          {NOTIFICATION_TYPES.map((t) => {
-            const meta = notificationMeta(t);
+          {NOTIFICATION_TYPES.map((type) => {
+            const meta = notificationMeta(type);
             return (
               <button
-                key={t}
-                className={`mode-btn ${filter === t ? 'active' : ''}`}
-                onClick={() => setFilter(t)}
-                style={filter === t ? { color: meta.color } : undefined}
+                key={type}
+                className={`mode-btn ${filter === type ? 'active' : ''}`}
+                onClick={() => setFilter(type)}
+                style={filter === type ? { color: meta.color } : undefined}
               >
-                {meta.icon} {meta.label}
+                {meta.icon} {t('notifType.' + type)}
               </button>
             );
           })}
@@ -217,15 +227,15 @@ export default function NotificationsPage() {
       {items.length === 0 ? (
         <div className="card animate-up delay-2" style={{ padding: 48, textAlign: 'center' }}>
           <div style={{ fontSize: 32, marginBottom: 12 }}>🔕</div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-bright)' }}>Aucune notification</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-bright)' }}>{t('notifications.empty')}</div>
           <p style={{ fontSize: 11, color: 'var(--text-mid)', marginTop: 6, marginBottom: 16 }}>
             {filter === 'all'
-              ? 'Aucune notification pour le moment. Les événements importants apparaîtront ici.'
-              : 'Aucune notification pour ce type de filtre.'}
+              ? t('notifications.empty.all')
+              : t('notifications.empty.filter')}
           </p>
           {filter !== 'all' && (
             <button className="btn btn-cyan" style={{ fontSize: 11 }} onClick={() => setFilter('all')}>
-              ← Voir toutes les notifications
+              {t('notifications.viewAll')}
             </button>
           )}
         </div>
@@ -265,7 +275,7 @@ export default function NotificationsPage() {
                           {n.title}
                         </span>
                         {!n.is_read && <span className="dot d-c" />}
-                        <span className={`pill ${meta.pill}`} style={{ fontSize: 7, flexShrink: 0 }}>{meta.label}</span>
+                        <span className={`pill ${meta.pill}`} style={{ fontSize: 7, flexShrink: 0 }}>{t('notifType.' + n.type)}</span>
                       </div>
                       {n.message && (
                         <div style={{ fontSize: 11, color: 'var(--text-mid)', marginTop: 3, lineHeight: 1.5 }}>
@@ -283,10 +293,10 @@ export default function NotificationsPage() {
                         style={{ fontSize: 10, padding: '6px 12px' }}
                         onClick={() => handleMarkRead(n.id)}
                       >
-                        ✓ Marquer comme lue
+                        {t('notifications.markRead')}
                       </button>
                     ) : (
-                      <span className="pill p-gr" style={{ fontSize: 8, flexShrink: 0 }}>Lue</span>
+                      <span className="pill p-gr" style={{ fontSize: 8, flexShrink: 0 }}>{t('notifications.read')}</span>
                     )}
                   </div>
                 );
@@ -304,7 +314,7 @@ export default function NotificationsPage() {
             onClick={() => fetchPage(filter, page + 1, true)}
             disabled={loadingMore}
           >
-            {loadingMore ? 'Chargement…' : `Charger plus (${total - items.length} restantes)`}
+            {loadingMore ? t('notifications.loadingMore') : t('notifications.loadMore', { remaining: String(total - items.length) })}
           </button>
         </div>
       )}

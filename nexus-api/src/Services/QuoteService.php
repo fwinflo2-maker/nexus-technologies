@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nexus\Services;
 
 use Nexus\Execution\ExecutionEnvironment;
+use Nexus\Providers\ProviderConfig;
 
 /**
  * QuoteService — exécute le pipeline Capability → Policy → Quote → Routing.
@@ -38,7 +39,7 @@ final class QuoteService
         $providers = CapabilityEngine::findEligible($intent, $environment);
 
         // Policy Engine : conformité avant tout calcul de prix.
-        $sourceToEur = self::rateToEur((string) $intent['sourceCurrency']);
+        $sourceToEur = self::rateToEur((string) $intent['sourceCurrency'], $environment);
         $amountRef   = $sourceToEur > 0.0 ? ((float) $intent['amount'] / $sourceToEur) : 0.0;
         PolicyEngine::evaluate($user, $intent, $amountRef, $environment);
 
@@ -69,14 +70,27 @@ final class QuoteService
         return self::ID_PREFIX . '-' . strtoupper(substr(md5(uniqid((string) random_int(0, PHP_INT_MAX), true)), 0, 8)) . '-' . substr(str_shuffle('ABCDEFGHJKLMNPQRSTUVWXYZ'), 0, 4);
     }
 
-    /** Taux EUR vers une devise (cohérent avec QuoteEngine). */
-    private static function rateToEur(string $currency): float
+    /**
+     * Taux EUR vers une devise (1 EUR = X), RÉEL.
+     *
+     * Pour le Policy Engine (plafonds en EUR), le montant source doit être
+     * converti en EUR avec un taux de la source FX réelle. Sans taux, le
+     * plafond ne peut pas être évalué : refus explicite (§7) — aucun tableau
+     * de taux statique ne subsiste.
+     */
+    private static function rateToEur(string $currency, ?ExecutionEnvironment $environment = null): float
     {
-        $rates = [
-            'EUR' => 1.0, 'USD' => 1.0870, 'GBP' => 0.8550,
-            'XAF' => 655.957, 'XOF' => 655.957,
-            'USDT' => 1.0870, 'USDC' => 1.0870,
-        ];
-        return $rates[strtoupper($currency)] ?? 0.0;
+        $environment ??= ExecutionEnvironment::fromString(ProviderConfig::defaultEnvironment());
+
+        $pricing = QuotePricing::resolveRate('EUR', strtoupper($currency), $environment);
+        if ($pricing['status'] === QuotePricing::RESOLVED && $pricing['rate'] !== null) {
+            return (float) $pricing['rate'];
+        }
+
+        throw new QuoteRateUnavailable(
+            'EUR',
+            $currency,
+            sprintf('Aucun taux de change disponible pour EUR → %s : plafond non évaluable.', $currency)
+        );
     }
 }

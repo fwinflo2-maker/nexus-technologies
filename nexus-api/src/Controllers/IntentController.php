@@ -7,6 +7,7 @@ namespace Nexus\Controllers;
 use Nexus\Auth\AuthMiddleware;
 use Nexus\Core\Request;
 use Nexus\Core\Response;
+use Nexus\Execution\ExecutionContext;
 use Nexus\Services\FundingSourceEngine;
 use Nexus\Services\IntentEngine;
 
@@ -43,9 +44,13 @@ final class IntentController
      */
     public static function countries(Request $request): void
     {
-        AuthMiddleware::handle($request);
+        $request = AuthMiddleware::handle($request);
+        $user    = $request->attribute('user');
 
-        $coverage = IntentEngine::coverage();
+        // Les taux d'estimation sont scopés par l'environnement de la
+        // requête : un taux sandbox n'alimente pas une vue de production (§7).
+        $context  = ExecutionContext::fromRequest($request, $user);
+        $coverage = IntentEngine::coverage($context->environment);
 
         Response::success($coverage);
     }

@@ -13,6 +13,7 @@ use Nexus\Providers\ProviderConfig;
 use Nexus\Services\ExecutionEngine;
 use Nexus\Services\LedgerService;
 use Nexus\Services\WalletService;
+use Nexus\Tests\Fixtures\UsesScriptedProvider;
 use PDO;
 use PHPUnit\Framework\TestCase;
 
@@ -33,6 +34,8 @@ use PHPUnit\Framework\TestCase;
  */
 final class EnvironmentPropagationTest extends TestCase
 {
+    use UsesScriptedProvider;
+
     private PDO $pdo;
     /** @var list<int> */
     private array $users = [];
@@ -41,10 +44,13 @@ final class EnvironmentPropagationTest extends TestCase
     {
         $this->pdo = Database::getConnection();
         $this->clearEnv();
+        // Chemin nominal : provider réellement configuré, API scriptée.
+        $this->scriptStripe();
     }
 
     protected function tearDown(): void
     {
+        $this->unscriptStripe();
         foreach ($this->users as $uid) {
             $this->pdo->prepare('DELETE FROM ledger_entries WHERE wallet_id IN (SELECT id FROM wallets WHERE user_id = ?)')->execute([$uid]);
             $this->pdo->prepare('DELETE FROM wallet_operations WHERE user_id = ?')->execute([$uid]);

@@ -12,6 +12,7 @@ import {
 } from '../../api/client';
 import { countries } from '../../data/countries';
 import { getOperatorsForCountry } from '../../data/mobile-money';
+import { useDashT } from '../../data/dashboard-i18n';
 
 type AccountRole = 'source' | 'destination';
 
@@ -44,6 +45,7 @@ function kindIcon(kind: AccountKind, role: AccountRole): string {
  *   chiffrées côté serveur et masquées à l'affichage.
  */
 export default function AccountsPanel({ role }: AccountsPanelProps) {
+  const t = useDashT();
   const [items, setItems] = useState<PaymentAccount[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +64,7 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
     setError(null);
     const res = await apiAccountsList(role);
     if (!res.success || !res.data) {
-      setError(res.error || 'Erreur lors du chargement des comptes.');
+      setError(res.error || t('accounts.loadError'));
       setLoading(false);
       return;
     }
@@ -108,37 +110,37 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
   /** Validation côté client avant envoi. Retourne un message d'erreur ou null. */
   const validateClient = (): string | null => {
     if (!formData.label || formData.label.trim().length < 2) {
-      return 'Le libellé est requis (2 caractères minimum).';
+      return t('accounts.validation.label');
     }
     if (formKind === 'bank_iban' || formKind === 'virtual_iban') {
       const iban = (formData.iban ?? '').replace(/\s+/g, '').toUpperCase();
-      if (!iban && !editTarget) return 'L\'IBAN est requis.';
-      if (iban && iban.length < 15) return 'L\'IBAN est trop court (15 caractères minimum).';
-      if (iban && !/^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$/.test(iban)) return 'Format IBAN invalide.';
+      if (!iban && !editTarget) return t('accounts.validation.iban');
+      if (iban && iban.length < 15) return t('accounts.validation.ibanShort');
+      if (iban && !/^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$/.test(iban)) return t('accounts.validation.ibanFormat');
     }
     if (formKind === 'mobile_money') {
-      if (!formData.country && !editTarget) return 'Le pays est requis pour Mobile Money.';
-      if (!formData.operator && !editTarget) return 'L\'opérateur est requis.';
+      if (!formData.country && !editTarget) return t('accounts.validation.country');
+      if (!formData.operator && !editTarget) return t('accounts.validation.operator');
       const phone = (formData.phone ?? '').replace(/\D/g, '');
-      if (!phone && !editTarget) return 'Le numéro de mobile est requis.';
-      if (phone && (phone.length < 8 || phone.length > 15)) return 'Le numéro doit contenir entre 8 et 15 chiffres.';
+      if (!phone && !editTarget) return t('accounts.validation.phone');
+      if (phone && (phone.length < 8 || phone.length > 15)) return t('accounts.validation.phoneLength');
     }
     if (formKind === 'crypto_wallet') {
-      if (!formData.network && !editTarget) return 'Le réseau blockchain est requis.';
+      if (!formData.network && !editTarget) return t('accounts.validation.network');
       const addr = (formData.address ?? '').trim();
-      if (!addr && !editTarget) return 'L\'adresse du wallet est requise.';
-      if (addr && addr.length < 10) return 'L\'adresse semble trop courte.';
+      if (!addr && !editTarget) return t('accounts.validation.address');
+      if (addr && addr.length < 10) return t('accounts.validation.addressShort');
     }
     if (formKind === 'card') {
       const pan = (formData.pan ?? '').replace(/\s/g, '');
-      if (!pan && !editTarget) return 'Le numéro de carte est requis.';
-      if (pan && !/^[0-9]{13,19}$/.test(pan)) return 'Le numéro doit contenir entre 13 et 19 chiffres.';
+      if (!pan && !editTarget) return t('accounts.validation.pan');
+      if (pan && !/^[0-9]{13,19}$/.test(pan)) return t('accounts.validation.panLength');
       const expiry = (formData.expiry ?? '').trim();
-      if (!expiry && !editTarget) return 'La date d\'expiration est requise.';
-      if (expiry && !/^(0[1-9]|1[0-2])\/?([0-9]{2})$/.test(expiry)) return 'Format d\'expiration invalide (MM/AA).';
+      if (!expiry && !editTarget) return t('accounts.validation.expiry');
+      if (expiry && !/^(0[1-9]|1[0-2])\/?([0-9]{2})$/.test(expiry)) return t('accounts.validation.expiryFormat');
     }
     if (formKind === 'cash_pickup') {
-      if (!formData.city && !editTarget) return 'La ville est requise pour un cash pickup.';
+      if (!formData.city && !editTarget) return t('accounts.validation.city');
     }
     return null;
   };
@@ -174,7 +176,7 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
       ? await apiAccountsUpdate(editTarget.id, payload)
       : await apiAccountsCreate(payload);
     if (!res.success) {
-      setFormError(res.error || 'Erreur lors de l\'enregistrement.');
+      setFormError(res.error || t('accounts.saveError'));
       setSubmitting(false);
       return;
     }
@@ -189,7 +191,7 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
   };
 
   const remove = async (id: number) => {
-    if (!confirm('Supprimer ce compte ?')) return;
+    if (!confirm(t('accounts.deleteConfirm'))) return;
     await apiAccountsDelete(id);
     fetch();
   };
@@ -209,7 +211,7 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
     return (
       <div className="card card-hi-c" style={{ padding: 24, textAlign: 'center' }}>
         <p style={{ color: 'var(--text-mid)', marginBottom: 12 }}>{error}</p>
-        <button className="btn btn-cyan" onClick={fetch}>↻ Réessayer</button>
+        <button className="btn btn-cyan" onClick={fetch}>{t('accounts.retry')}</button>
       </div>
     );
   }
@@ -219,10 +221,12 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
       {/* Bouton d'ajout */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-bright)' }}>
-          {items.length} {role === 'source' ? 'source' : 'destination'}{items.length > 1 ? 's' : ''}
+          {role === 'source'
+            ? (items.length === 1 ? t('accounts.source.one', { n: items.length }) : t('accounts.source.many', { n: items.length }))
+            : (items.length === 1 ? t('accounts.dest.one', { n: items.length }) : t('accounts.dest.many', { n: items.length }))}
         </div>
         <button className="btn btn-cyan" style={{ fontSize: 11 }} onClick={openCreate}>
-          + Ajouter {role === 'source' ? 'une source' : 'une destination'}
+          {role === 'source' ? t('accounts.addSource') : t('accounts.addDest')}
         </button>
       </div>
 
@@ -233,15 +237,13 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
             {role === 'source' ? '💰' : '🎯'}
           </div>
           <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-bright)', marginBottom: 4 }}>
-            Aucun {role === 'source' ? 'compte source' : 'compte destination'} configuré
+            {role === 'source' ? t('accounts.emptySource.title') : t('accounts.emptyDest.title')}
           </div>
           <p style={{ fontSize: 11, color: 'var(--text-mid)' }}>
-            {role === 'source'
-              ? 'Ajoutez votre premier compte pour pouvoir envoyer de l\'argent.'
-              : 'Ajoutez votre premier compte pour pouvoir recevoir de l\'argent.'}
+            {role === 'source' ? t('accounts.emptySource.text') : t('accounts.emptyDest.text')}
           </p>
           <button className="btn btn-cyan" style={{ marginTop: 12, fontSize: 11 }} onClick={openCreate}>
-            + Configurer mon premier compte
+            {t('accounts.first')}
           </button>
         </div>
       )}
@@ -276,12 +278,12 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
                   <div>
                     <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-bright)' }}>{account.label}</div>
                     <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                      {meta.label}
+                      {t('accounts.kind.' + account.kind)}
                     </div>
                   </div>
                 </div>
                 {account.is_default && (
-                  <div className="pill p-gr" style={{ fontSize: 7, flexShrink: 0 }}>✓ Défaut</div>
+                  <div className="pill p-gr" style={{ fontSize: 7, flexShrink: 0 }}>{t('accounts.default')}</div>
                 )}
               </div>
 
@@ -296,7 +298,7 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
                 {account.phone_masked && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
                     <span style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                      {account.operator ?? 'Téléphone'}
+                      {account.operator ?? t('accounts.phone')}
                     </span>
                     <span style={{ color: 'var(--text-bright)', fontFamily: 'var(--font-mono)' }}>{account.phone_masked}</span>
                   </div>
@@ -304,7 +306,7 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
                 {account.address_masked && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
                     <span style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                      {account.network ?? 'Adresse'}
+                      {account.network ?? t('accounts.address')}
                     </span>
                     <span style={{ color: 'var(--text-bright)', fontFamily: 'var(--font-mono)' }}>{account.address_masked}</span>
                   </div>
@@ -312,20 +314,20 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
                 {account.pan_masked && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
                     <span style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                      Carte {account.expiry ? `(${account.expiry})` : ''}
+                      {t('accounts.card')} {account.expiry ? `(${account.expiry})` : ''}
                     </span>
                     <span style={{ color: 'var(--text-bright)', fontFamily: 'var(--font-mono)' }}>{account.pan_masked}</span>
                   </div>
                 )}
                 {account.city && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
-                    <span style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>Ville</span>
+                    <span style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>{t('accounts.city')}</span>
                     <span style={{ color: 'var(--text-bright)', fontFamily: 'var(--font-mono)' }}>{account.city}</span>
                   </div>
                 )}
                 {account.holder_name && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10 }}>
-                    <span style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>Titulaire</span>
+                    <span style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>{t('accounts.holder')}</span>
                     <span style={{ color: 'var(--text-bright)' }}>{account.holder_name}</span>
                   </div>
                 )}
@@ -339,7 +341,7 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
                     style={{ fontSize: 9, padding: '4px 8px' }}
                     onClick={() => setDefault(account.id)}
                   >
-                    Par défaut
+                    {t('accounts.setDefault')}
                   </button>
                 )}
                 <button
@@ -347,14 +349,14 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
                   style={{ fontSize: 9, padding: '4px 8px' }}
                   onClick={() => openEdit(account)}
                 >
-                  Modifier
+                  {t('accounts.edit')}
                 </button>
                 <button
                   className="btn btn-ghost"
                   style={{ fontSize: 9, padding: '4px 8px', color: 'var(--red)', borderColor: 'rgba(255,69,96,0.3)' }}
                   onClick={() => remove(account.id)}
                 >
-                  Supprimer
+                  {t('accounts.delete')}
                 </button>
               </div>
             </div>
@@ -380,10 +382,10 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div>
                 <div style={{ fontSize: 9, color: 'var(--text-dim)', letterSpacing: '0.15em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
-                  {editTarget ? 'Modifier' : 'Nouveau'} compte
+                  {editTarget ? t('accounts.modal.edit') : t('accounts.modal.new')}
                 </div>
                 <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-bright)' }}>
-                  {role === 'source' ? 'Source de financement' : 'Destination'}
+                  {role === 'source' ? t('accounts.modal.source') : t('accounts.modal.destination')}
                 </div>
               </div>
               <button className="btn btn-ghost" style={{ fontSize: 11 }} onClick={() => setModalOpen(false)}>
@@ -395,7 +397,7 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
             {!editTarget && (
               <div style={{ marginBottom: 14 }}>
                 <div style={{ fontSize: 9, color: 'var(--text-dim)', letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)', marginBottom: 6 }}>
-                  Type
+                  {t('accounts.modal.type')}
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
                   {(role === 'source'
@@ -417,7 +419,7 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
                         onClick={() => setFormKind(k)}
                       >
                         <span style={{ fontSize: 18 }}>{kindIcon(k, role)}</span>
-                        {m.label}
+                        {t('accounts.kind.' + k)}
                       </button>
                     );
                   })}
@@ -427,12 +429,12 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
 
             {/* Champs communs */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
-              <FormInput label="Libellé" value={formData.label ?? ''} onChange={v => setFormData(d => ({ ...d, label: v }))} placeholder="Ex: Compte courant Swan" />
+              <FormInput label={t('accounts.label')} value={formData.label ?? ''} onChange={v => setFormData(d => ({ ...d, label: v }))} placeholder={t('accounts.labelPlaceholder')} />
 
               {/* Pays + devise */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
-                  <FormLabel>Pays</FormLabel>
+                  <FormLabel>{t('accounts.country')}</FormLabel>
                   <select
                     value={formData.country ?? ''}
                     onChange={e => setFormData(d => ({ ...d, country: e.target.value }))}
@@ -445,7 +447,7 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
                   </select>
                 </div>
                 <div>
-                  <FormLabel>Devise</FormLabel>
+                  <FormLabel>{t('accounts.currency')}</FormLabel>
                   <select
                     value={formData.currency ?? ''}
                     onChange={e => setFormData(d => ({ ...d, currency: e.target.value }))}
@@ -458,7 +460,7 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
                 </div>
               </div>
 
-              <FormInput label="Titulaire" value={formData.holder_name ?? ''} onChange={v => setFormData(d => ({ ...d, holder_name: v }))} placeholder="Nom du titulaire" />
+              <FormInput label={t('accounts.holderLabel')} value={formData.holder_name ?? ''} onChange={v => setFormData(d => ({ ...d, holder_name: v }))} placeholder={t('accounts.holderPlaceholder')} />
             </div>
 
             {/* Champs spécifiques au kind */}
@@ -466,20 +468,20 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
               {(formKind === 'bank_iban' || formKind === 'virtual_iban') && (
                 <>
                   <FormInput
-                    label={`IBAN ${editTarget ? '(laisser vide pour conserver)' : ''}`}
+                    label={t('accounts.iban', { keep: editTarget ? t('accounts.keep') : '' })}
                     value={formData.iban ?? ''}
                     onChange={v => setFormData(d => ({ ...d, iban: v }))}
-                    placeholder={editTarget ? '•••• conserver la valeur existante ••••' : 'FR76 3000 4000 0123 4567 8910 123'}
+                    placeholder={editTarget ? t('accounts.keepValue') : t('accounts.ibanPlaceholder')}
                     mono
                   />
-                  <FormInput label="BIC (optionnel)" value={formData.bic ?? ''} onChange={v => setFormData(d => ({ ...d, bic: v }))} placeholder="SwanFRPP" />
+                  <FormInput label={t('accounts.bic')} value={formData.bic ?? ''} onChange={v => setFormData(d => ({ ...d, bic: v }))} placeholder="SwanFRPP" />
                 </>
               )}
 
               {formKind === 'mobile_money' && (
                 <>
                   <div>
-                    <FormLabel>Opérateur</FormLabel>
+                    <FormLabel>{t('accounts.operator')}</FormLabel>
                     <select
                       value={formData.operator ?? ''}
                       onChange={e => setFormData(d => ({ ...d, operator: e.target.value }))}
@@ -492,10 +494,10 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
                     </select>
                   </div>
                   <FormInput
-                    label={`Numéro de mobile ${editTarget ? '(laisser vide pour conserver)' : ''}`}
+                    label={t('accounts.mobileNumber', { keep: editTarget ? t('accounts.keep') : '' })}
                     value={formData.phone ?? ''}
                     onChange={v => setFormData(d => ({ ...d, phone: v.replace(/\D/g, '') }))}
-                    placeholder={editTarget ? '•••• conserver le numéro existant ••••' : '242066123456'}
+                    placeholder={editTarget ? t('accounts.keepNumber') : t('accounts.phonePlaceholder')}
                     mono
                   />
                 </>
@@ -504,7 +506,7 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
               {formKind === 'crypto_wallet' && (
                 <>
                   <div>
-                    <FormLabel>Réseau blockchain</FormLabel>
+                    <FormLabel>{t('accounts.network')}</FormLabel>
                     <select
                       value={formData.network ?? ''}
                       onChange={e => setFormData(d => ({ ...d, network: e.target.value }))}
@@ -517,10 +519,10 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
                     </select>
                   </div>
                   <FormInput
-                    label={`Adresse du wallet ${editTarget ? '(laisser vide pour conserver)' : ''}`}
+                    label={t('accounts.walletAddress', { keep: editTarget ? t('accounts.keep') : '' })}
                     value={formData.address ?? ''}
                     onChange={v => setFormData(d => ({ ...d, address: v }))}
-                    placeholder={editTarget ? '•••• conserver l\'adresse existante ••••' : '0x1234… ou bc1…'}
+                    placeholder={editTarget ? t('accounts.keepAddress') : t('accounts.walletPlaceholder')}
                     mono
                   />
                 </>
@@ -529,14 +531,14 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
               {formKind === 'card' && (
                 <>
                   <FormInput
-                    label={`PAN ${editTarget ? '(laisser vide pour conserver)' : ''}`}
+                    label={t('accounts.pan', { keep: editTarget ? t('accounts.keep') : '' })}
                     value={formData.pan ?? ''}
                     onChange={v => setFormData(d => ({ ...d, pan: v.replace(/\s/g, '') }))}
-                    placeholder={editTarget ? '••••••••••••' : '4242 4242 4242 4242'}
+                    placeholder={editTarget ? '••••••••••••' : t('accounts.panPlaceholder')}
                     mono
                   />
                   <FormInput
-                    label="Date d'expiration"
+                    label={t('accounts.expiry')}
                     value={formData.expiry ?? ''}
                     onChange={v => setFormData(d => ({ ...d, expiry: v }))}
                     placeholder="MM/AA"
@@ -546,10 +548,10 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
 
               {formKind === 'cash_pickup' && (
                 <FormInput
-                  label="Ville (cash pickup)"
+                  label={t('accounts.cityPickup')}
                   value={formData.city ?? ''}
                   onChange={v => setFormData(d => ({ ...d, city: v }))}
-                  placeholder="Brazzaville, Kinshasa, Dakar…"
+                  placeholder={t('accounts.cityPlaceholder')}
                 />
               )}
             </div>
@@ -562,7 +564,7 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
                 onChange={e => setFormData(d => ({ ...d, is_default: e.target.checked }))}
                 style={{ accentColor: 'var(--cyan)' }}
               />
-              Définir comme compte par défaut pour ce rôle
+              {t('accounts.setDefaultLabel')}
             </label>
 
             {formError && (
@@ -576,10 +578,10 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
 
             <div style={{ display: 'flex', gap: 8 }}>
               <button className="btn btn-cyan" style={{ flex: 1, justifyContent: 'center', fontSize: 12 }} onClick={submit} disabled={submitting}>
-                {submitting ? 'Enregistrement...' : (editTarget ? '✓ Mettre à jour' : '✓ Enregistrer')}
+                {submitting ? t('accounts.saving') : (editTarget ? t('accounts.update') : t('accounts.save'))}
               </button>
               <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => setModalOpen(false)}>
-                Annuler
+                {t('accounts.cancel')}
               </button>
             </div>
           </div>

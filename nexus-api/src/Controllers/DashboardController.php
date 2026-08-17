@@ -10,6 +10,7 @@ use Nexus\Core\Database;
 use Nexus\Core\Request;
 use Nexus\Execution\ExecutionContext;
 use Nexus\Core\Response;
+use Nexus\Services\FXService;
 use Nexus\Services\WalletService;
 
 /**
@@ -75,9 +76,16 @@ final class DashboardController
             $inTransit  = $wallet !== null ? (float) $wallet['in_transit_balance'] : 0.0;
             $settlement = $wallet !== null ? (float) $wallet['settlement_balance'] : 0.0;
 
-            $rateRef = Currency::rateToRef($currency);
-            $totalRef          += $balance * $rateRef;
-            $totalAvailableRef += $available * $rateRef;
+            // Équivalent EUR : taux RÉEL de l'environnement, ou null si
+            // indisponible — jamais une valeur inventée (§7, §9).
+            $rateRef = FXService::rateToRef($currency, $context->environment);
+            $refEquivalent = $rateRef !== null && $rateRef > 0.0
+                ? round($balance / $rateRef, 2)
+                : null;
+            if ($rateRef !== null && $rateRef > 0.0) {
+                $totalRef          += $balance / $rateRef;
+                $totalAvailableRef += $available / $rateRef;
+            }
             if ($balance > 0) {
                 $currenciesWithFunds++;
             }
@@ -89,7 +97,7 @@ final class DashboardController
                 'pending'        => round($pending, 2),
                 'in_transit'     => round($inTransit, 2),
                 'settlement'     => round($settlement, 2),
-                'ref_equivalent' => round($balance * $rateRef, 2),
+                'ref_equivalent' => $refEquivalent,
                 'has_funds'      => $balance > 0,
             ];
         }
@@ -305,6 +313,9 @@ final class DashboardController
         $avgExecSeconds = (float) $stmt->fetchColumn();
 
         // Frais totaux (équivalent ref EUR), 30 derniers jours.
+        // Taux RÉEL par devise ; sans taux, le frais ne contribue pas au
+        // total (jamais de conversion inventée, §7).
+        $execEnv = \Nexus\Execution\ExecutionEnvironment::fromString($environment);
         $stmt = $pdo->prepare(
             'SELECT fee, fee_currency FROM transactions
              WHERE user_id = :uid AND status <> \'cancelled\' AND created_at >= :since'
@@ -312,7 +323,10 @@ final class DashboardController
         $stmt->execute(['uid' => $userId, 'since' => $since30d]);
         $feesRef = 0.0;
         foreach ($stmt->fetchAll() as $row) {
-            $feesRef += (float) $row['fee'] * Currency::rateToRef($row['fee_currency']);
+            $rate = FXService::rateToRef((string) $row['fee_currency'], $execEnv);
+            if ($rate !== null && $rate > 0.0) {
+                $feesRef += (float) $row['fee'] / $rate;
+            }
         }
 
         return [

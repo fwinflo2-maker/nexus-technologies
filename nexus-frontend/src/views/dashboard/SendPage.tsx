@@ -12,6 +12,8 @@ import {
   type AuthorizedOriginsData,
 } from '../../api/client';
 import RouteSelectionStep from './RouteSelectionStep';
+import { useDashT, localeFor } from '../../data/dashboard-i18n';
+import { useI18n } from '../../context/I18nContext';
 
 /**
  * SendPage — Moteur de transfert NEXUS (i-tech engine).
@@ -54,37 +56,37 @@ interface FormErrors {
 
 // ─── Constantes ─────────────────────────────────────────────────────────────
 
-const OBJECTIVE_OPTIONS: Array<{ key: string; icon: string; label: string; desc: string }> = [
-  { key: 'optimized',     icon: '⭐', label: 'Optimisé',           desc: 'Meilleur équilibre entre coût, rapidité, montant reçu et fiabilité.' },
-  { key: 'fastest',       icon: '⚡', label: 'Plus rapide',        desc: 'Privilégie la vitesse d\'exécution.' },
-  { key: 'cheapest',      icon: '💸', label: 'Moins cher',         desc: 'Minimise les frais du transfert.' },
-  { key: 'max_received',  icon: '💰', label: 'Plus reçu',          desc: 'Maximise le montant reçu par le bénéficiaire.' },
-  { key: 'most_reliable', icon: '🛡️', label: 'Plus fiable',        desc: 'Privilégie la fiabilité et le taux de réussite.' },
+const OBJECTIVE_OPTIONS: Array<{ key: string; icon: string; i18nLabel: string; i18nDesc: string }> = [
+  { key: 'optimized',     icon: '⭐', i18nLabel: 'send.obj.optimized',     i18nDesc: 'send.obj.optimized.desc' },
+  { key: 'fastest',       icon: '⚡', i18nLabel: 'send.obj.fastest',       i18nDesc: 'send.obj.fastest.desc' },
+  { key: 'cheapest',      icon: '💸', i18nLabel: 'send.obj.cheapest',      i18nDesc: 'send.obj.cheapest.desc' },
+  { key: 'max_received',  icon: '💰', i18nLabel: 'send.obj.max_received',  i18nDesc: 'send.obj.max_received.desc' },
+  { key: 'most_reliable', icon: '🛡️', i18nLabel: 'send.obj.most_reliable', i18nDesc: 'send.obj.most_reliable.desc' },
 ];
 
-const STEPS: Array<{ num: Step; label: string; sub: string }> = [
-  { num: 1, label: 'Éligibilité',  sub: 'Détails' },
-  { num: 2, label: 'Confirmation', sub: 'Résumé' },
-  { num: 3, label: 'Routing',      sub: 'Routes' },
+const STEPS: Array<{ num: Step; i18nLabel: string; i18nSub: string }> = [
+  { num: 1, i18nLabel: 'send.step1', i18nSub: 'send.step1.sub' },
+  { num: 2, i18nLabel: 'send.step2', i18nSub: 'send.step2.sub' },
+  { num: 3, i18nLabel: 'send.step3', i18nSub: 'send.step3.sub' },
 ];
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function beneficiaryFieldsForMethod(methodType: string): {
+function beneficiaryFieldsForMethod(methodType: string, t: (key: string, params?: Record<string, string | number>) => string): {
   nameLabel: string; refLabel: string; refPlaceholder: string;
   secondaryLabel?: string; secondaryPlaceholder?: string;
 } {
   switch (methodType) {
-    case 'mobile_money': return { nameLabel: 'Nom du bénéficiaire', refLabel: 'Numéro de téléphone', refPlaceholder: '242066123456', secondaryLabel: 'Opérateur' };
-    case 'bank':         return { nameLabel: 'Nom du bénéficiaire', refLabel: 'IBAN / numéro de compte', refPlaceholder: 'FR76 3000 4000 0123 4567 8910 123' };
-    case 'crypto':       return { nameLabel: 'Pseudonyme / label', refLabel: 'Adresse du wallet', refPlaceholder: '0x1234...5678', secondaryLabel: 'Réseau' };
-    case 'cash_pickup':  return { nameLabel: 'Nom du bénéficiaire', refLabel: 'Informations de retrait', refPlaceholder: 'Ville, pièce d\'identité…', secondaryLabel: 'Ville de retrait', secondaryPlaceholder: 'Douala, Abidjan…' };
-    default:             return { nameLabel: 'Nom du bénéficiaire', refLabel: 'Référence', refPlaceholder: '' };
+    case 'mobile_money': return { nameLabel: t('send.beneficiary.name'), refLabel: t('send.beneficiary.phone'), refPlaceholder: t('send.beneficiary.phonePlaceholder'), secondaryLabel: t('send.beneficiary.operator') };
+    case 'bank':         return { nameLabel: t('send.beneficiary.name'), refLabel: t('send.beneficiary.iban'), refPlaceholder: t('send.beneficiary.ibanPlaceholder') };
+    case 'crypto':       return { nameLabel: t('send.beneficiary.pseudo'), refLabel: t('send.beneficiary.wallet'), refPlaceholder: t('send.beneficiary.walletPlaceholder'), secondaryLabel: t('send.beneficiary.network') };
+    case 'cash_pickup':  return { nameLabel: t('send.beneficiary.name'), refLabel: t('send.beneficiary.withdrawInfo'), refPlaceholder: t('send.beneficiary.withdrawPlaceholder'), secondaryLabel: t('send.beneficiary.city'), secondaryPlaceholder: t('send.beneficiary.cityPlaceholder') };
+    default:             return { nameLabel: t('send.beneficiary.name'), refLabel: t('send.beneficiary.ref'), refPlaceholder: '' };
   }
 }
 
-function formatCurrencyDisplay(val: number, cur: string): string {
-  const formatted = val.toLocaleString('fr-FR', {
+function formatCurrencyDisplay(val: number, cur: string, locale: string): string {
+  const formatted = val.toLocaleString(locale, {
     minimumFractionDigits: ['XAF', 'XOF', 'NGN', 'GHS', 'UGX', 'TZS', 'RWF', 'ZMW', 'IDR', 'JPY', 'CLP', 'COP', 'ARS', 'HUF', 'GNF'].includes(cur) ? 0 : 2,
     maximumFractionDigits: 2,
   });
@@ -138,6 +140,7 @@ function AnimatedValue({ value, format }: { value: number; format: (v: number) =
 
 /** Rail d'étapes animé. */
 function StepRail({ current, completed }: { current: Step; completed: Step[] }) {
+  const t = useDashT();
   return (
     <div className="se-railbar">
       {STEPS.map((s, i) => {
@@ -153,8 +156,8 @@ function StepRail({ current, completed }: { current: Step; completed: Step[] }) 
             >
               {done ? '✓' : s.num}
             </motion.div>
-            <span className="se-step-label">{s.label}</span>
-            <span className="se-step-sub">{s.sub}</span>
+            <span className="se-step-label">{t(s.i18nLabel)}</span>
+            <span className="se-step-sub">{t(s.i18nSub)}</span>
             {i < STEPS.length - 1 && (
               <div className={`se-step-line ${done ? 'se-step-line-done' : ''}`} />
             )}
@@ -241,8 +244,9 @@ function TelemetryPanel({
   sourceCurrenciesCount: number;
   step: Step;
 }) {
+  const t = useDashT();
   const kycColor = kycLevel === 'verified' ? 'var(--green)' : kycLevel === 'pending' ? 'var(--gold)' : 'var(--red)';
-  const kycLabel = kycLevel === 'verified' ? 'Vérifié' : kycLevel === 'pending' ? 'En cours' : 'Non vérifié';
+  const kycLabel = kycLevel === 'verified' ? t('send.kyc.verified') : kycLevel === 'pending' ? t('send.kyc.pending') : t('send.kyc.unverified');
   const statusLabel = step === 1 ? 'CONFIGURATION' : step === 2 ? 'VALIDATION' : 'ROUTING ACTIF';
 
   return (
@@ -315,6 +319,7 @@ function CountrySelector({
   onSelect: (code: string) => void;
   placeholder?: string;
 }) {
+  const t = useDashT();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
@@ -350,7 +355,7 @@ function CountrySelector({
             <span className="mono" style={{ fontSize: 9, color: 'var(--text-dim)' }}>{selected.code}</span>
           </>
         ) : (
-          <span style={{ fontSize: 12, color: 'var(--text-dim)', flex: 1 }}>{placeholder || 'Sélectionner un pays ▼'}</span>
+          <span style={{ fontSize: 12, color: 'var(--text-dim)', flex: 1 }}>            {placeholder || t('send.selectCountry')}</span>
         )}
         <span style={{ fontSize: 9, color: 'var(--text-dim)', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>▼</span>
       </div>
@@ -366,7 +371,7 @@ function CountrySelector({
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 6, marginBottom: 8 }}>
             <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>🔍</span>
-            <input ref={inputRef} type="text" value={query} onChange={e => setQuery(e.target.value)} placeholder="Rechercher un pays…" style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-bright)', fontSize: 11 }} />
+            <input ref={inputRef} type="text" value={query} onChange={e => setQuery(e.target.value)} placeholder={t('send.searchCountry')} style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-bright)', fontSize: 11 }} />
             {query && <button onClick={() => setQuery('')} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 10 }}>✕</button>}
           </div>
           {filtered.length === 0 ? (
@@ -403,6 +408,9 @@ function CountrySelector({
 // ─── Composant principal ─────────────────────────────────────────────────────
 
 export default function SendPage() {
+  const t = useDashT();
+  const { lang } = useI18n();
+  const locale = localeFor(lang);
   const [step, setStep] = useState<Step>(1);
   const [completedSteps, setCompletedSteps] = useState<Step[]>([]);
 
@@ -486,19 +494,19 @@ export default function SendPage() {
     const errors: FormErrors = {};
     if (step === 1) {
       const num = parseFloat(amount);
-      if (!amount || isNaN(num) || num <= 0) errors.amount = 'Le montant doit être supérieur à 0.';
+      if (!amount || isNaN(num) || num <= 0) errors.amount = t('send.validation.amount');
       if (fundingType === 'wallet') {
-        if (!sourceCurrency) errors.sourceCurrency = 'Sélectionnez une devise de votre wallet.';
+        if (!sourceCurrency) errors.sourceCurrency = t('send.validation.walletCurrency');
       } else {
-        if (!originCountry) errors.originCountry = 'Sélectionnez une proposition du provider.';
+        if (!originCountry) errors.originCountry = t('send.validation.provider');
       }
-      if (!destCountry) errors.destCountry = 'Sélectionnez un pays de destination.';
-      if (destCountry && !destCurrency) errors.destCurrency = 'Sélectionnez une devise de réception.';
-      if (destCountry && destCurrency && !receivingMethod) errors.receivingMethod = 'Sélectionnez un mode de réception.';
+      if (!destCountry) errors.destCountry = t('send.validation.destCountry');
+      if (destCountry && !destCurrency) errors.destCurrency = t('send.validation.destCurrency');
+      if (destCountry && destCurrency && !receivingMethod) errors.receivingMethod = t('send.validation.receivingMethod');
       if (receivingMethod) {
-        const fields = beneficiaryFieldsForMethod(receivingMethod);
-        if (fields.nameLabel && !beneficiary.name.trim()) errors.beneficiaryName = `Le champ « ${fields.nameLabel} » est requis.`;
-        if (fields.refLabel && !beneficiary.reference.trim()) errors.beneficiaryRef = `Le champ « ${fields.refLabel} » est requis.`;
+        const fields = beneficiaryFieldsForMethod(receivingMethod, t);
+        if (fields.nameLabel && !beneficiary.name.trim()) errors.beneficiaryName = t('send.validation.fieldRequired', { field: fields.nameLabel });
+        if (fields.refLabel && !beneficiary.reference.trim()) errors.beneficiaryRef = t('send.validation.fieldRequired', { field: fields.refLabel });
       }
     }
     return errors;
@@ -551,9 +559,9 @@ export default function SendPage() {
       <div className="page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
         <div className="card card-hi-c" style={{ padding: 40, textAlign: 'center', maxWidth: 460 }}>
           <div style={{ fontSize: 28, marginBottom: 12 }}>⚠️</div>
-          <h2 style={{ color: 'var(--text-bright)', marginBottom: 10, fontSize: 18 }}>Moteur hors ligne</h2>
+          <h2 style={{ color: 'var(--text-bright)', marginBottom: 10, fontSize: 18 }}>{t('send.engineOffline')}</h2>
           <p style={{ color: 'var(--text-mid)', marginBottom: 20 }}>{error}</p>
-          <button className="btn btn-cyan" onClick={fetchAll}>↻ Relancer le moteur</button>
+          <button className="btn btn-cyan" onClick={fetchAll}>{t('send.restart')}</button>
         </div>
       </div>
     );
@@ -577,7 +585,7 @@ export default function SendPage() {
         <div className="se-header">
           <div>
             <div className="page-label">NEXUS TRANSFER ENGINE</div>
-            <div className="page-title">Envoyez <span className="gc">intelligemment.</span></div>
+            <div className="page-title">{t('send.intro1')} <span className="gc">{t('send.intro2')}</span></div>
           </div>
           <div className="se-badge"><span className="se-led" /> ENGINE // LIVE</div>
         </div>
@@ -606,13 +614,13 @@ export default function SendPage() {
               {/* ── ÉTAPE 1 : ÉLIGIBILITÉ ────────────────────────── */}
               {step === 1 && (
                 <div className="card card-hi-c" style={{ padding: 24 }}>
-                  <div className="page-label" style={{ marginBottom: 16 }}>Détails du transfert</div>
+                  <div className="page-label" style={{ marginBottom: 16 }}>{t('send.details')}</div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
                     {/* Source des fonds : wallet OU proposition du provider */}
                     <motion.div {...stagger(0)}>
-                      <div className="se-field-label">Source des fonds</div>
+                      <div className="se-field-label">{t('send.source')}</div>
 
                       {/* Toggle Wallet / Provider */}
                       <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
@@ -642,7 +650,7 @@ export default function SendPage() {
                             >
                               {sourceCurrencies.map(c => {
                                 const w = wallets.find(x => x.currency === c);
-                                return <option key={c} value={c}>{w && (w.available > 0 || w.has_funds) ? `${c} · ${formatCurrencyDisplay(w.available, c)} dispo` : c}</option>;
+                                return <option key={c} value={c}>{w && (w.available > 0 || w.has_funds) ? `${c} · ${formatCurrencyDisplay(w.available, c, locale)} ${t('send.beneficiary.available')}` : c}</option>;
                               })}
                             </select>
                             <input type="text" value={amount} onChange={e => setAmount(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="0.00" />
@@ -656,7 +664,7 @@ export default function SendPage() {
                                   className={`se-chip ${sourceCurrency === w.currency ? 'se-chip-selected' : ''}`}
                                   style={{ fontSize: 10, padding: '5px 10px' }}
                                 >
-                                  {w.currency} · {formatCurrencyDisplay(w.available, w.currency)}
+                                  {w.currency} · {formatCurrencyDisplay(w.available, w.currency, locale)}
                                 </button>
                               ))}
                             </div>
@@ -715,36 +723,36 @@ export default function SendPage() {
                     </motion.div>
 
                     {/* Estimation conversion */}
-                    {amount && sourceCurrency && destCurrency && estimatedReceived > 0 && (
+                    {amount && sourceCurrency && destCurrency && estimatedReceived !== null && estimatedReceived > 0 && (
                       <motion.div className="se-estimate" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.25 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingLeft: 10 }}>
                           <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                            {formatCurrencyDisplay(parseFloat(amount) || 0, sourceCurrency)}
+                            {formatCurrencyDisplay(parseFloat(amount) || 0, sourceCurrency, locale)}
                           </div>
                           <div style={{ fontSize: 14, color: 'var(--cyan)', fontWeight: 600 }}>≈</div>
                           <div>
                             <span style={{ fontSize: 17, fontWeight: 800, color: 'var(--white)', fontFamily: 'var(--font-mono)' }}>
-                              <AnimatedValue value={estimatedReceived} format={v => formatCurrencyDisplay(v, destCurrency)} />
+                              <AnimatedValue value={estimatedReceived} format={v => formatCurrencyDisplay(v, destCurrency, locale)} />
                             </span>
                           </div>
                         </div>
                         <div style={{ fontSize: 9, color: 'var(--text-dim)', marginTop: 6, textAlign: 'center', fontStyle: 'italic', paddingLeft: 10 }}>
-                          Estimation en temps réel — frais et spread inclus dans les routes finales.
+                          {t('send.estimateNote')}
                         </div>
                       </motion.div>
                     )}
 
                     {/* Destination */}
                     <motion.div {...stagger(2)}>
-                      <div className="se-field-label">Pays de destination</div>
-                      <CountrySelector countries={coverage.countries} selectedCode={destCountry} onSelect={setDestCountry} placeholder="Sélectionner un pays ▼" />
+                      <div className="se-field-label">{t('send.destCountry')}</div>
+                      <CountrySelector countries={coverage.countries} selectedCode={destCountry} onSelect={setDestCountry} placeholder={t('send.selectCountry')} />
                       {errors.destCountry && <ErrorText>{errors.destCountry}</ErrorText>}
                     </motion.div>
 
                     {/* Devise réception */}
                     {destCountry && destCurrencies.length > 0 && (
                       <motion.div {...stagger(3)}>
-                        <div className="se-field-label">Devise de réception</div>
+                        <div className="se-field-label">{t('send.destCurrency')}</div>
                         {destCurrencies.length === 1 ? (
                           <div className="se-chip se-chip-locked">
                             <span className="pill p-c" style={{ fontSize: 8 }}>{destCurrencies[0].code}</span>
@@ -764,7 +772,7 @@ export default function SendPage() {
                     {/* Mode de réception */}
                     {destCurrency && availableMethods.length > 0 && (
                       <motion.div {...stagger(4)}>
-                        <div className="se-field-label">Mode de réception</div>
+                        <div className="se-field-label">{t('send.method')}</div>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
                           {availableMethods.map(m => (
                             <motion.button
@@ -785,8 +793,7 @@ export default function SendPage() {
 
                     {/* Opérateur Mobile Money */}
                     {selectedMethod?.type === 'mobile_money' && mobileOperators.length > 0 && (
-                      <motion.div {...stagger(5)}>
-                        <div className="se-field-label">Opérateur</div>
+                      <motion.div {...stagger(5)}>                          <div className="se-field-label">{t('send.operator')}</div>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                           {mobileOperators.map(op => (
                             <button
@@ -803,13 +810,13 @@ export default function SendPage() {
 
                     {/* Champs bénéficiaire */}
                     {receivingMethod && (() => {
-                      const fields = beneficiaryFieldsForMethod(receivingMethod);
+                      const fields = beneficiaryFieldsForMethod(receivingMethod, t);
                       return (
                         <motion.div {...stagger(6)} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                          <div className="se-field-label">Bénéficiaire</div>
+                          <div className="se-field-label">{t('send.beneficiary')}</div>
                           <div>
                             <div className="se-field-label" style={{ marginBottom: 4 }}>{fields.nameLabel}</div>
-                            <input className="se-input" value={beneficiary.name} onChange={e => setBeneficiary(b => ({ ...b, name: e.target.value }))} placeholder="Nom complet" />
+                            <input className="se-input" value={beneficiary.name} onChange={e => setBeneficiary(b => ({ ...b, name: e.target.value }))} placeholder={t('send.fullNamePh')} />
                             {errors.beneficiaryName && <ErrorText>{errors.beneficiaryName}</ErrorText>}
                           </div>
                           <div>
@@ -839,9 +846,9 @@ export default function SendPage() {
                     {/* Mode de transfert (préférence de routage) */}
                     {receivingMethod && (
                       <motion.div {...stagger(7)}>
-                        <div className="se-field-label">Comment souhaitez-vous envoyer ?</div>
+                        <div className="se-field-label">{t('send.how')}</div>
                         <div style={{ fontSize: 11, color: 'var(--text-mid)', marginBottom: 8 }}>
-                          Vous indiquez votre préférence — Nexus choisit automatiquement la meilleure route.
+                          {t('send.ai1')}
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                           {OBJECTIVE_OPTIONS.map((opt, oi) => (
@@ -861,9 +868,9 @@ export default function SendPage() {
                                   animate={{ rotate: objective === opt.key ? [0, -8, 8, 0] : 0 }}
                                   transition={{ duration: 0.4 }}
                                 >{opt.icon}</motion.span>
-                                {opt.label}
+                                {t(opt.i18nLabel)}
                               </span>
-                              <span style={{ fontSize: 9.5, color: 'var(--text-mid)', fontWeight: 400, lineHeight: 1.3 }}>{opt.desc}</span>
+                              <span style={{ fontSize: 9.5, color: 'var(--text-mid)', fontWeight: 400, lineHeight: 1.3 }}>{t(opt.i18nDesc)}</span>
                             </motion.button>
                           ))}
                         </div>
@@ -872,7 +879,7 @@ export default function SendPage() {
 
                     {/* Navigation */}
                     <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                      <button className="se-cta" onClick={goNext} style={{ flex: 1 }}>Continuer →</button>
+                      <button className="se-cta" onClick={goNext} style={{ flex: 1 }}>{t('send.next')} →</button>
                     </div>
                   </div>
                 </div>
@@ -881,17 +888,17 @@ export default function SendPage() {
               {/* ── ÉTAPE 2 : CONFIRMATION ────────────────────────── */}
               {step === 2 && (
                 <div className="card card-hi-c" style={{ padding: 24 }}>
-                  <div className="page-label" style={{ marginBottom: 16 }}>Résumé — Validation</div>
+                  <div className="page-label" style={{ marginBottom: 16 }}>{t('send.step2')} — {t('send.step2.sub')}</div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
                     {[
-                      ['Vous envoyez', formatCurrencyDisplay(parseFloat(amount) || 0, sourceCurrency), 'var(--white)', true],
-                      ['Source des fonds', fundingType === 'wallet'
-                        ? `💼 Wallet ${sourceCurrency}`
-                        : `🏦 ${selectedOrigin?.flag ?? ''} ${selectedOrigin?.countryName ?? originCountry}`, 'var(--green)', false],
-                      ['Destination', `${selectedCountry?.flag ?? ''} ${selectedCountry?.name ?? destCountry}`, 'var(--text-bright)', false],
-                      ['Devise reçue', destCurrency, 'var(--cyan)', true],
-                      ['Mode de réception', `${selectedMethod?.icon ?? ''} ${selectedMethod?.label ?? ''}${beneficiary.operator ? ` — ${beneficiary.operator}` : ''}`, 'var(--text-bright)', false],
+                      [t('send.youSend'), formatCurrencyDisplay(parseFloat(amount) || 0, sourceCurrency, locale), 'var(--white)', true],
+                      [t('send.source'), fundingType === 'wallet'
+                        ? t('send.walletSrc', { currency: sourceCurrency })
+                        : t('send.originSrc', { flag: selectedOrigin?.flag ?? '', name: selectedOrigin?.countryName ?? originCountry }), 'var(--green)', false],
+                      [t('send.destination'), `${selectedCountry?.flag ?? ''} ${selectedCountry?.name ?? destCountry}`, 'var(--text-bright)', false],
+                      [t('send.receiveCurrency'), destCurrency, 'var(--cyan)', true],
+                      [t('send.method'), `${selectedMethod?.icon ?? ''} ${selectedMethod?.label ?? ''}${beneficiary.operator ? ` — ${beneficiary.operator}` : ''}`, 'var(--text-bright)', false],
                     ].map(([k, v, col, mono], i) => (
                       <motion.div key={k as string} className="trow" {...stagger(i)}>
                         <span style={{ fontSize: 11, color: 'var(--text-mid)' }}>{k as string}</span>
@@ -901,7 +908,7 @@ export default function SendPage() {
 
                     {/* Bénéficiaire */}
                     <motion.div className="trow" {...stagger(5)}>
-                      <span style={{ fontSize: 11, color: 'var(--text-mid)' }}>Bénéficiaire</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-mid)' }}>{t('send.beneficiary')}</span>
                       <div style={{ textAlign: 'right' }}>
                         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-bright)' }}>{beneficiary.name || '—'}</div>
                         <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
@@ -912,9 +919,9 @@ export default function SendPage() {
 
                     {/* Objectif */}
                     <motion.div className="trow" {...stagger(6)}>
-                      <span style={{ fontSize: 11, color: 'var(--text-mid)' }}>Mode de transfert</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-mid)' }}>{t('send.modeTransfer')}</span>
                       <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-bright)' }}>
-                        {OBJECTIVE_OPTIONS.find(o => o.key === objective)?.icon} {OBJECTIVE_OPTIONS.find(o => o.key === objective)?.label}
+                        {OBJECTIVE_OPTIONS.find(o => o.key === objective)?.icon} {t(OBJECTIVE_OPTIONS.find(o => o.key === objective)?.i18nLabel ?? 'send.obj.optimized')}
                       </span>
                     </motion.div>
 
@@ -922,29 +929,31 @@ export default function SendPage() {
 
                     {/* Frais */}
                     <motion.div className="trow" {...stagger(7)}>
-                      <span style={{ fontSize: 11, color: 'var(--text-mid)' }}>Frais estimés</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-mid)' }}>{t('send.estFees')}</span>
                       <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--gold)', fontFamily: 'var(--font-mono)' }}>
-                        {formatCurrencyDisplay(estimatedFees, sourceCurrency)}
+                        {formatCurrencyDisplay(estimatedFees, sourceCurrency, locale)}
                       </span>
                     </motion.div>
 
                     {/* Montant reçu estimé */}
                     <motion.div className="trow" {...stagger(8)}>
-                      <span style={{ fontSize: 11, color: 'var(--text-mid)' }}>Montant estimé reçu</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-mid)' }}>{t('send.estReceived')}</span>
                       <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--green)', fontFamily: 'var(--font-mono)' }}>
-                        {formatCurrencyDisplay(estimatedReceived, destCurrency)}
+                        {estimatedReceived !== null
+                          ? formatCurrencyDisplay(estimatedReceived, destCurrency, locale)
+                          : <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>{t('send.estUnavailable')}</span>}
                       </span>
                     </motion.div>
                   </div>
 
                   <div style={{ fontSize: 9, color: 'var(--text-dim)', textAlign: 'center', marginTop: 14, padding: '8px 12px', background: 'var(--panel2)', borderRadius: 8, fontStyle: 'italic' }}>
-                    Estimation — Le Routing Engine calculera les frais exacts et les taux en temps réel.
+                    {t('send.summaryNote')}
                   </div>
 
                   <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-                    <button className="se-cta se-cta-ghost" onClick={goBack}>← Modifier</button>
+                    <button className="se-cta se-cta-ghost" onClick={goBack}>{t('send.edit')}</button>
                     <button className="se-cta" onClick={goToRouting} style={{ flex: 1 }}>
-                      ⚡ Engager le Routing Engine →
+                      {t('send.engageRouting')}
                     </button>
                   </div>
                 </div>
@@ -970,8 +979,8 @@ export default function SendPage() {
                 </div>
                 <div className="quote quote-v" style={{ padding: '10px 14px' }}>
                   <div className="quote-text" style={{ fontSize: 11, fontStyle: 'normal', fontWeight: 500 }}>
-                    {step === 1 && <>Saisissez les détails de votre envoi. Les origines sont dérivées de vos sources de financement vérifiées — jamais d'une liste globale.</>}
-                    {step === 2 && <>Vérifiez votre intention. Le Routing Engine analysera les meilleures routes en temps réel lors de l'étape suivante.</>}
+                    {step === 1 && <>{t('send.ai1')}</>}
+                    {step === 2 && <>{t('send.ai2')}</>}
                   </div>
                 </div>
               </motion.div>

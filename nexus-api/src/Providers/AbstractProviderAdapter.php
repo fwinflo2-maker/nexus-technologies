@@ -98,6 +98,21 @@ abstract class AbstractProviderAdapter implements ProviderAdapter
         return WebhookVerifier::verify($payload, $signature, $secret);
     }
 
+    /**
+     * Test de connexion par défaut — honnête (§5) : sans adaptateur dédié,
+     * AUCUN appel n'est effectué et aucun succès n'est déclaré. Le statut
+     * CONFIGURATION_ERROR signale que la validation d'authentification n'est
+     * pas implémentée pour ce provider ; un futur adaptateur l'implémentera.
+     */
+    public function testConnection(string $environment, ?array $credentials = null): array
+    {
+        return [
+            'status'    => 'CONFIGURATION_ERROR',
+            'message'   => 'Test d\'authentification non implémenté pour ce provider : aucune validation réelle n\'a été effectuée.',
+            'tested_at' => gmdate(DATE_ATOM),
+        ];
+    }
+
     // ── Opérations métier : non implémentées à ce stade ────────────────────
 
     public function getQuote(array $intent): array

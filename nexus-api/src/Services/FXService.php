@@ -12,28 +12,24 @@ use RuntimeException;
  * Service FX — résolution et conversion de taux (Phase D).
  *
  * Flux de résolution, TOUJOURS dans un environnement donné :
- *   FXService → FXRateCache → ManualRateProvider (sandbox uniquement)
+ *   FXService → FXRateCache
  *
- *   1. `resolve()` tente d'abord une entrée valide (non expirée) de
+ *   1. `resolve()` tente une entrée valide (non expirée) de
  *      `fx_rates_cache`, POUR CET ENVIRONNEMENT ;
- *   2. en cas d'absence ou d'expiration, le `ManualRateProvider` prend le
- *      relais — mais en SANDBOX SEULEMENT ;
- *   3. si aucune source ne connaît la paire, une RuntimeException est levée.
+ *   2. si aucune source ne connaît la paire, une RuntimeException est levée.
  *
- * POURQUOI LE REPLI MANUEL EST INTERDIT EN PRODUCTION
- * ───────────────────────────────────────────────────
- * `ManualRateProvider` porte un jeu de taux CODÉS EN DUR, sans horodatage
- * réel ni provenance externe. Vérifié en HTTP avant correctif : avec un cache
- * vide, une quote demandée en production obtenait `655.957` / source
- * « manual ». Un taux écrit dans le code ne peut pas coter de l'argent réel :
- * en production, l'absence de taux doit produire un REFUS explicite —
- * visible et corrigeable — plutôt qu'une valeur silencieuse (§12, §13).
- *
- * La sandbox, elle, conserve ce repli : elle ne déplace aucun argent réel et
- * doit rester utilisable sans configuration préalable.
+ * AUCUN TAUX CODÉ EN DUR — DANS AUCUN ENVIRONNEMENT
+ * ────────────────────────────────────────────────
+ * Le repli historique `ManualRateProvider` (jeu de taux codés en dur) est
+ * supprimé : un taux écrit dans le code ne peut pas coter de l'argent, pas
+ * même en sandbox. La sandbox d'un provider réel n'existe que lorsque ses
+ * credentials sandbox sont configurées ; tant qu'aucune source FX réelle
+ * n'est branchée, l'absence de taux produit un REFUS explicite
+ * (`FX_RATE_NOT_AVAILABLE`), visible et corrigeable — jamais une valeur
+ * silencieuse (§7).
  *
  * Le `spread_pct` est conservé dans le cache mais NE modifie PAS le taux :
- * le taux fourni par le provider est le taux final à appliquer.
+ * le taux fourni par la source est le taux final à appliquer.
  *
  * Ce service n'exécute JAMAIS de transfert ni d'écriture comptable :
  * l'orchestration des mouvements appartient à
@@ -50,9 +46,8 @@ final class FXService
      * Résout le taux d'une paire de devises.
      *
      * Priorité :
-     *   1. `fx_rates_cache` (entrée non expirée) ;
-     *   2. `ManualRateProvider` (fallback déterministe) ;
-     *   3. exception si la paire est inconnue.
+     *   1. `fx_rates_cache` (entrée non expirée, environnement scopé) ;
+     *   2. exception si la paire est inconnue dans cet environnement.
      *
      * @param string $baseCurrency  Devise source (ex. 'EUR')
      * @param string $quoteCurrency Devise destination (ex. 'USD')
@@ -61,8 +56,7 @@ final class FXService
      *
      * @return FXRate Taux résolu (jamais null).
      *
-     * @throws RuntimeException Si la paire n'existe pas dans cet environnement,
-     *         ou si la production ne dispose d'aucun taux réel.
+     * @throws RuntimeException Si la paire n'existe pas dans cet environnement.
      */
     public static function resolve(
         string $baseCurrency,
@@ -74,18 +68,82 @@ final class FXService
             return $cached;
         }
 
-        // Production : pas de repli sur des taux codés en dur. L'absence de
-        // taux réel doit se voir, pas se combler.
-        if ($environment === ExecutionEnvironment::PRODUCTION) {
-            throw new RuntimeException(sprintf(
-                'Aucun taux de production disponible pour %s/%s. '
-                . 'Un taux de secours ne peut pas coter de l\'argent réel.',
-                strtoupper($baseCurrency),
-                strtoupper($quoteCurrency)
-            ));
-        }
+        throw new RuntimeException(sprintf(
+            'Aucun taux de change configuré pour %s → %s en %s. '
+            . "Aucune source FX réelle n'est disponible : le système refuse de coter.",
+            strtoupper($baseCurrency),
+            strtoupper($quoteCurrency),
+            $environment->value
+        ));
+    }
 
-        return ManualRateProvider::getRate($baseCurrency, $quoteCurrency);
+    /**
+     * Taux brut d'une paire (1 base = X quote), ou null si indisponible.
+     *
+     * Ne lève jamais : l'indisponibilité est une valeur (null), pas une
+     * panne — les agrégats affichent « indisponible » au lieu d'inventer
+     * un taux (§7, §9).
+     */
+    public static function rate(string $baseCurrency, string $quoteCurrency, ExecutionEnvironment $environment): ?float
+    {
+        try {
+            $rate = self::resolve($baseCurrency, $quoteCurrency, $environment);
+            $value = (float) $rate->getRate();
+            return $value > 0.0 ? $value : null;
+        } catch (RuntimeException) {
+            return null;
+        }
+    }
+
+    /**
+     * Taux EUR de référence d'une devise (projections, agrégats dashboard).
+     *
+     * Convention : « 1 EUR = X <devise> » (XAF → 655.957). Identité pour
+     * l'EUR ; sinon résolution depuis la source FX réelle dans
+     * l'environnement donné. Retourne null quand aucun taux n'est disponible :
+     * les appels affichent alors « indisponible » au lieu d'une valeur
+     * inventée (§7, §9).
+     *
+     * Pour convertir un montant DEVISE → EUR : montant / rateToRef().
+     * Pour convertir un montant EUR → DEVISE : montant × rateToRef().
+     *
+     * @return float|null 1.0 pour EUR, le taux EUR→devise, ou null si inconnu.
+     */
+    public static function rateToRef(string $currency, ExecutionEnvironment $environment): ?float
+    {
+        $currency = strtoupper(trim($currency));
+        if ($currency === '') {
+            return null;
+        }
+        if ($currency === 'EUR') {
+            return 1.0;
+        }
+        return self::rate('EUR', $currency, $environment);
+    }
+
+    /**
+     * Taux XAF de référence d'une devise : « 1 <devise> = X XAF ».
+     *
+     * Dérivé des taux réels EUR→devise et EUR→XAF. Null dès qu'une des deux
+     * paires est indisponible (jamais de valeur inventée).
+     */
+    public static function rateToXaf(string $currency, ExecutionEnvironment $environment): ?float
+    {
+        $currency = strtoupper(trim($currency));
+        if ($currency === '') {
+            return null;
+        }
+        $eurToXaf = self::rate('EUR', 'XAF', $environment);
+        if ($eurToXaf === null) {
+            return null;
+        }
+        if ($currency === 'XAF') {
+            return 1.0;
+        }
+        $eurToCurrency = self::rate('EUR', $currency, $environment);
+        return $eurToCurrency !== null && $eurToCurrency > 0.0
+            ? $eurToXaf / $eurToCurrency
+            : null;
     }
 
     /**

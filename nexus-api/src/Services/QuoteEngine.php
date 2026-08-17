@@ -181,35 +181,25 @@ final class QuoteEngine
     }
 
     /**
-     * Taux EUR vers une devise (1 EUR = X unités de devise).
-     * Pour XAF/XOF : taux fixe.
-     * Pour les autres devises : taux du Currency module.
+     * Taux EUR vers une devise (1 EUR = X unités de devise), RÉEL.
+     *
+     * Les frais du barème sont libellés en EUR : convertir le montant source
+     * en EUR exige un taux. Il vient de la source FX réelle (comme le taux
+     * principal) ; l'identité EUR→EUR vaut 1. Sans taux, la quote est
+     * impossible — refus explicite (§7) : aucun tableau de taux statique ne
+     * subsiste.
      */
     private static function rateToEur(string $currency, ExecutionEnvironment $environment): float
     {
-        // Les frais du barème sont libellés en EUR : convertir le montant
-        // source en EUR exige un taux. On interroge d'abord la source FX
-        // réelle, comme pour le taux principal.
         $pricing = QuotePricing::resolveRate('EUR', $currency, $environment);
         if ($pricing['status'] === QuotePricing::RESOLVED && $pricing['rate'] !== null) {
             return (float) $pricing['rate'];
         }
 
-        // Repli : table de référence interne. Elle ne sert QUE de facteur de
-        // conversion des frais, jamais du montant reçu — celui-ci exige un
-        // taux réel et refuse de se calculer sans (QuoteRateUnavailable).
-        $rates = [
-            'EUR'  => 1.0,
-            'USD'  => 1.0870,
-            'GBP'  => 0.8550,
-            'XAF'  => 655.957,
-            'XOF'  => 655.957,
-            'USDT' => 1.0870,
-            'USDC' => 1.0870,
-            'NGN'  => 1650.0,
-            'GHS'  => 14.80,
-            'KES'  => 141.0,
-        ];
-        return $rates[$currency] ?? 1.0;
+        throw new QuoteRateUnavailable(
+            'EUR',
+            $currency,
+            sprintf('Aucun taux de change disponible pour EUR → %s : frais non calculables.', $currency)
+        );
     }
 }

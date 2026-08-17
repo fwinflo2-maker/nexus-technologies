@@ -8,6 +8,7 @@ import {
   type ProviderCatalogItem,
   type ProviderCredentialState,
 } from '../../api/client';
+import { useDashT } from '../../data/dashboard-i18n';
 
 type Tab = 'all' | 'mobile_money' | 'banking' | 'fx' | 'cards' | 'crypto' | 'payout_network';
 
@@ -19,6 +20,7 @@ type Tab = 'all' | 'mobile_money' | 'banking' | 'fx' | 'cards' | 'crypto' | 'pay
  * Les secrets ne sont JAMAIS affichés en clair dans l'interface.
  */
 export default function ProvidersPage() {
+  const t = useDashT();
   const [tab, setTab] = useState<Tab>('all');
   const [catalog, setCatalog] = useState<ProviderCatalogData | null>(null);
   const [credentials, setCredentials] = useState<ProviderCredentialState[]>([]);
@@ -39,7 +41,7 @@ export default function ProvidersPage() {
     setError(null);
     const [catRes, credRes] = await Promise.all([apiProvidersCatalog(), apiProviderCredentialsList()]);
     if (!catRes.success || !catRes.data) {
-      setError(catRes.error || 'Erreur lors du chargement du catalogue.');
+      setError(catRes.error || t('providers.loadError'));
       setLoading(false);
       return;
     }
@@ -58,10 +60,10 @@ export default function ProvidersPage() {
   /** Statut d'affichage pour un provider. */
   const statusLabel = (status: string) => {
     switch (status) {
-      case 'active': return { text: 'Actif', color: 'var(--green)', pillCls: 'p-gr' };
-      case 'sandbox_only': return { text: 'Sandbox', color: 'var(--gold)', pillCls: 'p-g' };
-      case 'error': return { text: 'Erreur', color: 'var(--red)', pillCls: 'p-r' };
-      default: return { text: 'Non configuré', color: 'var(--text-dim)', pillCls: '' };
+      case 'active': return { text: t('providers.status.active'), color: 'var(--green)', pillCls: 'p-gr' };
+      case 'sandbox_only': return { text: t('providers.status.sandbox_only'), color: 'var(--gold)', pillCls: 'p-g' };
+      case 'error': return { text: t('providers.status.error'), color: 'var(--red)', pillCls: 'p-r' };
+      default: return { text: t('providers.status.not_configured'), color: 'var(--text-dim)', pillCls: '' };
     }
   };
 
@@ -91,7 +93,7 @@ export default function ProvidersPage() {
 
     const res = await apiProviderCredentialsUpsert(configProvider.slug, configEnvironment, filteredCreds);
     if (!res.success) {
-      setConfigSubmitError(res.error || 'Erreur lors de l\'enregistrement.');
+      setConfigSubmitError(res.error || t('providers.saveError'));
       setConfigSubmitLoading(false);
       return;
     }
@@ -128,9 +130,9 @@ export default function ProvidersPage() {
     return (
       <div className="page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
         <div className="card card-hi-c" style={{ padding: 40, textAlign: 'center', maxWidth: 460 }}>
-          <h2 style={{ color: 'var(--text-bright)', marginBottom: 10 }}>Impossible de charger les providers</h2>
+          <h2 style={{ color: 'var(--text-bright)', marginBottom: 10 }}>{t('providers.loadError')}</h2>
           <p style={{ color: 'var(--text-mid)', marginBottom: 20 }}>{error}</p>
-          <button className="btn btn-cyan" onClick={fetchAll}>↻ Réessayer</button>
+          <button className="btn btn-cyan" onClick={fetchAll}>{t('providers.retry')}</button>
         </div>
       </div>
     );
@@ -145,34 +147,33 @@ export default function ProvidersPage() {
   const cats = catalog.categories;
 
   const tabs: { id: Tab; label: string }[] = [
-    { id: 'all', label: 'Tous' },
-    { id: 'mobile_money', label: '📱 Mobile Money' },
-    { id: 'banking', label: '🏦 Banking' },
-    { id: 'fx', label: '💱 FX' },
-    { id: 'cards', label: '💳 Cards' },
-    { id: 'crypto', label: '🔗 Crypto' },
-    { id: 'payout_network', label: '🌍 Payout' },
+    { id: 'all', label: t('providers.tabs.all') },
+    { id: 'mobile_money', label: t('providers.tabs.mobile_money') },
+    { id: 'banking', label: t('providers.tabs.banking') },
+    { id: 'fx', label: t('providers.tabs.fx') },
+    { id: 'cards', label: t('providers.tabs.cards') },
+    { id: 'crypto', label: t('providers.tabs.crypto') },
+    { id: 'payout_network', label: t('providers.tabs.payout_network') },
   ];
 
   return (
     <div className="page">
       {/* En-tête */}
       <div className="page-header animate-up">
-        <div className="page-label">Nexus Providers — Intégrations API</div>
-        <div className="page-title">Configurez vos <span className="gc">providers de paiement.</span></div>
+        <div className="page-label">{t('providers.pageLabel')}</div>
+        <div className="page-title">{t('providers.title')}</div>
         <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text-mid)', maxWidth: 600, lineHeight: 1.6 }}>
-          Les identifiants API sont chiffrés en AES-256-GCM et ne sont jamais affichés en clair.
-          Configurez chaque provider pour activer les routes de paiement.
+          {t('providers.subtitle')}
         </div>
       </div>
 
       {/* KPIs */}
       <div className="g4 animate-up delay-1" style={{ marginBottom: 20 }}>
         {[
-          { label: 'Providers', val: catalog.total.toString(), color: 'var(--cyan)', sub: 'Disponibles' },
-          { label: 'Configurés', val: credentials.filter(c => c.has_credentials).length.toString(), color: 'var(--green)', sub: 'Avec clés API' },
-          { label: 'Actifs', val: credentials.filter(c => c.status === 'active').length.toString(), color: 'var(--green)', sub: 'Prêts pour la production' },
-          { label: 'En erreur', val: credentials.filter(c => c.status === 'error').length.toString(), color: 'var(--red)', sub: 'À vérifier' },
+          { label: t('providers.kpi.providers'), val: catalog.total.toString(), color: 'var(--cyan)', sub: t('providers.kpi.providers.sub') },
+          { label: t('providers.kpi.configured'), val: credentials.filter(c => c.has_credentials).length.toString(), color: 'var(--green)', sub: t('providers.kpi.configured.sub') },
+          { label: t('providers.kpi.active'), val: credentials.filter(c => c.status === 'active').length.toString(), color: 'var(--green)', sub: t('providers.kpi.active.sub') },
+          { label: t('providers.kpi.error'), val: credentials.filter(c => c.status === 'error').length.toString(), color: 'var(--red)', sub: t('providers.kpi.error.sub') },
         ].map(s => (
           <div key={s.label} className="card stat-card">
             <div className="stat-label">{s.label}</div>
@@ -252,7 +253,7 @@ export default function ProvidersPage() {
                   onClick={e => e.stopPropagation()}
                   style={{ fontSize: 9, color: 'var(--cyan)', fontFamily: 'var(--font-mono)', letterSpacing: '0.05em' }}
                 >
-                  Documentation ↗
+                  {t('providers.docs')}
                 </a>
                 {cred?.has_credentials && (
                   <button
@@ -261,7 +262,7 @@ export default function ProvidersPage() {
                     onClick={e => { e.stopPropagation(); testProvider(p.slug); }}
                     disabled={configTestLoading}
                   >
-                    {configTestLoading ? '...' : '🔍 Tester'}
+                    {configTestLoading ? '...' : t('providers.test')}
                   </button>
                 )}
               </div>
@@ -308,7 +309,7 @@ export default function ProvidersPage() {
             {/* Sélecteur environment */}
             <div style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 9, color: 'var(--text-dim)', letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)', marginBottom: 6 }}>
-                Environnement
+                {t('providers.env')}
               </div>
               <div style={{ display: 'flex', gap: 4 }}>
                 {(['sandbox', 'production'] as const).map(env => (
@@ -323,7 +324,7 @@ export default function ProvidersPage() {
                     }}
                     onClick={() => setConfigEnvironment(env)}
                   >
-                    {env === 'sandbox' ? '🧪 Sandbox' : '🚀 Production'}
+                    {env === 'sandbox' ? t('providers.env.sandbox') : t('providers.env.production')}
                   </button>
                 ))}
               </div>
@@ -349,7 +350,7 @@ export default function ProvidersPage() {
                     }}
                   />
                   <div style={{ fontSize: 9, color: 'var(--text-dim)', marginTop: 2 }}>
-                    Laissez vide pour conserver la valeur existante
+                    {t('providers.keepValue')}
                   </div>
                 </div>
               ))}
@@ -370,14 +371,14 @@ export default function ProvidersPage() {
                 onClick={submitConfig}
                 disabled={configSubmitLoading}
               >
-                {configSubmitLoading ? 'Enregistrement...' : '✓ Enregistrer'}
+                {configSubmitLoading ? t('providers.saving') : t('providers.save')}
               </button>
               <button
                 className="btn btn-ghost"
                 onClick={() => setConfigOpen(false)}
                 style={{ fontSize: 12 }}
               >
-                Annuler
+                {t('providers.cancel')}
               </button>
             </div>
           </div>

@@ -168,63 +168,21 @@ final class IntentEngine
         'TH' => ['name' => 'Thaïlande',            'dial' => '+66',  'currency' => 'THB', 'currency_name' => 'Baht thaïlandais',        'symbol' => '฿'],
     ];
 
-    // ── Taux de conversion (1 EUR = X) — taux de démonstration ────────────
-    private const RATES_FROM_EUR = [
-        'EUR'  => 1.0,
-        'USD'  => 1.0870,
-        'GBP'  => 0.8550,
-        'XAF'  => 655.957,
-        'XOF'  => 655.957,
-        'NGN'  => 1650.0,
-        'GHS'  => 14.80,
-        'KES'  => 141.0,
-        'UGX'  => 4050.0,
-        'TZS'  => 2900.0,
-        'ZMW'  => 25.50,
-        'ZAR'  => 19.80,
-        'RWF'  => 1430.0,
-        'JOD'  => 0.770,
-        'MAD'  => 10.70,
-        'TND'  => 3.35,
-        'CAD'  => 1.490,
-        'AUD'  => 1.640,
-        'SGD'  => 1.470,
-        'JPY'  => 162.0,
-        'BRL'  => 5.85,
-        'MXN'  => 20.10,
-        'COP'  => 4350.0,
-        'ARS'  => 1080.0,
-        'CLP'  => 980.0,
-        'PEN'  => 4.05,
-        'UYU'  => 47.0,
-        'IDR'  => 17200.0,
-        'PHP'  => 61.50,
-        'MYR'  => 4.95,
-        'THB'  => 38.0,
-        'GNF'  => 9250.0,
-        'CZK'  => 25.10,
-        'DKK'  => 7.46,
-        'HUF'  => 395.0,
-        'PLN'  => 4.28,
-        'RON'  => 4.97,
-        'SEK'  => 11.40,
-        'BGN'  => 1.96,
-        'USDT' => 1.0870,
-        'USDC' => 1.0870,
-    ];
-
-    /** Pourcentage de frais estimés (pour l'affichage dans le formulaire). */
-    public const FEE_ESTIMATE_PCT = 1.5;
-
     private function __construct() {}
 
     /**
      * Retourne la couverture complète des providers : pays, devises,
      * modes de réception, opérateurs et taux de conversion.
      *
-     * @return array{countries: list<array>, source_currencies: list<string>, crypto_networks: list<string>, rates: array<string, float>, fee_estimate_pct: float}
+     * AUCUN TAUX DE DÉMONSTRATION (§7) : `rates` ne contient que les taux
+     * RÉELS disponibles dans l'environnement donné (devises de référence du
+     * portefeuille, EUR = identité). Une devise sans taux n'y figure pas ;
+     * l'estimation du formulaire affiche alors « non disponible » jusqu'au
+     * calcul réel des routes.
+     *
+     * @return array{countries: list<array>, source_currencies: list<string>, crypto_networks: list<string>, rates: array<string, float>}
      */
-    public static function coverage(): array
+    public static function coverage(?\Nexus\Execution\ExecutionEnvironment $environment = null): array
     {
         // 1. Collecter la couverture de chaque provider (avec expansion EU)
         $countryProviders = []; // countryCode => [slug => providerInfo]
@@ -281,6 +239,19 @@ final class IntentEngine
         // Tri alphabétique par nom
         usort($countries, static fn (array $a, array $b): int => mb_strtolower($a['name']) <=> mb_strtolower($b['name']));
 
+        // Taux RÉELS de l'environnement (jamais de tableau statique, §7) :
+        // seules les paires résolues par la source FX y figurent.
+        $environment ??= \Nexus\Execution\ExecutionEnvironment::fromString(
+            \Nexus\Providers\ProviderConfig::defaultEnvironment()
+        );
+        $rates = [];
+        foreach (Currency::WALLET_CURRENCIES as $currency) {
+            $rate = \Nexus\Services\FXService::rateToRef($currency, $environment);
+            if ($rate !== null) {
+                $rates[$currency] = $rate;
+            }
+        }
+
         return [
             'countries'         => $countries,
             'source_currencies' => Currency::WALLET_CURRENCIES,
@@ -288,8 +259,7 @@ final class IntentEngine
                 'Ethereum', 'Polygon', 'Arbitrum', 'Optimism',
                 'BNB Smart Chain', 'Tron', 'Solana', 'Bitcoin', 'Base',
             ],
-            'rates'             => self::RATES_FROM_EUR,
-            'fee_estimate_pct'  => self::FEE_ESTIMATE_PCT,
+            'rates'             => $rates,
         ];
     }
 

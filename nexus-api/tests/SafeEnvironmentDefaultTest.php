@@ -132,31 +132,27 @@ final class SafeEnvironmentDefaultTest extends TestCase
     }
 
     /**
-     * Le seeder de démonstration doit marquer ses transactions comme
-     * sandbox, explicitement.
+     * PLUS AUCUN seeder de démonstration : l'inscription ne crée ni
+     * transactions fictives ni bonus de bienvenue (§9 du brief).
      *
-     * Le défaut SQL sûr suffirait aujourd'hui, mais un défaut est une
-     * protection passive : si quelqu'un le remet à 'production', le seeder
-     * doit rester correct par lui-même. Ceinture ET bretelles, parce que
-     * cette donnée est fictive par nature.
+     * Le seeder historique (`seedDemoTransactions`) a été supprimé : une
+     * donnée fictive marquée « sandbox » reste une donnée fictive, et le
+     * brief l'interdit quelle que soit son étiquette d'environnement.
      */
-    public function test_the_demo_seeder_marks_its_transactions_explicitly(): void
+    public function test_no_demo_seeder_writes_transactions_on_registration(): void
     {
         $source = file_get_contents(__DIR__ . '/../src/Controllers/AuthController.php');
         $this->assertIsString($source);
 
-        // La liste de colonnes du seeder doit inclure `environment`.
-        $this->assertMatchesRegularExpression(
-            '/INSERT INTO transactions.{0,400}environment\)/s',
+        $this->assertStringNotContainsString(
+            'seedDemoTransactions',
             $source,
-            'Le seeder de démo doit fournir la colonne environment explicitement.'
+            'Le seeder de démo a été supprimé : l\'inscription ne doit plus écrire de transactions fictives.'
         );
-
-        // Le littéral est échappé dans la requête PHP : \'sandbox\'
-        $this->assertMatchesRegularExpression(
-            "/\\\\'sandbox\\\\'\\)/",
+        $this->assertStringNotContainsString(
+            'seedDemoNotifications',
             $source,
-            'Les transactions de démonstration doivent être marquées sandbox.'
+            'Le seeder de démo a été supprimé : l\'inscription ne doit plus écrire de notifications fictives.'
         );
     }
 
