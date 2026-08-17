@@ -385,8 +385,16 @@ PHP;
             $this->assertSame(0.0, $wallet['pending']);
             $this->assertSame(0.0, $wallet['in_transit']);
             $this->assertSame(0.0, $wallet['settlement']);
-            $this->assertSame(0.0, $wallet['ref_equivalent']);
             $this->assertFalse($wallet['has_funds']);
+
+            // Sans source FX configurée, l'équivalent EUR d'un wallet est
+            // « indisponible » (null) — jamais une valeur inventée (§9).
+            // Seule l'EUR bénéficie de l'identité (1 EUR = 1 EUR).
+            if ($wallet['currency'] === 'EUR') {
+                $this->assertSame(0.0, $wallet['ref_equivalent']);
+            } else {
+                $this->assertNull($wallet['ref_equivalent']);
+            }
         }
 
         $this->assertSame(0.0, $response['totals']['total_ref']);
@@ -472,6 +480,20 @@ PHP;
 
     public function test_index_calcule_ref_equivalent_en_eur(): void
     {
+        // Source FX réelle : 1 EUR = 1.087 USD (table fx_rates_cache).
+        $stmt = $this->pdo->prepare(
+            'INSERT INTO fx_rates_cache (base_currency, quote_currency, rate, spread_pct, source, fetched_at, expires_at)
+             VALUES (:b, :q, :r, :s, :src, NOW(), DATE_ADD(NOW(), INTERVAL 1 DAY))'
+        );
+        $stmt->execute([
+            'b'   => 'EUR',
+            'q'   => 'USD',
+            'r'   => '1.08700000',
+            's'   => '0.0000',
+            'src' => 'fx_provider_test',
+        ]);
+        $fxRow = (int) $this->pdo->lastInsertId();
+
         $u = $this->createUser($this->uniqueSuffix());
         $this->createWallet($u, 'EUR', '100.00');
         $this->createWallet($u, 'USD', '100.00');
@@ -489,6 +511,9 @@ PHP;
         $this->assertSame(92.0,  $byCurrency['USD']['ref_equivalent']);
         $this->assertSame(192.0, $response['totals']['total_ref']);
         $this->assertSame(192.0, $response['totals']['available_ref']);
+
+        // Nettoyage du taux de test.
+        $this->pdo->prepare('DELETE FROM fx_rates_cache WHERE id = ?')->execute([$fxRow]);
     }
 
     public function test_index_currencies_with_funds(): void

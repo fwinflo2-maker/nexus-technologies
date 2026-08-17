@@ -6,7 +6,6 @@ namespace Nexus\Controllers;
 
 use Nexus\Auth\AuthMiddleware;
 use Nexus\Auth\Jwt;
-use Nexus\Core\Currency;
 use Nexus\Core\Database;
 use Nexus\Core\Request;
 use Nexus\Core\Response;
@@ -30,30 +29,6 @@ final class AuthController
 
     /** Types de compte acceptés à l'inscription. */
     private const ALLOWED_ACCOUNT_TYPES = ['personal', 'business'];
-
-    /** Wallets de bienvenue (données de démonstration). */
-    private const WELCOME_WALLETS = [
-        ['currency' => 'EUR',  'amount' => '2500.00'],
-        ['currency' => 'USD',  'amount' => '1200.00'],
-        ['currency' => 'GBP',  'amount' => '500.00'],
-        ['currency' => 'XAF',  'amount' => '1500000.00'],
-        ['currency' => 'USDT', 'amount' => '1200.00'],
-        ['currency' => 'USDC', 'amount' => '500.00'],
-    ];
-
-    /**
-     * Transactions de bienvenue (données de démonstration) : alimentent le
-     * dashboard (KPIs, activité, historique) dès l'inscription.
-     *
-     * @var list<array{type: string, direction: string, label: string, provider: string, destination: string, amount: float, currency: string, status: string, execution_time: int, hours_ago: int}>
-     */
-    private const DEMO_TRANSACTIONS = [
-        ['type' => 'receive', 'direction' => 'in',  'label' => 'Réception SEPA',       'provider' => 'Swan',           'destination' => 'Virement entrant',        'amount' => 1200, 'currency' => 'EUR',  'status' => 'completed',  'execution_time' => 45,   'hours_ago' => 5],
-        ['type' => 'send',    'direction' => 'out', 'label' => 'Envoi Mobile Money',   'provider' => 'pawaPay',        'destination' => 'Congo — +242 06 123456', 'amount' => 500,  'currency' => 'EUR',  'status' => 'completed',  'execution_time' => 180,  'hours_ago' => 2],
-        ['type' => 'send',    'direction' => 'out', 'label' => 'Paiement fournisseur', 'provider' => 'Thunes',          'destination' => 'Thunes — XAF',             'amount' => 750,  'currency' => 'EUR',  'status' => 'processing', 'execution_time' => null, 'hours_ago' => 1],
-        ['type' => 'fx',      'direction' => 'fx',  'label' => 'Conversion FX',        'provider' => 'Currencycloud',  'destination' => 'EUR → USD',                'amount' => 300,  'currency' => 'EUR',  'status' => 'completed',  'execution_time' => 95,   'hours_ago' => 26],
-        ['type' => 'receive', 'direction' => 'in',  'label' => 'Reçu — Mobile Money',  'provider' => 'pawaPay',        'destination' => '+242 06 654321',          'amount' => 120,  'currency' => 'EUR',  'status' => 'completed',  'execution_time' => 60,   'hours_ago' => 49],
-    ];
 
     /** POST /api/register — crée un compte + wallets de démo. */
     public static function register(Request $request): void
@@ -156,45 +131,10 @@ final class AuthController
             ]);
             $userId = (int) $pdo->lastInsertId();
 
-            // Remplacement des INSERT directs par WalletService et LedgerService
-            // §29 : les wallets de bienvenue sont un jeu de démonstration —
-            // jamais crédités automatiquement en production.
-            foreach (\Nexus\Core\DemoMode::seedingAllowed() ? self::WELCOME_WALLETS : [] as $wallet) {
-                $currency = $wallet['currency'];
-                $amount   = $wallet['amount'];
-
-                // 1. Garantie de l'existence du wallet
-                $w = \Nexus\Services\WalletService::ensureWallet($userId, $currency);
-
-                // 2. Crédit initial via LedgerService
-                // L'environnement est fourni EXPLICITEMENT (= sandbox).
-                // Sans contexte, LedgerService::credit() retombe sur
-                // ProviderConfig::defaultEnvironment() : sur un déploiement
-                // dont PROVIDERS_ENV vaut « production », un bonus fictif de
-                // 2500 EUR était écrit au ledger en ARGENT RÉEL. La boucle 17
-                // avait corrigé seedDemoTransactions(), mais ce chemin-ci
-                // passe par le ledger et avait été manqué.
-                \Nexus\Services\LedgerService::credit(
-                    $userId,
-                    $w['id'],
-                    $amount,
-                    $currency,
-                    'welcome_bonus',
-                    'welcome_bonus:register:' . $userId . ':' . $currency,
-                    'Bonus de bienvenue à l\'inscription',
-                    ['source' => 'registration_seed'],
-                    \Nexus\Execution\ExecutionContext::explicit(
-                        actorUserId: $userId,
-                        environment: \Nexus\Execution\ExecutionEnvironment::SANDBOX,
-                        accountType: $accountType
-                    )
-                );
-            }
-
-            self::seedDemoTransactions($pdo, $userId);
-
-            // Comptes de démo (sources & destinations)
-            AccountController::seedDemoAccountsAtLogin($pdo, $userId);
+            // AUCUNE donnée de démonstration n'est injectée à l'inscription
+            // (§9) : ni wallets de bienvenue, ni transactions fictives, ni
+            // comptes de démo. Un compte frais part de zéro ; les soldes et
+            // l'historique ne reflètent que des opérations réelles.
 
             $pdo->commit();
         } catch (PDOException $e) {
@@ -301,13 +241,6 @@ final class AuthController
         $userId = (int) $user['id'];
         self::audit($userId, 'auth.login', 'users', $userId, [$lookupKey => $identifier], $request);
 
-        // Notifications de démo au premier login (idempotent : uniquement si
-        // l'utilisateur n'a encore aucune notification).
-        NotificationController::seedDemoNotificationsIfEmpty($pdo, $userId);
-
-        // Comptes de démo (sources & destinations) — idempotent.
-        AccountController::seedDemoAccountsAtLogin($pdo, $userId);
-
         $token = Jwt::encode(['sub' => $userId]);
 
         Response::success([
@@ -359,68 +292,6 @@ final class AuthController
         $user = $stmt->fetch();
 
         return $user === false ? null : $user;
-    }
-
-    /**
-     * Insère les transactions de démonstration de bienvenue.
-     *
-     * À appeler dans la même transaction que la création du compte :
-     * les agrégats du dashboard (KPIs, activité, historique) sont ainsi
-     * alimentés dès l'inscription.
-     */
-    private static function seedDemoTransactions(\PDO $pdo, int $userId): void
-    {
-        // §29 : jamais de données de démonstration en production.
-        if (!\Nexus\Core\DemoMode::seedingAllowed()) {
-            return;
-        }
-
-        $stmt = $pdo->prepare(
-            // `environment` est fourni EXPLICITEMENT.
-            //
-            // La colonne a pour défaut 'production' : omettre le champ
-            // marquait ces transactions de démonstration comme de l'argent
-            // réel. Vérifié en base avant correctif — 5 lignes de démo en
-            // `production` après une simple inscription. Elles apparaissaient
-            // donc dans les vues production et dans les totaux comptables.
-            'INSERT INTO transactions
-                (user_id, type, direction, label, description, amount, currency,
-                 amount_ref, ref_currency, amount_xaf, fee, fee_currency,
-                 status, provider, destination, execution_time_seconds, created_at,
-                 environment)
-             VALUES
-                (:user_id, :type, :direction, :label, :description, :amount, :currency,
-                 :amount_ref, :ref_currency, :amount_xaf, :fee, :fee_currency,
-                 :status, :provider, :destination, :execution_time, :created_at,
-                 \'sandbox\')'
-        );
-
-        foreach (self::DEMO_TRANSACTIONS as $tx) {
-            $amount    = (float) $tx['amount'];
-            $currency  = $tx['currency'];
-            $fee       = round($amount * 0.015, 2);   // ~1,5 % de frais de démo.
-            $createdAt = gmdate('Y-m-d H:i:s', time() - ((int) $tx['hours_ago'] * 3600));
-
-            $stmt->execute([
-                'user_id'        => $userId,
-                'type'           => $tx['type'],
-                'direction'      => $tx['direction'],
-                'label'          => $tx['label'],
-                'description'    => 'Transaction de bienvenue (démo)',
-                'amount'         => (string) $amount,
-                'currency'       => $currency,
-                'amount_ref'     => (string) round($amount * Currency::rateToRef($currency), 2),
-                'ref_currency'   => Currency::REF,
-                'amount_xaf'     => (string) round($amount * Currency::rateToXaf($currency), 2),
-                'fee'            => (string) $fee,
-                'fee_currency'   => $currency,
-                'status'         => $tx['status'],
-                'provider'       => $tx['provider'],
-                'destination'    => $tx['destination'],
-                'execution_time' => $tx['execution_time'] > 0 ? $tx['execution_time'] : null,
-                'created_at'     => $createdAt,
-            ]);
-        }
     }
 
     /** Retire les champs sensibles avant envoi au client. */

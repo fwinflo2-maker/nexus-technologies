@@ -9,7 +9,10 @@ use Nexus\Core\Database;
 use Nexus\Core\HttpException;
 use Nexus\Execution\EnvironmentGuard;
 use Nexus\Execution\ExecutionContext;
+use Nexus\Execution\ExecutionEnvironment;
 use Nexus\Providers\ProviderConfig;
+use Nexus\Providers\ProviderOperationNotImplemented;
+use Nexus\Providers\ProviderRegistry;
 use PDO;
 use RuntimeException;
 use Throwable;
@@ -266,6 +269,15 @@ final class ExecutionEngine
             $context
         );
 
+        // ── 2bis. Appel provider RÉEL : hold → provider → capture (§6) ──
+        // Le pipeline n'est jamais « hold → capture → succès » sans passer
+        // par le provider. Sans provider configuré pour cet environnement,
+        // l'exécution REFUSE (NO_AVAILABLE_PROVIDER) et aucune transaction
+        // n'est créée. Avec un provider configuré, la capture ne s'exécute
+        // que sur une réponse réelle du provider ; toute intégration non
+        // implémentée ou en échec fait échouer l'opération (PROVIDER_ERROR).
+        self::callProvider($provider, $sourceCurrency, $destCurrency, $amountSent, $destination, $operationId, $context);
+
         WalletService::captureHold((string) $hold['operation_id'], $userId, $captureIdemKey, $context);
 
         // ── 3. Écriture comptable dashboard (table transactions) ─────
@@ -293,6 +305,76 @@ final class ExecutionEngine
         self::notify($pdo, $userId, $sourceCurrency, $destCurrency, $destAmount, $provider !== '' ? $provider : null);
 
         return $txId;
+    }
+
+    /**
+     * Vérrou provider + appel réel avant règlement (§6).
+     *
+     * Exécuté DANS la transaction PDO ouverte : un échec (provider non
+     * configuré, intégration non implémentée, refus de l'API) fait échouer
+     * l'opération et restaure l'état initial — aucun hold ne subsiste, aucun
+     * ledger n'est écrit, aucune transaction n'est créée.
+     *
+     * @throws HttpException NO_AVAILABLE_PROVIDER / PROVIDER_ERROR
+     */
+    private static function callProvider(
+        string $provider,
+        string $sourceCurrency,
+        string $destCurrency,
+        string $amountSent,
+        string $destination,
+        string $operationId,
+        ?ExecutionContext $context
+    ): void {
+        if ($provider === '') {
+            throw new HttpException(
+                409,
+                'Aucun provider n\'est associé à cette route : l\'opération ne peut pas être exécutée.',
+                'NO_AVAILABLE_PROVIDER'
+            );
+        }
+
+        if (!ProviderRegistry::isConfigured($provider)) {
+            throw new HttpException(
+                409,
+                sprintf(
+                    'Le provider « %s » n\'est pas configuré pour l\'environnement « %s » : aucune transaction ne sera créée.',
+                    $provider,
+                    $context?->environmentValue() ?? ProviderConfig::defaultEnvironment()
+                ),
+                'NO_AVAILABLE_PROVIDER'
+            );
+        }
+
+        $params = [
+            'operation_id' => $operationId,
+            'amount'       => $amountSent,
+            'currency'     => $sourceCurrency,
+            'dest_currency'=> $destCurrency,
+            'destination'  => $destination,
+            'environment'  => $context?->environmentValue() ?? ProviderConfig::defaultEnvironment(),
+        ];
+
+        try {
+            ProviderRegistry::adapter($provider)->createPayment($params);
+        } catch (ProviderOperationNotImplemented $e) {
+            // Intégration pas encore câblée : refus explicite, jamais de
+            // succès simulé.
+            throw new HttpException(
+                503,
+                sprintf('L\'intégration du provider « %s » n\'est pas encore implémentée.', $provider),
+                'PROVIDER_ERROR'
+            );
+        } catch (HttpException $e) {
+            throw $e;
+        } catch (Throwable $e) {
+            error_log('[NEXUS execution] provider ' . $provider . ' : ' . $e->getMessage());
+            throw new HttpException(
+                502,
+                sprintf('Le provider « %s » a refusé ou échoué l\'opération. Aucune transaction n\'a été créée.', $provider),
+                'PROVIDER_ERROR'
+            );
+        }
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -368,9 +450,23 @@ final class ExecutionEngine
         $destCurrency   = strtoupper((string) $quote['dest_currency']);
         $amountSent     = (string) $quote['amount_sent'];
 
+        // Les frais du barème sont libellés en EUR : leur conversion dans la
+        // devise source exige un taux EUR→devise RÉEL (§7). Sans taux, la
+        // quote ne peut pas être réglée : refus explicite. L'environnement
+        // de la quote est la référence (jamais le défaut serveur).
         $feeEur  = (float) ($route['feesNum'] ?? 0);
-        $rateRef = Currency::rateToRef($sourceCurrency);
-        $feeSource = $rateRef > 0.0 ? bcdiv((string) $feeEur, (string) $rateRef, 8) : '0.00000000';
+        $env     = ExecutionEnvironment::fromString((string) ($quote['environment'] ?? ProviderConfig::defaultEnvironment()));
+        $rateRef = FXService::rateToRef($sourceCurrency, $env);
+        if ($rateRef === null && strtoupper($sourceCurrency) !== 'EUR') {
+            throw new HttpException(
+                503,
+                sprintf('Aucun taux de change disponible pour %s : frais non calculables.', $sourceCurrency),
+                'FX_RATE_UNAVAILABLE'
+            );
+        }
+        $rateRef ??= 1.0;
+        // 1 EUR = X devise → feeSource = feeEur × X.
+        $feeSource = $feeEur > 0.0 ? bcmul((string) $feeEur, (string) $rateRef, 8) : '0.00000000';
 
         return [
             'source_currency' => $sourceCurrency,
@@ -423,10 +519,16 @@ final class ExecutionEngine
         float $startedAt,
         ?ExecutionContext $context = null
     ): int {
-        $rateRef   = Currency::rateToRef($sourceCurrency);
-        $rateXaf   = Currency::rateToXaf($sourceCurrency);
-        $amountRef = round((float) $amountSent * $rateRef, 2);
-        $amountXaf = round((float) $amountSent * $rateXaf, 2);
+        // Projections de référence (§7, §9) : calculées avec les taux RÉELS
+        // de l'environnement. Quand aucune conversion n'est disponible, les
+        // colonnes NOT NULL conservent leur défaut 0.00 (projection interne
+        // d'agrégation — le montant réel reste `amount`/`currency`).
+        $env       = $context?->environmentValue() ?? ProviderConfig::defaultEnvironment();
+        $execEnv   = ExecutionEnvironment::fromString($env);
+        $rateRef   = FXService::rateToRef($sourceCurrency, $execEnv);
+        $rateXaf   = FXService::rateToXaf($sourceCurrency, $execEnv);
+        $amountRef = $rateRef !== null ? round((float) $amountSent / $rateRef, 2) : 0.0;
+        $amountXaf = $rateXaf !== null ? round((float) $amountSent * $rateXaf, 2) : 0.0;
         $fee2      = round((float) $feeSource, 2);
         $execSec   = max(1, (int) round(microtime(true) - $startedAt));
 

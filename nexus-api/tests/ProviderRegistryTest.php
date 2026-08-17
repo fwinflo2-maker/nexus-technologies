@@ -258,20 +258,19 @@ final class ProviderRegistryTest extends TestCase
         $this->assertSame(['pawapay'], $slugs);
     }
 
-    // ── 5. DÉMO MODE impossible en production ───────────────────────────────
+    // ── 5. AUCUN mode démo : catalogue ≠ opérationnel (§10) ─────────────────
 
-    public function test_demo_mode_impossible_in_production(): void
+    public function test_no_provider_is_routable_without_configuration(): void
     {
-        // Simulation production : APP_ENV=production (aucun provider configuré).
+        // Le « mode démo » historique (tout le catalogue éligible tant qu'aucun
+        // provider n'était configuré) est supprimé : sans credentials, AUCUN
+        // provider du catalogue ne participe au routing, dans aucun environnement.
         putenv('APP_ENV=production');
 
         try {
-            // Le mode strict est forcé en production, même sans provider.
-            $this->assertTrue(ProviderRegistry::isStrictMode());
-            // Aucun provider n'étant configuré, AUCUN n'est routable.
             $this->assertFalse(ProviderRegistry::isAvailableForRouting('stripe'));
             $this->assertFalse(ProviderRegistry::isAvailableForRouting('pawapay'));
-            // Le CapabilityEngine doit REFUSER (aucun provider éligible).
+            // Le CapabilityEngine doit REFUSER (provider configuré requis).
             try {
                 \Nexus\Services\CapabilityEngine::findEligible([
                     'amount'          => 100.0,
@@ -281,9 +280,9 @@ final class ProviderRegistryTest extends TestCase
                     'receivingMethod' => 'mobile_money',
                     'objective'       => 'optimized',
                 ]);
-                $this->fail('Le CapabilityEngine aurait dû refuser (NO_PROVIDER) en production sans provider configuré.');
+                $this->fail('Le CapabilityEngine aurait dû refuser sans provider configuré.');
             } catch (\Nexus\Core\HttpException $e) {
-                $this->assertSame('NO_PROVIDER', $e->errorCode());
+                $this->assertSame('NO_AVAILABLE_PROVIDER', $e->errorCode());
             }
         } finally {
             putenv('APP_ENV');
@@ -292,12 +291,14 @@ final class ProviderRegistryTest extends TestCase
 
     // ── Mode strict & disponibilité pour le routing ─────────────────────────
 
-    public function test_strict_mode_off_when_no_provider_configured(): void
+    public function test_catalog_alone_never_makes_a_provider_routable(): void
     {
         $this->assertFalse(ProviderRegistry::isStrictMode());
-        // En mode démo, tous les providers du catalogue sont disponibles.
-        $this->assertTrue(ProviderRegistry::isAvailableForRouting('stripe'));
-        $this->assertTrue(ProviderRegistry::isAvailableForRouting('pawapay'));
+        // Présence au catalogue ≠ opérationnel : sans configuration, un
+        // provider n'est JAMAIS disponible pour le routing (§10).
+        $this->assertFalse(ProviderRegistry::isAvailableForRouting('stripe'));
+        $this->assertFalse(ProviderRegistry::isAvailableForRouting('pawapay'));
+        $this->assertFalse(ProviderRegistry::isConfigured('stripe'));
     }
 
     public function test_strict_mode_on_and_routing_filtered(): void

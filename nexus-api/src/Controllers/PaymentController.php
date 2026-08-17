@@ -13,6 +13,7 @@ use Nexus\Core\Response;
 use Nexus\Execution\EnvironmentGuard;
 use Nexus\Execution\ExecutionContext;
 use Nexus\Services\BusinessService;
+use Nexus\Services\FXService;
 use PDO;
 use Throwable;
 
@@ -122,9 +123,11 @@ final class PaymentController
         $intent = $quote['intent'];
 
         // Frais en devise source (le quote exprime les frais en EUR).
-        $rateRef  = Currency::rateToRef((string) $intent['sourceCurrency']);
-        $feeSource = $rateRef > 0.0 ? round((float) ($best['feesNum'] ?? 0) / $rateRef, 2) : 0.0;
-        $amountRef = round((float) $intent['amount'] * $rateRef, 2);
+        // Taux RÉEL de l'environnement ; sans taux, aucune conversion
+        // inventée (§7) : les projections restent à 0.00.
+        $rateRef   = FXService::rateToRef((string) $intent['sourceCurrency'], $context->environment);
+        $feeSource = $rateRef !== null && $rateRef > 0.0 ? round((float) ($best['feesNum'] ?? 0) / $rateRef, 2) : 0.0;
+        $amountRef = $rateRef !== null && $rateRef > 0.0 ? round((float) $intent['amount'] * $rateRef, 2) : 0.0;
 
         $ins = $pdo->prepare(
             'INSERT INTO payments

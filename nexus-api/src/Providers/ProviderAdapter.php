@@ -32,6 +32,20 @@ interface ProviderAdapter
     /** Health check : configuration + connectivité (si activée). */
     public function healthCheck(): array;
 
+    /**
+     * Test de connexion RÉEL : appelle l'API du provider avec les
+     * credentials (fournies par le dashboard, sinon l'environnement).
+     *
+     * Ne retourne JAMAIS un succès sans vérification réelle (§5).
+     * Statuts : CONNECTION_SUCCESS | INVALID_CREDENTIALS | UNAUTHORIZED |
+     *           PROVIDER_UNAVAILABLE | TIMEOUT | CONFIGURATION_ERROR |
+     *           PROVIDER_NOT_CONFIGURED.
+     *
+     * @param array<string,string>|null $credentials Credentials déchiffrées
+     *        (dashboard SuperAdmin) ; null/absent → repli sur l'environnement.
+     */
+    public function testConnection(string $environment, ?array $credentials = null): array;
+
     // ── Opérations métier (réservées — non implémentées à ce stade) ──
 
     public function getQuote(array $intent): array;

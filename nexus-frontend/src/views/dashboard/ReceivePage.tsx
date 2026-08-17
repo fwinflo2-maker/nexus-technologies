@@ -4,6 +4,7 @@ import {
   apiAccountsList,
   type PaymentAccount,
 } from '../../api/client';
+import { useDashT } from '../../data/dashboard-i18n';
 
 /**
  * ReceivePage — Recevoir de l'argent sur NEXUS.
@@ -25,6 +26,7 @@ const CURRENCY_META: Record<string, { flag: string; symbol: string; label: strin
 };
 
 export default function ReceivePage() {
+  const t = useDashT();
   const [selectedCurrency, setSelectedCurrency] = useState<string>('EUR');
   const [accounts, setAccounts] = useState<PaymentAccount[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,9 +71,9 @@ export default function ReceivePage() {
         variants={fadeInUp}
       >
         <div className="page-label">NEXUS</div>
-        <div className="page-title">Recevoir un transfert</div>
+        <div className="page-title">{t('receive.title')}</div>
         <p style={{ marginTop: 10, fontSize: 13, color: 'var(--text-mid)', maxWidth: 520 }}>
-          Partagez vos coordonnées de réception pour recevoir des fonds depuis l'étranger ou localement.
+          {t('receive.subtitle')}
         </p>
       </motion.div>
 
@@ -83,7 +85,7 @@ export default function ReceivePage() {
         animate="visible"
         variants={fadeInUp}
       >
-        <div className="page-label" style={{ marginBottom: 12 }}>Choisissez votre devise de réception</div>
+        <div className="page-label" style={{ marginBottom: 12 }}>{t('receive.pickCurrency')}</div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {Object.entries(CURRENCY_META).map(([code, meta]) => (
             <button
@@ -105,7 +107,7 @@ export default function ReceivePage() {
       {loading ? (
         <div className="card card-hi-c" style={{ padding: 40, textAlign: 'center' }}>
           <div className="nexus-spinner" />
-          <p style={{ marginTop: 16, color: 'var(--text-mid)' }}>Chargement de vos comptes de réception…</p>
+          <p style={{ marginTop: 16, color: 'var(--text-mid)' }}>{t('receive.loading')}</p>
         </div>
       ) : filteredAccounts.length === 0 ? (
         <motion.div 
@@ -115,12 +117,11 @@ export default function ReceivePage() {
           animate={{ opacity: 1, scale: 1 }}
         >
           <div style={{ fontSize: 48, marginBottom: 16 }}>📭</div>
-          <h3 style={{ color: 'var(--text-bright)', marginBottom: 8 }}>Aucun compte de réception</h3>
+          <h3 style={{ color: 'var(--text-bright)', marginBottom: 8 }}>{t('receive.empty.title')}</h3>
           <p style={{ color: 'var(--text-mid)', marginBottom: 20, maxWidth: 420 }}>
-            Vous n'avez pas encore configuré de compte pour recevoir des fonds en {selectedCurrency}.
-            Ajoutez un compte bancaire, Mobile Money ou wallet crypto dans vos paramètres.
+            {t('receive.empty.text', { currency: selectedCurrency })}
           </p>
-          <a href="/settings" className="btn btn-cyan">Configurer un compte</a>
+          <a href="/settings" className="btn btn-cyan">{t('receive.configure')}</a>
         </motion.div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -137,15 +138,15 @@ export default function ReceivePage() {
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                     <span style={{ fontSize: 20 }}>{account.kind === 'bank_iban' ? '🏦' : account.kind === 'mobile_money' ? '📱' : '🔐'}</span>
-                    <span className="mono" style={{ fontSize: 14, color: 'var(--cyan)' }}>{account.kind.replace('_', ' ').toUpperCase()}</span>
+                    <span className="mono" style={{ fontSize: 14, color: 'var(--cyan)' }}>{account.kind === 'bank_iban' ? t('method.bank').toUpperCase() : account.kind === 'mobile_money' ? t('method.mobile_money').toUpperCase() : t('method.crypto').toUpperCase()}</span>
                   </div>
                   <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-bright)' }}>{account.label}</div>
                   {account.holder_name && (
-                    <div style={{ fontSize: 12, color: 'var(--text-mid)', marginTop: 2 }}>Titulaire : {account.holder_name}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-mid)', marginTop: 2 }}>{t('receive.holder', { name: account.holder_name })}</div>
                   )}
                 </div>
                 {account.is_default && (
-                  <span className="pill p-gr" style={{ fontSize: 11 }}>● Compte principal</span>
+                  <span className="pill p-gr" style={{ fontSize: 11 }}>{t('receive.main')}</span>
                 )}
               </div>
 
@@ -153,31 +154,31 @@ export default function ReceivePage() {
               <div style={{ background: 'rgba(0,0,0,0.3)', borderRadius: 8, padding: 12, marginBottom: 12 }}>
                 {account.iban_masked && (
                   <div style={{ marginBottom: 8 }}>
-                    <div style={{ fontSize: 10, color: 'var(--text-dim)', textTransform: 'uppercase', marginBottom: 4 }}>IBAN</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-dim)', textTransform: 'uppercase', marginBottom: 4 }}>{t('receive.iban')}</div>
                     <div className="mono" style={{ fontSize: 14, color: 'var(--text-bright)', wordBreak: 'break-all' }}>{account.iban_masked}</div>
                   </div>
                 )}
                 {account.bic && (
                   <div style={{ marginBottom: 8 }}>
-                    <div style={{ fontSize: 10, color: 'var(--text-dim)', textTransform: 'uppercase', marginBottom: 4 }}>BIC / SWIFT</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-dim)', textTransform: 'uppercase', marginBottom: 4 }}>{t('receive.bic')}</div>
                     <div className="mono" style={{ fontSize: 14, color: 'var(--text-bright)' }}>{account.bic}</div>
                   </div>
                 )}
                 {account.phone_masked && (
                   <div style={{ marginBottom: 8 }}>
-                    <div style={{ fontSize: 10, color: 'var(--text-dim)', textTransform: 'uppercase', marginBottom: 4 }}>Téléphone</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-dim)', textTransform: 'uppercase', marginBottom: 4 }}>{t('receive.phone')}</div>
                     <div className="mono" style={{ fontSize: 14, color: 'var(--text-bright)' }}>{account.phone_masked}</div>
                   </div>
                 )}
                 {account.operator && (
                   <div style={{ marginBottom: 8 }}>
-                    <div style={{ fontSize: 10, color: 'var(--text-dim)', textTransform: 'uppercase', marginBottom: 4 }}>Opérateur</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-dim)', textTransform: 'uppercase', marginBottom: 4 }}>{t('receive.operator')}</div>
                     <div style={{ fontSize: 14, color: 'var(--text-bright)' }}>{account.operator}</div>
                   </div>
                 )}
                 {account.address_masked && (
                   <div>
-                    <div style={{ fontSize: 10, color: 'var(--text-dim)', textTransform: 'uppercase', marginBottom: 4 }}>Adresse</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-dim)', textTransform: 'uppercase', marginBottom: 4 }}>{t('receive.address')}</div>
                     <div style={{ fontSize: 14, color: 'var(--text-bright)' }}>{account.address_masked}</div>
                   </div>
                 )}
@@ -191,7 +192,7 @@ export default function ReceivePage() {
                     className="btn btn-sm btn-outline"
                     style={{ borderColor: copied?.startsWith('iban-' + account.id) ? 'var(--green)' : undefined, color: copied?.startsWith('iban-' + account.id) ? 'var(--green)' : undefined }}
                   >
-                    {copied?.startsWith('iban-' + account.id) ? '✓ Copié' : 'Copier IBAN'}
+                    {copied?.startsWith('iban-' + account.id) ? `✓ ${t('receive.copied')}` : t('receive.copyIban')}
                   </button>
                 )}
                 {account.phone_masked && (
@@ -200,19 +201,19 @@ export default function ReceivePage() {
                     className="btn btn-sm btn-outline"
                     style={{ borderColor: copied?.startsWith('phone-' + account.id) ? 'var(--green)' : undefined, color: copied?.startsWith('phone-' + account.id) ? 'var(--green)' : undefined }}
                   >
-                    {copied?.startsWith('phone-' + account.id) ? '✓ Copié' : 'Copier Téléphone'}
+                    {copied?.startsWith('phone-' + account.id) ? `✓ ${t('receive.copied')}` : t('receive.copyPhone')}
                   </button>
                 )}
-                <button className="btn btn-sm btn-cyan">Partager</button>
+                <button className="btn btn-sm btn-cyan">{t('receive.share')}</button>
               </div>
 
               {/* Statut */}
               <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>
-                  Statut : <span className={account.verification_status === 'verified' ? 'p-gr' : account.verification_status === 'pending' ? 'p-g' : 'p-r'}>{account.verification_status}</span>
+                  {t('receive.status')} : <span className={account.verification_status === 'verified' ? 'p-gr' : account.verification_status === 'pending' ? 'p-g' : 'p-r'}>{t(`status.${account.verification_status}`)}</span>
                 </div>
                 {account.country && (
-                  <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>Pays : {account.country.toUpperCase()}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{t('receive.countryLabel')} : {account.country.toUpperCase()}</div>
                 )}
               </div>
             </motion.div>
@@ -229,14 +230,14 @@ export default function ReceivePage() {
           animate={{ opacity: 1 }}
           transition={{ delay: 0.3 }}
         >
-          <div className="page-label" style={{ marginBottom: 12 }}>QR Code de réception</div>
+          <div className="page-label" style={{ marginBottom: 12 }}>{t('receive.qrTitle')}</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <div style={{ width: 120, height: 120, background: '#fff', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <span style={{ fontSize: 14, color: '#000', textAlign: 'center' }}>QR<br/>Code</span>
             </div>
             <div>
-              <div style={{ fontSize: 13, color: 'var(--text-bright)', marginBottom: 4 }}>Scannez ce code pour recevoir</div>
-              <div style={{ fontSize: 12, color: 'var(--text-mid)' }}>Fonctionnalité bientôt disponible</div>
+              <div style={{ fontSize: 13, color: 'var(--text-bright)', marginBottom: 4 }}>{t('receive.qrScan')}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-mid)' }}>{t('receive.qrSoon')}</div>
             </div>
           </div>
         </motion.div>

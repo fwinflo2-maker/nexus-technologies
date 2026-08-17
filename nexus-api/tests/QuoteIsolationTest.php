@@ -9,6 +9,7 @@ use Nexus\Core\HttpException;
 use Nexus\Execution\ExecutionContext;
 use Nexus\Execution\ExecutionEnvironment;
 use Nexus\Services\ExecutionEngine;
+use Nexus\Tests\Fixtures\UsesScriptedProvider;
 use PDO;
 use PHPUnit\Framework\TestCase;
 
@@ -24,6 +25,8 @@ use PHPUnit\Framework\TestCase;
  */
 final class QuoteIsolationTest extends TestCase
 {
+    use UsesScriptedProvider;
+
     private PDO $pdo;
     private int $ownerId = 0;
     private int $strangerId = 0;
@@ -32,6 +35,8 @@ final class QuoteIsolationTest extends TestCase
     {
         $this->pdo = Database::getConnection();
         putenv('PROVIDERS_ENV');
+        // Chemin nominal : provider réellement configuré, API scriptée.
+        $this->scriptStripe();
 
         $this->ownerId    = $this->createUser('owner');
         $this->strangerId = $this->createUser('stranger');
@@ -40,6 +45,7 @@ final class QuoteIsolationTest extends TestCase
 
     protected function tearDown(): void
     {
+        $this->unscriptStripe();
         putenv('PROVIDERS_ENV');
         foreach ([$this->ownerId, $this->strangerId] as $uid) {
             if ($uid <= 0) {

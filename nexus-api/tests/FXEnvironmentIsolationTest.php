@@ -162,14 +162,16 @@ final class FXEnvironmentIsolationTest extends TestCase
     }
 
     /**
-     * Le repli sur `ManualRateProvider` reste ouvert en sandbox : elle ne
-     * déplace aucun argent réel et doit rester utilisable sans configuration.
+     * Plus AUCUN repli manuel, même en sandbox : sans source FX réelle
+     * branchée, l'absence de taux produit un REFUS explicite (§7). La
+     * sandbox d'un provider réel n'existe que lorsque ses credentials
+     * sandbox sont configurées — jamais un taux codé en dur.
      */
-    public function test_la_sandbox_conserve_le_repli_manuel(): void
+    public function test_la_sandbox_sans_taux_refuse_de_coter(): void
     {
-        $rate = FXService::resolve('EUR', 'USD', ExecutionEnvironment::SANDBOX);
+        $this->expectException(RuntimeException::class);
 
-        self::assertSame('manual', $rate->getSource());
+        FXService::resolve('EUR', 'USD', ExecutionEnvironment::SANDBOX);
     }
 
     // ── Tests 7 et 8 : l'expiration respecte l'environnement ────────────────
@@ -184,16 +186,14 @@ final class FXEnvironmentIsolationTest extends TestCase
         $this->seed('EUR', 'XAF', '100.00000000', 'sandbox', -3600);   // expiré
         $this->seed('EUR', 'XAF', '777.00000000', 'production', 3600); // valide
 
-        $rate = FXService::resolve('EUR', 'XAF', ExecutionEnvironment::SANDBOX);
-
-        self::assertNotSame(
-            '777.00000000',
-            $rate->getRate(),
-            'Un taux sandbox expiré ne doit pas être remplacé par celui de production.'
-        );
-        self::assertNotSame(self::TEST_SOURCE, $rate->getSource());
-        // Elle retombe sur le provider manuel, qui connaît EUR/XAF.
-        self::assertSame('manual', $rate->getSource());
+        // La sandbox a un taux EXPIRÉ pour cette paire et AUCUN repli :
+        // elle refuse, et surtout ne lit pas le taux de production.
+        try {
+            FXService::resolve('EUR', 'XAF', ExecutionEnvironment::SANDBOX);
+            self::fail('Un taux sandbox expiré ne doit pas être remplacé par celui de production, ni par un taux codé en dur.');
+        } catch (RuntimeException $e) {
+            self::assertStringContainsString('EUR', $e->getMessage());
+        }
     }
 
     public function test_un_taux_production_expire_ne_bascule_pas_sur_la_sandbox(): void

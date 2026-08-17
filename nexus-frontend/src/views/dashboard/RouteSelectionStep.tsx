@@ -8,6 +8,8 @@ import {
   type QuoteData,
   type TransferTx,
 } from '../../api/client';
+import { useDashT, localeFor } from '../../data/dashboard-i18n';
+import { useI18n } from '../../context/I18nContext';
 
 /**
  * RouteSelectionStep — Étape du workflow /send affichant les routes
@@ -18,6 +20,7 @@ import {
  *   - Cartes de routes avec animations stagger
  *   - Compte à rebours HUD
  *   - Explication IA dynamique
+ * Tous les textes visibles passent par l'i18n.
  */
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -41,40 +44,28 @@ interface RouteSelectionStepProps {
   onBack: () => void;
 }
 
-// ─── Pipeline ───────────────────────────────────────────────────────────────
-
-const PIPELINE = [
-  { label: 'Intent Parser',         color: 'var(--cyan)' },
-  { label: 'Capability Engine',     color: 'var(--cyan)' },
-  { label: 'Policy Engine',         color: 'var(--gold)' },
-  { label: 'Quote Engine',          color: 'var(--violet)' },
-  { label: 'Routing Engine',        color: 'var(--violet)' },
-  { label: 'Optimization & Scoring', color: 'var(--gold)' },
-  { label: 'Routes présentées',     color: 'var(--green)' },
-];
-
-const MODE_LABELS: Record<string, string> = {
-  optimized: 'optimisé', fastest: 'plus rapide',
-  max_received: 'max reçu', cheapest: 'moins cher', most_reliable: 'plus fiable',
-};
+// ─── Pipeline (noms techniques des moteurs, dernier libellé localisé) ───────
 
 function formatCountdown(s: number): string {
   return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 }
 
+const OBJECTIVE_MODES = ['optimized', 'cheapest', 'fastest', 'max_received', 'most_reliable'] as const;
+
 // ─── Composants ─────────────────────────────────────────────────────────────
 
 /** Panneau « sécurisation » : message utilisateur, sans révéler les moteurs internes. */
 function SecureBadge({ loaded }: { loaded: boolean }) {
+  const t = useDashT();
   return (
     <div className="card" style={{ padding: 16 }}>
       <div className="page-label" style={{ marginBottom: 10 }}>
-        {loaded ? '✓ Votre envoi est sécurisé' : 'Sécurisation de votre envoi…'}
+        {loaded ? t('send.routes.secure.ok') : t('send.routes.secure.working')}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: 'var(--text-mid)', lineHeight: 1.5 }}>
         <span style={{ fontSize: 18 }}>🔒</span>
         <span>
-          Nous vérifions le meilleur itinéraire pour votre transfert : montant reçu maximum, frais réduits et délai le plus court. Vos informations restent confidentielles.
+          {t('send.routes.secure.text')}
         </span>
       </div>
     </div>
@@ -95,6 +86,7 @@ function RouteCard({
   onSelect: () => void;
   delay: number;
 }) {
+  const t = useDashT();
   return (
     <motion.div
       className={`rc se-route-card ${selected ? 'selected' : ''} ${recommended ? 'se-route-recommended' : ''}`}
@@ -111,23 +103,23 @@ function RouteCard({
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-bright)' }}>
-          {recommended ? <span style={{ color: 'var(--green)' }}>⭐ Recommandée</span> : 'Option de réception'}
+          {recommended ? <span style={{ color: 'var(--green)' }}>{t('send.routes.rec.recommended')}</span> : t('send.routes.rec.option')}
         </div>
         <span className={`pill ${route.badgeCls}`} style={{ fontSize: 8 }}>{route.badge}</span>
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
         <div>
-          <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>Montant reçu</div>
+          <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>{t('send.routes.rec.amount')}</div>
           <div style={{ fontSize: 20, fontWeight: 800, color: recommended ? 'var(--green)' : 'var(--text-bright)', fontFamily: 'var(--font-mono)' }}>
             {route.received}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 20 }}>
           {([
-            ['Frais', route.fees, 'var(--text-bright)'],
-            ['Délai', route.delay, 'var(--cyan)'],
-            ['Fiabilité', route.reliability, route.reliabilityColor],
+            [t('send.routes.rec.fees'), route.fees, 'var(--text-bright)'],
+            [t('send.routes.rec.delay'), route.delay, 'var(--cyan)'],
+            [t('send.routes.rec.reliability'), route.reliability, route.reliabilityColor],
           ] as [string, string, string][]).map(([lbl, val, col]) => (
             <div key={lbl} style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>{lbl}</div>
@@ -143,6 +135,22 @@ function RouteCard({
 // ─── Composant principal ────────────────────────────────────────────────────
 
 export default function RouteSelectionStep({ intent, onBack }: RouteSelectionStepProps) {
+  const t = useDashT();
+  const { lang } = useI18n();
+  const locale = localeFor(lang);
+
+  const pipeline = [
+    { label: 'Intent Parser', color: 'var(--cyan)' },
+    { label: 'Capability Engine', color: 'var(--cyan)' },
+    { label: 'Policy Engine', color: 'var(--gold)' },
+    { label: 'Quote Engine', color: 'var(--violet)' },
+    { label: 'Routing Engine', color: 'var(--violet)' },
+    { label: 'Optimization & Scoring', color: 'var(--gold)' },
+    { label: t('send.routes.pipeline.routes'), color: 'var(--green)' },
+  ];
+
+  const modeLabel = (m: string): string => t('send.routes.mode.' + m);
+
   const [selected, setSelected] = useState<string>('A');
   const [quote, setQuote] = useState<QuoteData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -176,7 +184,7 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
     });
 
     if (!res.success || !res.data) {
-      setError(res.error || 'Erreur lors du calcul des routes.');
+      setError(res.error || t('send.routes.error.fetch'));
       setLoading(false);
       return;
     }
@@ -186,7 +194,7 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
     const nowTs = Date.now() / 1000;
     setRemaining(Math.max(0, Math.floor(expiresTs - nowTs)));
     setLoading(false);
-  }, [intent.amount, intent.sourceCurrency, intent.originCountry, intent.destinationCountry, intent.destinationCurrency, intent.receivingMethod, objective]);
+  }, [intent.amount, intent.sourceCurrency, intent.originCountry, intent.destinationCountry, intent.destinationCurrency, intent.receivingMethod, objective, t]);
 
   useEffect(() => { fetchQuote(); }, [fetchQuote]);
 
@@ -196,12 +204,12 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
     setPipeStep(0);
     const interval = setInterval(() => {
       setPipeStep(prev => {
-        if (prev >= PIPELINE.length) { clearInterval(interval); return prev; }
+        if (prev >= pipeline.length) { clearInterval(interval); return prev; }
         return prev + 1;
       });
     }, 280);
     return () => clearInterval(interval);
-  }, [loading]);
+  }, [loading, pipeline.length]);
 
   // ── Compte à rebours ────────────────────────────────────
   useEffect(() => {
@@ -236,7 +244,7 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
     if (res.success && res.data) {
       setExecutedTx(res.data);
     } else {
-      setExecutionError(res.error || 'Échec de l\'exécution du transfert.');
+      setExecutionError(res.error || t('send.routes.exec.fetchError'));
     }
   };
 
@@ -256,7 +264,7 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
             <div className="card card-hi-c" style={{ padding: 30 }}>
               <div className="se-boot">
                 <div className="se-boot-ring"><div className="se-boot-core" /></div>
-                <div className="se-boot-log">Recherche de la meilleure option pour votre envoi…</div>
+                <div className="se-boot-log">{t('send.routes.bootSearch')}</div>
               </div>
               {/* Progress bar */}
               <div style={{ marginTop: 16 }}>
@@ -265,13 +273,13 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
                     className="progress-bar"
                     style={{ background: 'linear-gradient(90deg, var(--cyan), var(--violet))' }}
                     initial={{ width: '0%' }}
-                    animate={{ width: `${Math.min(100, (pipeStep / PIPELINE.length) * 100)}%` }}
+                    animate={{ width: `${Math.min(100, (pipeStep / pipeline.length) * 100)}%` }}
                     transition={{ duration: 0.3, ease: 'easeOut' }}
                   />
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
                   <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                    {pipeStep < PIPELINE.length ? 'Optimisation en cours…' : 'Terminé'}
+                    {pipeStep < pipeline.length ? t('send.routes.optimizing') : t('send.routes.done')}
                   </span>
                 </div>
               </div>
@@ -290,11 +298,11 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300 }}>
         <div className="card card-hi-c" style={{ padding: 40, textAlign: 'center', maxWidth: 500 }}>
           <div style={{ fontSize: 28, marginBottom: 12 }}>⚠️</div>
-          <h2 style={{ color: 'var(--text-bright)', marginBottom: 10, fontSize: 18 }}>Moteur de routing en erreur</h2>
+          <h2 style={{ color: 'var(--text-bright)', marginBottom: 10, fontSize: 18 }}>{t('send.routes.error.title')}</h2>
           <p style={{ color: 'var(--text-mid)', marginBottom: 20, fontSize: 13, lineHeight: 1.6 }}>{error}</p>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-            <button className="se-cta" onClick={fetchQuote}>↻ Relancer le moteur</button>
-            <button className="se-cta se-cta-ghost" onClick={onBack}>← Retour au résumé</button>
+            <button className="se-cta" onClick={fetchQuote}>{t('send.routes.error.retry')}</button>
+            <button className="se-cta se-cta-ghost" onClick={onBack}>{t('send.routes.error.back')}</button>
           </div>
         </div>
       </div>
@@ -306,16 +314,16 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300 }}>
         <div className="card card-hi-g" style={{ padding: 40, textAlign: 'center', maxWidth: 500 }}>
           <div style={{ fontSize: 28, marginBottom: 12 }}>⏱️</div>
-          <h2 style={{ color: 'var(--gold)', marginBottom: 10, fontSize: 18 }}>Quote expirée</h2>
+          <h2 style={{ color: 'var(--gold)', marginBottom: 10, fontSize: 18 }}>{t('send.routes.expired.title')}</h2>
           <p style={{ color: 'var(--text-mid)', marginBottom: 8, fontSize: 13, lineHeight: 1.6 }}>
-            Cette quote a expiré après 5 minutes. Les prix et taux peuvent avoir changé.
+            {t('send.routes.expired.text')}
           </p>
           <p style={{ color: 'var(--text-dim)', marginBottom: 20, fontSize: 11 }}>
-            Relancez une demande depuis le formulaire d'envoi pour obtenir de nouvelles routes.
+            {t('send.routes.expired.text2')}
           </p>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-            <button className="se-cta" onClick={fetchQuote}>↻ Nouvelles routes</button>
-            <button className="se-cta se-cta-ghost" onClick={onBack}>← Retour au résumé</button>
+            <button className="se-cta" onClick={fetchQuote}>{t('send.routes.expired.new')}</button>
+            <button className="se-cta se-cta-ghost" onClick={onBack}>{t('send.routes.error.back')}</button>
           </div>
         </div>
       </div>
@@ -328,21 +336,20 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
         <div className="card card-hi-gr" style={{ padding: 40, textAlign: 'center', maxWidth: 560 }}>
           <div style={{ fontSize: 34, marginBottom: 12 }}>✅</div>
-          <h2 style={{ color: 'var(--green)', marginBottom: 10, fontSize: 20 }}>Transfert exécuté</h2>
+          <h2 style={{ color: 'var(--green)', marginBottom: 10, fontSize: 20 }}>{t('send.routes.success.title')}</h2>
           <p style={{ color: 'var(--text-mid)', marginBottom: 20, fontSize: 13, lineHeight: 1.6 }}>
-            Votre opération a été réglée, enregistrée dans le ledger et ajoutée à votre historique.
+            {t('send.routes.success.text')}
           </p>
           <div className="card" style={{ padding: 16, textAlign: 'left', marginBottom: 20 }}>
             {([
-              ['Référence', `#${executedTx.id}`],
-              ['Statut', executedTx.status === 'completed' ? 'Terminé' : executedTx.status],
-              ['Envoyé', `${executedTx.amount.toLocaleString('fr-FR')} ${executedTx.currency}`],
-              ['Frais', executedTx.fee != null ? `${executedTx.fee.toLocaleString('fr-FR')} ${executedTx.fee_currency ?? executedTx.currency}` : '—'],
-              ['Montant reçu', executedTx.dest_amount != null ? `${executedTx.dest_amount.toLocaleString('fr-FR')} ${executedTx.dest_currency ?? ''}` : '—'],
-              ['Taux FX', executedTx.fx_rate != null ? executedTx.fx_rate.toLocaleString('fr-FR', { maximumFractionDigits: 4 }) : '—'],
-              ['Statut', executedTx.status ?? '—'],
-              ['Route', executedTx.route_id ?? '—'],
-              ['Destination', executedTx.destination ?? '—'],
+              [t('send.routes.success.ref'), `#${executedTx.id}`],
+              [t('send.routes.success.status'), executedTx.status === 'completed' ? t('send.routes.success.done') : t('status.' + executedTx.status)],
+              [t('send.routes.success.sent'), `${executedTx.amount.toLocaleString(locale)} ${executedTx.currency}`],
+              [t('send.routes.success.fees'), executedTx.fee != null ? `${executedTx.fee.toLocaleString(locale)} ${executedTx.fee_currency ?? executedTx.currency}` : '—'],
+              [t('send.routes.success.received'), executedTx.dest_amount != null ? `${executedTx.dest_amount.toLocaleString(locale)} ${executedTx.dest_currency ?? ''}` : '—'],
+              [t('send.routes.success.fx'), executedTx.fx_rate != null ? executedTx.fx_rate.toLocaleString(locale, { maximumFractionDigits: 4 }) : '—'],
+              [t('send.routes.success.route'), executedTx.route_id ?? '—'],
+              [t('send.routes.success.dest'), executedTx.destination ?? '—'],
             ] as [string, string][]).map(([k, v]) => (
               <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
                 <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>{k}</span>
@@ -351,8 +358,8 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
             ))}
           </div>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-            <Link to="/history" className="se-cta">Voir l'historique</Link>
-            <Link to="/send" className="se-cta se-cta-ghost">Nouvel envoi</Link>
+            <Link to="/history" className="se-cta">{t('send.routes.success.history')}</Link>
+            <Link to="/send" className="se-cta se-cta-ghost">{t('send.routes.success.new')}</Link>
           </div>
         </div>
       </div>
@@ -365,11 +372,11 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
         <div className="card card-hi-g" style={{ padding: 40, textAlign: 'center', maxWidth: 520 }}>
           <div style={{ fontSize: 30, marginBottom: 12 }}>⚠️</div>
-          <h2 style={{ color: 'var(--gold)', marginBottom: 10, fontSize: 18 }}>Exécution impossible</h2>
+          <h2 style={{ color: 'var(--gold)', marginBottom: 10, fontSize: 18 }}>{t('send.routes.exec.title')}</h2>
           <p style={{ color: 'var(--text-mid)', marginBottom: 20, fontSize: 13, lineHeight: 1.6 }}>{executionError}</p>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-            <button className="se-cta" onClick={handleConfirm}>↻ Réessayer</button>
-            <button className="se-cta se-cta-ghost" onClick={onBack}>← Retour</button>
+            <button className="se-cta" onClick={handleConfirm}>{t('send.routes.exec.retry')}</button>
+            <button className="se-cta se-cta-ghost" onClick={onBack}>{t('send.routes.exec.back')}</button>
           </div>
         </div>
       </div>
@@ -386,35 +393,35 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
 
         {/* Récap intention */}
         <motion.div className="card card-hi-c" style={{ padding: 20 }} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-          <div className="page-label" style={{ marginBottom: 12 }}>Intention validée</div>
+          <div className="page-label" style={{ marginBottom: 12 }}>{t('send.routes.recap.title')}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <div>
-                <div className="se-field-label">Depuis</div>
+                <div className="se-field-label">{t('send.routes.recap.from')}</div>
                 <div style={{ padding: '8px 10px', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12, color: 'var(--text-bright)' }}>
                   {intent.originCountry ?? '—'} · {intent.sourceCurrency ?? 'EUR'}
                 </div>
               </div>
               <div>
-                <div className="se-field-label">Vers</div>
+                <div className="se-field-label">{t('send.routes.recap.to')}</div>
                 <div style={{ padding: '8px 10px', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12, color: 'var(--text-bright)' }}>
                   {intent.destinationCurrency ?? 'XAF'} · {intent.destinationCountry ?? 'CG'}
                 </div>
               </div>
             </div>
             <div>
-              <div className="se-field-label">Montant</div>
+              <div className="se-field-label">{t('send.routes.recap.amount')}</div>
               <div className="se-amount" style={{ borderRadius: 8 }}>
                 <span style={{ padding: '8px 12px', color: 'var(--cyan)', fontWeight: 700, fontSize: 13, borderRight: '1px solid var(--border)' }}>€</span>
                 <span style={{ flex: 1, padding: '8px 10px', color: 'var(--white)', fontSize: 14, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
-                  {amountSent.toLocaleString('fr-FR')},00
+                  {amountSent.toLocaleString(locale)},00
                 </span>
               </div>
             </div>
             <div>
-              <div className="se-field-label">Mode d'analyse</div>
+              <div className="se-field-label">{t('send.routes.recap.mode')}</div>
               <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' as const }}>
-                {(['optimized', 'cheapest', 'fastest', 'max_received', 'most_reliable'] as const).map(m => (
+                {OBJECTIVE_MODES.map(m => (
                   <span
                     key={m}
                     className={`pill ${m === objective ? 'p-c' : ''}`}
@@ -426,7 +433,7 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
                     }}
                   >
                     {m === 'optimized' && '⭐ '}{m === 'fastest' && '⚡ '}{m === 'max_received' && '💰 '}{m === 'cheapest' && '💸 '}{m === 'most_reliable' && '🛡️ '}
-                    {MODE_LABELS[m]}
+                    {modeLabel(m)}
                   </span>
                 ))}
               </div>
@@ -445,7 +452,7 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
 
         {/* Header routes + countdown */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div className="page-label">Options de réception</div>
+          <div className="page-label">{t('send.routes.options.title')}</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>⏱</span>
@@ -454,7 +461,7 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
               </span>
             </div>
             <button className="se-cta se-cta-ghost" onClick={fetchQuote} disabled={loading} style={{ fontSize: 9, padding: '4px 10px' }}>
-              ⟴ Recalculer
+              {t('send.routes.options.recalc')}
             </button>
           </div>
         </div>
@@ -485,21 +492,21 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 12, borderBottom: '1px solid var(--border)' }}>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-bright)' }}>
-                  Option sélectionnée
+                  {t('send.routes.sel.title')}
                 </div>
                 <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 2 }}>
-                  Route sélectionnée automatiquement par Nexus
+                  {t('send.routes.sel.sub')}
                 </div>
               </div>
                           </div>
             <div style={{ marginTop: 10 }}>
               {[
-                ['Envoyé', `\u20AC ${amountSent.toLocaleString('fr-FR')},00`, 'var(--white)'],
-                ['Reçu (estimé)', selectedRoute.received, 'var(--green)'],
-                ['Frais total', selectedRoute.fees, 'var(--text-bright)'],
-                ['Taux de change', selectedRoute.rate ? `1 ${intent.sourceCurrency ?? 'EUR'} = ${selectedRoute.rate.toLocaleString('fr-FR')} ${intent.destinationCurrency ?? ''}` : '—', 'var(--cyan)'],
-                ['Délai estimé', selectedRoute.delay, 'var(--cyan)'],
-                ['Expiration', `\u23F1 ${formatCountdown(remaining)} restantes`, countdownColor],
+                [t('send.routes.sel.sent'), `\u20AC ${amountSent.toLocaleString(locale)},00`, 'var(--white)'],
+                [t('send.routes.sel.received'), selectedRoute.received, 'var(--green)'],
+                [t('send.routes.sel.fees'), selectedRoute.fees, 'var(--text-bright)'],
+                [t('send.routes.sel.rate'), selectedRoute.rate ? `1 ${intent.sourceCurrency ?? 'EUR'} = ${selectedRoute.rate.toLocaleString(locale)} ${intent.destinationCurrency ?? ''}` : '—', 'var(--cyan)'],
+                [t('send.routes.sel.delay'), selectedRoute.delay, 'var(--cyan)'],
+                [t('send.routes.sel.expiry'), `\u23F1 ${t('send.routes.sel.expiryCount', { time: formatCountdown(remaining) })}`, countdownColor],
               ].map(([k, v, col]) => (
                 <div key={k as string} className="trow">
                   <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{k}</div>
@@ -508,9 +515,9 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
               ))}
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-              <button className="se-cta se-cta-ghost" onClick={onBack}>← Modifier</button>
+              <button className="se-cta se-cta-ghost" onClick={onBack}>{t('send.routes.sel.edit')}</button>
               <button className="se-cta" onClick={handleConfirm} disabled={executing || expired} style={{ flex: 1, opacity: executing || expired ? 0.55 : 1 }}>
-                {executing ? 'Exécution en cours…' : '✓ Confirmer et exécuter'}
+                {executing ? t('send.routes.sel.executing') : t('send.routes.sel.confirm')}
               </button>
             </div>
           </motion.div>
@@ -525,9 +532,9 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
           <div className="quote quote-v" style={{ padding: '10px 14px' }}>
             <div className="quote-text" style={{ fontSize: 11, fontStyle: 'normal', fontWeight: 500 }}>
               {selectedRoute ? (
-                <>Cette option est recommandée pour le mode «{MODE_LABELS[objective] ?? objective}» : meilleur équilibre entre montant reçu, frais et délai. Fiabilité historique {(selectedRoute.reliabilityNum * 100).toFixed(0)}%.</>
+                <>{t('send.routes.ai.text', { mode: modeLabel(objective), reliability: (selectedRoute.reliabilityNum * 100).toFixed(0) })}</>
               ) : (
-                <>Analyse de la meilleure option en cours…</>
+                <>{t('send.routes.ai.analyzing')}</>
               )}
             </div>
           </div>

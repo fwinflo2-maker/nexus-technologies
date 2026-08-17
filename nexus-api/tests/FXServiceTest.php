@@ -82,29 +82,25 @@ final class FXServiceTest extends TestCase
         $this->assertSame('manual', $rate->getSource());
     }
 
-    public function test_resolve_falls_back_to_manual_when_missing(): void
+    public function test_resolve_refuses_when_no_rate_exists(): void
     {
         // Ensure no cache row exists for EUR → USD.
         $stmt = $this->pdo->prepare('DELETE FROM fx_rates_cache WHERE base_currency = :b AND quote_currency = :q');
         $stmt->execute(['b' => 'EUR', 'q' => 'USD']);
 
-        $rate = FXService::resolve('EUR', 'USD', ExecutionEnvironment::SANDBOX);
-        $this->assertInstanceOf(FXRate::class, $rate);
-        // Manual rate defined in ManualRateProvider.
-        $this->assertSame('1.08700000', $rate->getRate());
-        $this->assertSame('manual', $rate->getSource());
+        // Plus aucun repli manuel : l'absence de taux est un REFUS explicite.
+        $this->expectException(RuntimeException::class);
+        FXService::resolve('EUR', 'USD', ExecutionEnvironment::SANDBOX);
     }
 
-    public function test_resolve_ignores_expired_cache_and_uses_manual(): void
+    public function test_resolve_refuses_when_only_expired_cache_entry_exists(): void
     {
         // Insert an expired cache entry.
         $this->insertCacheRow('EUR', 'GBP', '0.80000000', 'manual', ttlSeconds: -3600);
 
-        $rate = FXService::resolve('EUR', 'GBP', ExecutionEnvironment::SANDBOX);
-        $this->assertInstanceOf(FXRate::class, $rate);
-        // Expect manual fallback value.
-        $this->assertSame('0.85500000', $rate->getRate());
-        $this->assertSame('manual', $rate->getSource());
+        // Un taux expiré n'est pas un taux : aucun repli vers du hardcodé.
+        $this->expectException(RuntimeException::class);
+        FXService::resolve('EUR', 'GBP', ExecutionEnvironment::SANDBOX);
     }
 
     public function test_convert_applies_half_up_rounding_to_8_dp(): void

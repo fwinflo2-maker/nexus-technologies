@@ -23,6 +23,7 @@ final class TransferRequest
     private ?string $description;
     private ?array $metadata;
     private ?string $fxSource; // optional override source for FX (e.g., 'manual')
+    private ?string $fxRate; // optional LOCKED rate (decimal, 8 dp) — exécute la conversion au taux d'une quote, pas au taux courant
 
     /**
      * Contexte d'exécution — environnement déjà résolu et autorisé en amont.
@@ -45,7 +46,8 @@ final class TransferRequest
         ?string $description = null,
         ?array $metadata = null,
         ?string $fxSource = null,
-        ?ExecutionContext $context = null
+        ?ExecutionContext $context = null,
+        ?string $fxRate = null
     ) {
         $this->userId = $userId;
         $this->sourceWalletId = $sourceWalletId;
@@ -59,6 +61,7 @@ final class TransferRequest
         $this->metadata = $metadata;
         $this->fxSource = $fxSource;
         $this->context = $context;
+        $this->fxRate = $fxRate;
     }
 
     public function getUserId(): int { return $this->userId; }
@@ -72,6 +75,9 @@ final class TransferRequest
     public function getDescription(): ?string { return $this->description; }
     public function getMetadata(): ?array { return $this->metadata; }
     public function getFxSource(): ?string { return $this->fxSource; }
+
+    /** Taux VERROUILLÉ par une quote (exécution au taux garanti), ou null. */
+    public function getFxRate(): ?string { return $this->fxRate; }
     public function getContext(): ?ExecutionContext { return $this->context; }
 
     /** Environnement effectif, ou `null` si la requête n'en porte pas. */

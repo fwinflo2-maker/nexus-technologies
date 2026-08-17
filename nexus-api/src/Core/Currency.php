@@ -5,15 +5,14 @@ declare(strict_types=1);
 namespace Nexus\Core;
 
 /**
- * Devises de référence et taux de conversion (données de démonstration).
+ * Devises de référence et constantes d'affichage.
  *
- * Deux devises de référence sont utilisées par le dashboard :
- *  - EUR  : devise de référence du portefeuille (Solde total, activité).
- *  - XAF  : devise de référence du volume (KPI « Volume total »).
- *
- * Les taux ci-dessous sont des taux de démonstration (illustratifs) destinés
- * à l'environnement de développement. Ils seront remplacés par un service de
- * taux réel (Provider FX) dans une itération ultérieure.
+ * AUCUN TAUX DE CHANGE N'EST DÉFINI ICI (§7) : les taux de démonstration
+ * (`RATE_TO_EUR` / `RATE_TO_XAF`) ont été supprimés. La seule source de taux
+ * est la source FX réelle, scopée par environnement (`FXService` →
+ * `fx_rates_cache`). Tout agrégat qui convertit une devise doit passer par
+ * `FXService::rateToRef()` — qui rend null quand aucun taux réel n'existe,
+ * jamais une valeur inventée.
  */
 final class Currency
 {
@@ -26,48 +25,8 @@ final class Currency
     /** Devises affichées par la grille multi-devises du dashboard. */
     public const WALLET_CURRENCIES = ['EUR', 'USD', 'GBP', 'XAF', 'USDT', 'USDC'];
 
-    /**
-     * Valeur d'1 unité de devise exprimée en EUR (taux de démo).
-     *
-     * @var array<string, float>
-     */
-    private const RATE_TO_EUR = [
-        'EUR'  => 1.0,
-        'USD'  => 0.92,
-        'GBP'  => 1.17,
-        'XAF'  => 1.0 / 655.957,
-        'USDT' => 0.92,
-        'USDC' => 0.92,
-    ];
-
-    /**
-     * Valeur d'1 unité de devise exprimée en XAF (taux de démo).
-     *
-     * @var array<string, float>
-     */
-    private const RATE_TO_XAF = [
-        'EUR'  => 655.957,
-        'USD'  => 603.0,
-        'GBP'  => 767.0,
-        'XAF'  => 1.0,
-        'USDT' => 603.0,
-        'USDC' => 603.0,
-    ];
-
     private function __construct()
     {
         // Classe utilitaire : pas d'instanciation directe.
-    }
-
-    /** Taux de conversion d'une devise vers l'EUR (0 si devise inconnue). */
-    public static function rateToRef(string $currency): float
-    {
-        return self::RATE_TO_EUR[strtoupper($currency)] ?? 0.0;
-    }
-
-    /** Taux de conversion d'une devise vers le XAF (0 si devise inconnue). */
-    public static function rateToXaf(string $currency): float
-    {
-        return self::RATE_TO_XAF[strtoupper($currency)] ?? 0.0;
     }
 }

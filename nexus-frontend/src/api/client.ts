@@ -201,8 +201,10 @@ export interface WalletListData {
 /** Taux de conversion EUR de référence (MVP : taux fixe). */
 export interface WalletRatesData {
   base: string;
-  fx_rate_xaf: number;
-  updated_at: string;
+  /** null = aucune source FX réelle configurée : jamais de taux inventé. */
+  fx_rate_xaf: number | null;
+  available: boolean;
+  updated_at: string | null;
 }
 
 export interface WalletTx {
@@ -478,6 +480,16 @@ export interface QuoteRoute {
   recommended: boolean;
   spread: string;          // "0.35%"
   rate: number;
+  // Provenance du taux (audit) + route interne de conversion
+  rateSource?: string | null;
+  rateFetchedAt?: string | null;
+  rateExpiresAt?: string | null;
+  feeSource?: string | null;
+  delayStatus?: string;
+  reliabilityMeasured?: boolean;
+  kind?: 'internal' | 'provider';
+  /** Taux exact (8 dp) que l'exécution honorera pour une quote de conversion. */
+  locked_rate?: string;
 }
 
 /** Intention normalisée retournée par la quote. */
@@ -533,12 +545,44 @@ export async function apiCreateQuote(payload: {
 }
 
 /**
+ * Quote de conversion interne wallet→wallet (POST /api/quotes/convert).
+ *
+ * Rail INTERNE : aucun provider requis. Le taux vient de la source FX réelle
+ * (QuotePricing → fx_rates_cache) et est VERROUILLÉ dans la quote ; sans taux
+ * réel pour la paire, la réponse est FX_UNAVAILABLE (503) — jamais de taux
+ * inventé. L'exécution passe `quote_id` + `route_id` à apiWalletConvert pour
+ * honorer le taux garanti.
+ */
+export async function apiCreateConvertQuote(payload: {
+  amount: number;
+  sourceCurrency: string;
+  destCurrency: string;
+}): Promise<ApiResponse<QuoteData>> {
+  return request<QuoteData>('POST', '/quotes/convert', payload as unknown as Record<string, unknown>);
+}
+
+/** Résultat d'une conversion exécutée (TransferResult sérialisé). */
+export interface ConvertResult {
+  operation_id: string;
+  source_amount: string;
+  dest_amount: string;
+  fx_rate: string;
+  fx_source: string;
+  status: string;
+  description: string | null;
+}
+
+/**
  * Conversion réelle entre deux devises du compte (POST /api/wallets/convert).
  *
  * Le bouton « Convertir » exécutait auparavant un setTimeout de deux secondes
  * puis vidait le formulaire : l'utilisateur voyait une conversion réussie
  * alors qu'aucun argent n'avait bougé. Cette fonction appelle le moteur réel
  * (débit, crédit, écritures comptables, idempotence).
+ *
+ * `quote_id` + `route_id` (optionnels) lient l'exécution à une quote de
+ * conversion : le taux VERROUILLÉ de la quote est appliqué (taux vu = taux
+ * appliqué) et la quote est marquée EXECUTED.
  *
  * Aucun identifiant de wallet n'est transmis : le serveur les résout à partir
  * du jeton, donc on ne peut pas désigner le wallet d'un autre compte.
@@ -548,8 +592,10 @@ export async function apiWalletConvert(payload: {
   source_currency: string;
   dest_currency: string;
   idempotency_key?: string;
-}): Promise<ApiResponse<{ conversion: Record<string, unknown> }>> {
-  return request<{ conversion: Record<string, unknown> }>(
+  quote_id?: string;
+  route_id?: string;
+}): Promise<ApiResponse<{ conversion: ConvertResult }>> {
+  return request<{ conversion: ConvertResult }>(
     'POST',
     '/wallets/convert',
     payload as unknown as Record<string, unknown>,
@@ -1094,19 +1140,26 @@ export async function apiAuthorizedOrigins(): Promise<ApiResponse<AuthorizedOrig
 /**
  * Calcule une estimation de conversion entre deux devises à partir
  * des taux retournés par /intent/countries (1 EUR = X).
+ *
+ * Retourne null quand un taux manque (source FX non configurée) : une
+ * estimation ne doit JAMAIS supposer 1:1 pour une devise inconnue (§7).
  */
 export function estimateConvert(
   amount: number,
   fromCurrency: string,
   toCurrency: string,
   rates: Record<string, number>,
-): number {
-  if (!amount || amount <= 0) return 0;
-  const fromEUR = rates[fromCurrency] ?? 1;
-  const toEUR = rates[toCurrency] ?? 1;
+): number | null {
+  if (!amount || amount <= 0) return null;
+  const fromEUR = rates[fromCurrency];
+  const toEUR = rates[toCurrency];
+  // L'EUR est la devise de référence (identité réelle, pas un repli).
+  const fromFactor = fromCurrency === 'EUR' ? 1 : fromEUR;
+  const toFactor = toCurrency === 'EUR' ? 1 : toEUR;
+  if (fromFactor === undefined || toFactor === undefined) return null;
   // Convert from → EUR → to
-  const inEur = amount / fromEUR;
-  return inEur * toEUR;
+  const inEur = amount / fromFactor;
+  return inEur * toFactor;
 }
 
 // --- Hold Lifecycle (GET/POST /api/wallets/holds*) ---------------------------

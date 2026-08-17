@@ -6,6 +6,8 @@ import {
   type TransferTx,
 } from '../../api/client';
 import EmptyState from '../../components/EmptyState';
+import { useI18n } from '../../context/I18nContext';
+import { useDashT, localeFor } from '../../data/dashboard-i18n';
 
 type FilterType = 'all' | 'send' | 'receive' | 'convert' | 'fx';
 type FilterStatus = 'all' | 'completed' | 'pending' | 'failed';
@@ -19,6 +21,9 @@ const CURRENCY_META: Record<string, { flag: string; symbol: string }> = {
 };
 
 export default function HistoryPage() {
+  const t = useDashT();
+  const { lang } = useI18n();
+  const locale = localeFor(lang);
   const [transactions, setTransactions] = useState<TransferTx[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +42,7 @@ export default function HistoryPage() {
     const res = await apiTransfersList({ per_page: 100 });
 
     if (!res.success || !res.data) {
-      setError(res.error || 'Impossible de charger l\'historique.');
+      setError(res.error || t('history.empty'));
       setLoading(false);
       return;
     }
@@ -57,7 +62,7 @@ export default function HistoryPage() {
 
   const formatAmount = (tx: TransferTx): string => {
     const meta = CURRENCY_META[tx.currency];
-    const formatted = tx.amount.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const formatted = tx.amount.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const sign = tx.direction === 'in' ? '+' : tx.direction === 'out' ? '−' : '';
     if (meta) return `${sign}${meta.symbol} ${formatted}`;
     return `${sign}${formatted} ${tx.currency}`;
@@ -67,9 +72,9 @@ export default function HistoryPage() {
     const date = new Date(iso);
     const now = new Date();
     const diffDays = Math.floor((now.getTime() - date.getTime()) / 86400000);
-    if (diffDays === 0) return "Aujourd'hui";
-    if (diffDays === 1) return 'Hier';
-    return date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
+    if (diffDays === 0) return t('time.today');
+    if (diffDays === 1) return t('time.yesterday');
+    return date.toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' });
   };
 
   const statusClass = (status: string): string => {
@@ -84,24 +89,20 @@ export default function HistoryPage() {
   };
 
   const statusLabel = (status: string): string => {
-    switch (status) {
-      case 'completed': return '✓ Terminé';
-      case 'pending': return '⏳ En attente';
-      case 'processing': return '⚙ En cours';
-      case 'failed': return '✕ Échoué';
-      case 'cancelled': return 'Annulé';
-      default: return status;
-    }
+    const icons: Record<string, string> = {
+      completed: '✓ ', pending: '⏳ ', processing: '⚙ ', failed: '✕ ', cancelled: '',
+    };
+    return `${icons[status] ?? ''}${t(`status.${status}`)}`;
   };
 
   const typeLabel = (type: string): string => {
     const labels: Record<string, string> = {
-      send: 'Envoi',
-      receive: 'Réception',
-      convert: 'Conversion',
-      fx: 'FX',
+      send: 'history.type.send',
+      receive: 'history.type.receive',
+      convert: 'history.type.convert',
+      fx: 'history.type.fx',
     };
-    return labels[type] || type;
+    return t(labels[type] || type);
   };
 
   const typeIcon = (type: string): string => {
@@ -127,9 +128,9 @@ export default function HistoryPage() {
         animate={{ opacity: 1, y: 0 }}
       >
         <div className="page-label">NEXUS LEDGER</div>
-        <div className="page-title">Historique des <span className="gc">transactions</span></div>
+        <div className="page-title">{t('history.title')}</div>
         <p style={{ marginTop: 10, fontSize: 13, color: 'var(--text-mid)' }}>
-          Consultez toutes vos opérations financières enregistrées dans le ledger.
+          {t('history.subtitle')}
         </p>
       </motion.div>
 
@@ -142,7 +143,7 @@ export default function HistoryPage() {
         transition={{ delay: 0.1 }}
       >
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-          <span style={{ fontSize: 12, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Filtres :</span>
+          <span style={{ fontSize: 12, color: 'var(--text-dim)', textTransform: 'uppercase' }}>{t('history.filters')}</span>
           
           <select
             value={filterType}
@@ -150,10 +151,10 @@ export default function HistoryPage() {
             className="filter-select"
             style={{ cursor: 'pointer', fontSize: 12 }}
           >
-            <option value="all">Tous les types</option>
-            <option value="send">Envoyés</option>
-            <option value="receive">Reçus</option>
-            <option value="convert">Conversions</option>
+            <option value="all">{t('history.allTypes')}</option>
+            <option value="send">{t('history.type.send')}</option>
+            <option value="receive">{t('history.type.receive')}</option>
+            <option value="convert">{t('history.type.convert')}</option>
             <option value="fx">FX</option>
           </select>
 
@@ -163,10 +164,10 @@ export default function HistoryPage() {
             className="filter-select"
             style={{ cursor: 'pointer', fontSize: 12 }}
           >
-            <option value="all">Tous les statuts</option>
-            <option value="completed">Terminés</option>
-            <option value="pending">En attente</option>
-            <option value="failed">Échoués</option>
+            <option value="all">{t('history.allStatuses')}</option>
+            <option value="completed">{t('status.completed')}</option>
+            <option value="pending">{t('status.pending')}</option>
+            <option value="failed">{t('status.failed')}</option>
           </select>
 
           <select
@@ -175,7 +176,7 @@ export default function HistoryPage() {
             className="filter-select"
             style={{ cursor: 'pointer', fontSize: 12 }}
           >
-            <option value="all">Toutes devises</option>
+            <option value="all">{t('history.allCurrencies')}</option>
             {Object.keys(CURRENCY_META).map(code => (
               <option key={code} value={code}>{code}</option>
             ))}
@@ -187,7 +188,7 @@ export default function HistoryPage() {
               className="pill p-r"
               style={{ cursor: 'pointer', fontSize: 12 }}
             >
-              ✕ Reset
+              ✕ {t('common.reset')}
             </button>
           )}
 
@@ -196,7 +197,7 @@ export default function HistoryPage() {
             className="pill p-c"
             style={{ cursor: 'pointer', fontSize: 12, marginLeft: 'auto' }}
           >
-            ↻ Actualiser
+            ↻ {t('common.refresh')}
           </button>
         </div>
       </motion.div>
@@ -205,26 +206,26 @@ export default function HistoryPage() {
       {loading ? (
         <div className="card card-hi-c" style={{ padding: 40, textAlign: 'center' }}>
           <div className="nexus-spinner" />
-          <p style={{ marginTop: 16, color: 'var(--text-mid)' }}>Chargement de l'historique…</p>
+          <p style={{ marginTop: 16, color: 'var(--text-mid)' }}>{t('history.loading')}</p>
         </div>
       ) : error ? (
         <div className="card card-hi-g" style={{ padding: 40, textAlign: 'center' }}>
           <div style={{ fontSize: 34, marginBottom: 12 }}>⚠️</div>
-          <h3 style={{ color: 'var(--text-bright)', marginBottom: 8 }}>Erreur de chargement</h3>
+          <h3 style={{ color: 'var(--text-bright)', marginBottom: 8 }}>{t('common.error')}</h3>
           <p style={{ color: 'var(--text-mid)', marginBottom: 16 }}>{error}</p>
-          <button className="se-cta" onClick={fetchTransactions} style={{ fontSize: 12 }}>↻ Réessayer</button>
+          <button className="se-cta" onClick={fetchTransactions} style={{ fontSize: 12 }}>↻ {t('common.retry')}</button>
         </div>
       ) : filteredTxs.length === 0 ? (
         <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
           <div className="card card-hi-c" style={{ padding: 8 }}>
             <EmptyState
               icon="📭"
-              title={transactions.length === 0 ? 'Aucune transaction' : 'Aucun résultat'}
+              title={transactions.length === 0 ? t('history.empty') : t('history.noResult')}
               subtitle={transactions.length === 0
-                ? 'Lancez un premier envoi pour voir vos opérations apparaître ici, tracées dans le ledger.'
-                : 'Aucune transaction ne correspond à vos filtres actuels.'}
+                ? t('history.firstSend')
+                : t('history.noResult')}
               action={transactions.length === 0 ? (
-                <Link to="/send" className="btn btn-cyan" style={{ fontSize: 11, textDecoration: 'none' }}>↗ Envoyer maintenant</Link>
+                <Link to="/send" className="btn btn-cyan" style={{ fontSize: 11, textDecoration: 'none' }}>{t('wallet.empty.send')}</Link>
               ) : undefined}
             />
           </div>
@@ -294,8 +295,8 @@ export default function HistoryPage() {
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-                <span className="page-label">Détail de la transaction</span>
-                <button onClick={() => setSelected(null)} className="btn btn-ghost" style={{ fontSize: 11 }}>✕ Fermer</button>
+                <span className="page-label">{t('history.detail')}</span>
+                <button onClick={() => setSelected(null)} className="btn btn-ghost" style={{ fontSize: 11 }}>{t('wallet.tab.close')}</button>
               </div>
 
               {/* Icône + titre */}
@@ -312,20 +313,20 @@ export default function HistoryPage() {
                 <div className="mono" style={{ fontSize: 32, fontWeight: 800, color: selected.direction === 'in' ? 'var(--green)' : 'var(--text-bright)' }}>
                   {formatAmount(selected)}
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 6 }}>{typeLabel(selected.type)} · {new Date(selected.created_at).toLocaleString('fr-FR')}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 6 }}>{typeLabel(selected.type)} · {new Date(selected.created_at).toLocaleString(locale)}</div>
               </div>
 
               {/* Détails structurés */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
                 {[
-                  ['Type', typeLabel(selected.type)],
-                  ['Statut', statusLabel(selected.status).replace(/^[✓⏳⚙✕]+\s*/, '')],
-                  ['Devise', `${selected.currency}`],
-                  ['Destination', selected.destination || '—'],
-                  ['Date', new Date(selected.created_at).toLocaleString('fr-FR')],
-                  selected.dest_amount != null ? ['Montant reçu', `${selected.dest_amount.toLocaleString('fr-FR')} ${selected.dest_currency || ''}`] : null,
-                  selected.fx_rate != null ? ['Taux FX', selected.fx_rate.toFixed(4)] : null,
-                  selected.fee != null && selected.fee > 0 ? ['Frais', `${selected.fee.toLocaleString('fr-FR')} ${selected.fee_currency || ''}`] : null,
+                  [t('history.type'), typeLabel(selected.type)],
+                  [t('history.status'), t(`status.${selected.status}`)],
+                  [t('form.currency'), `${selected.currency}`],
+                  [t('send.destination'), selected.destination || '—'],
+                  [t('history.date'), new Date(selected.created_at).toLocaleString(locale)],
+                  selected.dest_amount != null ? [t('history.received'), `${selected.dest_amount.toLocaleString(locale)} ${selected.dest_currency || ''}`] : null,
+                  selected.fx_rate != null ? ['FX', selected.fx_rate.toFixed(4)] : null,
+                  selected.fee != null && selected.fee > 0 ? [t('history.fee'), `${selected.fee.toLocaleString(locale)} ${selected.fee_currency || ''}`] : null,
                 ].filter(Boolean).map((row, i) => row && (
                   <div key={i} style={{
                     display: 'flex', justifyContent: 'space-between', padding: '12px 0',

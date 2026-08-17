@@ -235,10 +235,12 @@ final class ProviderCredentialController
 
     /**
      * POST /api/providers/{slug}/test
-     * Ping simple : ouvre un socket TCP sur la base URL pour vérifier
-     * la connectivité. Endpoint volontairement simplifié : la vérification
-     * réelle des credentials est faite par les moteurs déterministes (capability,
-     * quote, execution) ; ici on s'assure juste que l'hôte répond.
+     *
+     * Test de connexion RÉEL (§5) : un appel authentifié à l'API du provider
+     * avec les credentials déchiffrées (dashboard SuperAdmin, sinon
+     * environnement). Le succès n'est JAMAIS déclaré sans vérification
+     * réelle ; un adaptateur sans test implémenté répond honnêtement
+     * CONFIGURATION_ERROR.
      */
     public static function test(Request $request): void
     {
@@ -266,52 +268,66 @@ final class ProviderCredentialController
             Response::badRequest('Paramètre « environment » requis (sandbox|production).');
         }
 
-        $pdo      = Database::getConnection();
-        $existing = ProviderCredentialService::findPlatformRow($pdo, $slug, $env);
+        $pdo = Database::getConnection();
 
-        if ($existing === null) {
-            Response::badRequest('Aucun identifiant enregistré pour ce provider dans l\'environnement « ' . $env . ' ».');
+        // Credentials absentes (ni base, ni environnement) : aucun appel ne
+        // doit être envoyé — réponse explicite PROVIDER_NOT_CONFIGURED (§5).
+        if (!\Nexus\Providers\ProviderRegistry::isConfigured($slug)) {
+            $result = [
+                'status'    => 'PROVIDER_NOT_CONFIGURED',
+                'message'   => 'Aucune credential configurée pour ce provider : aucun appel envoyé.',
+                'tested_at' => gmdate(DATE_ATOM),
+            ];
+            ProviderCredentialService::markPlatformTested($pdo, $slug, $env, 'not_configured', $result['message']);
+            self::audit($pdo, $userId, 'provider.credentials.test', $slug, [
+                'status'      => $result['status'],
+                'environment' => $env,
+            ], $request);
+            Response::success([
+                'provider_slug' => $slug,
+                'environment'   => $env,
+                'result'        => $result,
+            ]);
         }
 
-        $provider = ProviderCatalog::get($slug);
-        $url      = ($env === 'production') ? $provider['base_url'] : ($provider['sandbox_url'] ?? $provider['base_url']);
-
-        $parts = parse_url($url);
-        $host  = $parts['host'] ?? null;
-        $port  = $parts['scheme'] === 'https' ? 443 : (int) ($parts['port'] ?? 80);
+        // Credentials déchiffrées du dashboard (la source de vérité du
+        // SuperAdmin) ; l'adaptateur retombe sur l'environnement à défaut.
+        $credentials = ProviderCredentialService::resolvePlatform($pdo, $slug, $env) ?? [];
 
         $start = microtime(true);
-        $ok    = false;
-        $err   = null;
-        if ($host !== null) {
-            $errno = 0;
-            $errstr = '';
-            $fp = @fsockopen($host, $port, $errno, $errstr, 5.0);
-            if ($fp !== false) {
-                $ok = true;
-                fclose($fp);
-            } else {
-                $err = $errstr !== '' ? $errstr : "Connection failed ($errno)";
-            }
+        try {
+            $result = \Nexus\Providers\ProviderRegistry::adapter($slug)->testConnection($env, $credentials);
+        } catch (\Throwable $e) {
+            $result = [
+                'status'    => 'CONFIGURATION_ERROR',
+                'message'   => 'Échec inattendu du test de connexion.',
+                'tested_at' => gmdate(DATE_ATOM),
+            ];
         }
         $latency = round((microtime(true) - $start) * 1000);
 
-        $status = $ok ? ($env === 'production' ? 'active' : 'sandbox_only') : 'error';
+        // Persistance : le statut exploitable guide le routing (une ligne
+        // « error » rend le provider non routable via ProviderRegistry).
+        $dbStatus = match ($result['status'] ?? '') {
+            'CONNECTION_SUCCESS' => $env === 'production' ? 'active' : 'sandbox_only',
+            default              => 'error',
+        };
+        $error = ($result['status'] ?? '') === 'CONNECTION_SUCCESS'
+            ? null
+            : (string) ($result['message'] ?? $result['status'] ?? 'error');
 
-        ProviderCredentialService::markPlatformTested($pdo, $slug, $env, $status, $err);
+        ProviderCredentialService::markPlatformTested($pdo, $slug, $env, $dbStatus, $error);
 
         self::audit($pdo, $userId, 'provider.credentials.test', $slug, [
-            'reachable' => $ok,
-            'latency_ms'=> $latency,
+            'status'      => $result['status'] ?? 'CONFIGURATION_ERROR',
+            'latency_ms'  => $latency,
             'environment' => $env,
         ], $request);
 
         Response::success([
             'provider_slug' => $slug,
-            'reachable'     => $ok,
-            'latency_ms'    => $latency,
-            'error'         => $ok ? null : $err,
-            'environment'   => $existing['environment'],
+            'environment'   => $env,
+            'result'        => $result + ['latency_ms' => $latency],
         ]);
     }
 

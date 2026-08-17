@@ -371,6 +371,21 @@ CREATE TABLE `provider_credentials` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;
+CREATE TABLE `provider_webhook_events` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `provider` varchar(50) NOT NULL,
+  `environment` enum('sandbox','production') NOT NULL DEFAULT 'sandbox',
+  `event_id` varchar(191) NOT NULL,
+  `event_type` varchar(100) DEFAULT NULL,
+  `status` varchar(50) NOT NULL DEFAULT 'received',
+  `received_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_provider_webhook_event` (`provider`,`environment`,`event_id`),
+  KEY `idx_provider_webhook_received` (`provider`,`received_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8mb4 */;
 CREATE TABLE `quotes` (
   `id` varchar(22) NOT NULL,
   `user_id` bigint(20) unsigned NOT NULL,

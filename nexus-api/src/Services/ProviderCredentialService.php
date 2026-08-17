@@ -117,6 +117,42 @@ final class ProviderCredentialService
     }
 
     /**
+     * Résout les credentials DÉCHIFFRÉES de la plateforme (user_id IS NULL).
+     *
+     * Seul point de déchiffrement autorisé pour les credentials de la
+     * plateforme : les appels réels (test de connexion, exécution) peuvent
+     * les consommer sans jamais les journaliser ni les exposer.
+     *
+     * @return array<string,string>|null null si absente ou illisible
+     */
+    public static function resolvePlatform(PDO $pdo, string $slug, string $environment): ?array
+    {
+        $row = self::findPlatformRow($pdo, $slug, $environment);
+        if ($row === null || ($row['credentials_enc'] ?? null) === null) {
+            return null;
+        }
+
+        $plain = Crypto::decrypt((string) $row['credentials_enc']);
+        if ($plain === null || $plain === '') {
+            return null;
+        }
+
+        $payload = json_decode($plain, true);
+        if (!is_array($payload) || !isset($payload['credentials']) || !is_array($payload['credentials'])) {
+            return null;
+        }
+
+        $out = [];
+        foreach ($payload['credentials'] as $key => $value) {
+            if (is_string($key) && is_string($value) && $value !== '') {
+                $out[$key] = $value;
+            }
+        }
+
+        return $out === [] ? null : $out;
+    }
+
+    /**
      * Enregistre (upsert) la credential de PLATEFORME.
      *
      * `configured_by` retient l'opérateur : sans cette trace, aucune enquête

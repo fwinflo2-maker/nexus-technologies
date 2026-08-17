@@ -288,6 +288,10 @@ final class WalletServiceTransferTest extends TestCase
         $key          = 'ok_' . $suffix;
         $this->created['keys'][] = ['key' => $key, 'userId' => $userId];
 
+        // Source FX réelle (table fx_rates_cache) : plus aucun repli manuel.
+        $this->deleteCachePair('EUR', 'XAF');
+        $this->insertCacheRow('EUR', 'XAF', '655.95700000', 'fx_provider_test');
+
         $req = new TransferRequest(
             $userId,
             $sourceWallet,
@@ -309,7 +313,7 @@ final class WalletServiceTransferTest extends TestCase
         $this->assertUuid($result->getOperationId());
         $this->assertSame('100.00', $result->getSourceAmount());
         $this->assertSame('655.95700000', $result->getFxRate());
-        $this->assertSame('manual', $result->getFxSource());
+        $this->assertSame('fx_provider_test', $result->getFxSource());
         $this->assertSame('completed', $result->getStatus());
         $expectedDest = bcadd(bcmul('100.00', '655.95700000', 10), '0.000000005', 8);
         $this->assertSame($expectedDest, $result->getDestAmount());
@@ -321,7 +325,7 @@ final class WalletServiceTransferTest extends TestCase
         $this->assertSame('convert', $op['type']);
         $this->assertSame('completed', $op['status']);
         $this->assertSame('655.95700000', (string) $op['fx_rate']);
-        $this->assertSame('manual', $op['fx_source']);
+        $this->assertSame('fx_provider_test', $op['fx_source']);
         $this->assertSame('XAF', $op['dest_currency']);
         $this->assertSame($expectedDest, (string) $op['dest_amount']);
 
@@ -358,6 +362,10 @@ final class WalletServiceTransferTest extends TestCase
         $destWallet   = $this->createWallet($userId, 'USD', '0.00');
         $key          = 'idem_' . $suffix;
         $this->created['keys'][] = ['key' => $key, 'userId' => $userId];
+
+        // Source FX réelle : 50 EUR → 54.35 USD @ 1.087.
+        $this->deleteCachePair('EUR', 'USD');
+        $this->insertCacheRow('EUR', 'USD', '1.08700000', 'fx_provider_test');
 
         $makeRequest = function () use ($userId, $sourceWallet, $destWallet, $key): TransferRequest {
             return new TransferRequest(
@@ -524,6 +532,11 @@ final class WalletServiceTransferTest extends TestCase
         $sourceWallet = $this->createWallet($userId, 'EUR', '100.00', '80.00');
         $destWallet   = $this->createWallet($userId, 'USD', '0.00');
 
+        // Le taux est résolu AVANT le contrôle de solde : la source FX doit
+        // exister pour que le test atteigne le refus attendu.
+        $this->deleteCachePair('EUR', 'USD');
+        $this->insertCacheRow('EUR', 'USD', '1.08700000', 'fx_provider_test');
+
         $req = new TransferRequest($userId, $sourceWallet, $destWallet, '30.00', 'EUR', 'USD', 'convert');
 
         try {
@@ -555,6 +568,10 @@ final class WalletServiceTransferTest extends TestCase
         $srcA  = $this->createWallet($userA, 'EUR', '500.00');
         $dstA  = $this->createWallet($userA, 'USD', '0.00');
         $this->created['keys'][] = ['key' => $key, 'userId' => $userA];
+
+        // Source FX réelle requise pour le transfert nominal de A.
+        $this->deleteCachePair('EUR', 'USD');
+        $this->insertCacheRow('EUR', 'USD', '1.08700000', 'fx_provider_test');
 
         $reqA = new TransferRequest($userA, $srcA, $dstA, '50.00', 'EUR', 'USD', 'convert', $key);
         $okA  = WalletService::transferMultiCurrency($reqA);

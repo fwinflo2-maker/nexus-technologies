@@ -10,6 +10,7 @@ use Nexus\Execution\ExecutionContext;
 use Nexus\Execution\ExecutionEnvironment;
 use Nexus\Services\ExecutionEngine;
 use Nexus\Services\WalletService;
+use Nexus\Tests\Fixtures\UsesScriptedProvider;
 use PDO;
 use PHPUnit\Framework\TestCase;
 
@@ -30,6 +31,8 @@ use PHPUnit\Framework\TestCase;
  */
 final class EnvironmentGuardIntegrityTest extends TestCase
 {
+    use UsesScriptedProvider;
+
     private PDO $pdo;
     private int $userId = 0;
 
@@ -37,6 +40,9 @@ final class EnvironmentGuardIntegrityTest extends TestCase
     {
         $this->pdo = Database::getConnection();
         $this->clearEnv();
+        // Chemin nominal : un provider réellement configuré dont l'API est
+        // scriptée (fixture) pour exercer la saga hold → provider → capture.
+        $this->scriptStripe();
 
         $suffix = bin2hex(random_bytes(6));
         $stmt = $this->pdo->prepare(
@@ -55,6 +61,7 @@ final class EnvironmentGuardIntegrityTest extends TestCase
 
     protected function tearDown(): void
     {
+        $this->unscriptStripe();
         $this->clearEnv();
         if ($this->userId > 0) {
             $uid = $this->userId;

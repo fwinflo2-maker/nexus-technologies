@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { apiNotificationsList, type ApiNotification } from '../../api/client';
 import { useNotifications } from '../../context/NotificationsContext';
 import { notificationMeta } from '../../data/notifications';
+import { useDashT, localeFor } from '../../data/dashboard-i18n';
+import { useI18n } from '../../context/I18nContext';
 
 /**
  * Cloche de notifications de la Topbar.
@@ -14,22 +16,25 @@ import { notificationMeta } from '../../data/notifications';
  */
 
 /** Format relatif court, identique à l'esprit du dashboard (« Il y a 5 min »). */
-function formatRelativeTime(isoString: string): string {
+function formatRelativeTime(isoString: string, locale: string, t: (key: string, params?: Record<string, string | number>) => string): string {
   const date = new Date(isoString);
   const diffMs = Date.now() - date.getTime();
   const diffMinutes = Math.floor(diffMs / 60000);
   const diffHours = Math.floor(diffMinutes / 60);
   const diffDays = Math.floor(diffHours / 24);
 
-  if (diffMinutes < 1) return "À l'instant";
-  if (diffMinutes < 60) return `Il y a ${diffMinutes} min`;
-  if (diffHours < 24) return `Il y a ${diffHours}h`;
-  if (diffDays === 1) return 'Hier';
-  return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+  if (diffMinutes < 1) return t('notifications.justNow');
+  if (diffMinutes < 60) return t('notifications.minutesAgo', { minutes: diffMinutes });
+  if (diffHours < 24) return t('notifications.hoursAgo', { hours: diffHours });
+  if (diffDays === 1) return t('notifications.groupYesterday');
+  return date.toLocaleDateString(locale, { day: '2-digit', month: '2-digit' });
 }
 
 export default function NotificationBell() {
   const { unreadCount, refreshUnread, markRead, markAllRead } = useNotifications();
+  const t = useDashT();
+  const { lang } = useI18n();
+  const locale = localeFor(lang);
   const [open, setOpen] = useState(false);
   const [recent, setRecent] = useState<ApiNotification[]>([]);
   const [loading, setLoading] = useState(false);
@@ -201,9 +206,9 @@ export default function NotificationBell() {
             ) : recent.length === 0 ? (
               <div style={{ padding: 28, textAlign: 'center' }}>
                 <div style={{ fontSize: 24, marginBottom: 8 }}>🔕</div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-bright)' }}>Aucune notification</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-bright)' }}>{t('notifications.empty')}</div>
                 <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 4 }}>
-                  Les événements importants apparaîtront ici.
+                  {t('notifications.empty.all')}
                 </div>
               </div>
             ) : (
@@ -258,10 +263,10 @@ export default function NotificationBell() {
                           textOverflow: 'ellipsis',
                         }}
                       >
-                        {n.message || meta.label}
+                        {n.message || t('notifType.' + n.type)}
                       </div>
                       <div style={{ fontSize: 9, color: 'var(--text-dim)', marginTop: 2, fontFamily: 'var(--font-mono)' }}>
-                        {formatRelativeTime(n.created_at)}
+                        {formatRelativeTime(n.created_at, locale, t)}
                       </div>
                     </div>
                   </button>
@@ -288,7 +293,7 @@ export default function NotificationBell() {
               textDecoration: 'none',
             }}
           >
-            Tout voir <span aria-hidden>→</span>
+            {t('notifications.viewAllShort')} <span aria-hidden>→</span>
           </Link>
         </div>
       )}

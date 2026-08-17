@@ -122,6 +122,12 @@ export default function BusinessDashboard() {
             ))}
           </div>
         )}
+
+        {/* Conversion de devises : gestion de la trésorerie multi-devises */}
+        <Link to="/convert" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)', flexWrap: 'wrap' }}>
+          <div style={{ fontSize: 12, color: 'var(--text-mid)', maxWidth: 420, lineHeight: 1.5 }}>{td('biz.convertSub')}</div>
+          <span className="btn btn-cyan" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>{td('biz.convertCta')}</span>
+        </Link>
       </motion.div>
 
       {/* Actions rapides — opérations de l'entreprise */}
@@ -130,12 +136,13 @@ export default function BusinessDashboard() {
         <div className="page-label" style={{ marginBottom: 12 }}>Vos opérations</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
           {[
-            { to: '/payments', icon: '↗', label: 'Nouveau paiement' },
-            { to: '/history', icon: '🕘', label: 'Historique' },
-            { to: '/approvals', icon: '✓', label: 'Approbations' },
-            { to: '/beneficiaries', icon: '👥', label: 'Bénéficiaires' },
-            { to: '/reconciliation', icon: '⇌', label: 'Rapprochement' },
-            { to: '/team', icon: '⊕', label: 'Équipe' },
+            { to: '/payments', icon: '↗', label: td('nav.payments') },
+            { to: '/convert', icon: '⇄', label: td('page.convert') },
+            { to: '/history', icon: '🕘', label: td('nav.history') },
+            { to: '/approvals', icon: '✓', label: td('nav.approvals') },
+            { to: '/beneficiaries', icon: '👥', label: td('nav.beneficiaries') },
+            { to: '/reconciliation', icon: '⇌', label: td('nav.reconciliation') },
+            { to: '/team', icon: '⊕', label: td('nav.team') },
           ].map((a) => (
             <motion.div key={a.to} whileHover={{ y: -4, scale: 1.02 }} whileTap={{ scale: 0.97 }}
               transition={{ type: 'spring', stiffness: 260, damping: 18 }}>

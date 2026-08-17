@@ -55,6 +55,21 @@ final class WalletConvertEndpointTest extends TestCase
         $this->eurWallet = $this->createWallet($this->userId, 'EUR', '1000.00');
         $this->usdWallet = $this->createWallet($this->userId, 'USD', '0.00');
 
+        // Source FX réelle (table fx_rates_cache) : les conversions EUR→USD
+        // de ces tests exigent un taux configuré — plus aucun repli manuel.
+        $this->pdo->prepare('DELETE FROM fx_rates_cache WHERE base_currency = :b AND quote_currency = :q')
+            ->execute(['b' => 'EUR', 'q' => 'USD']);
+        $this->pdo->prepare(
+            'INSERT INTO fx_rates_cache (base_currency, quote_currency, rate, spread_pct, source, fetched_at, expires_at)
+             VALUES (:b, :q, :r, :s, :src, NOW(), DATE_ADD(NOW(), INTERVAL 1 DAY))'
+        )->execute([
+            'b'   => 'EUR',
+            'q'   => 'USD',
+            'r'   => '1.08700000',
+            's'   => '0.0000',
+            'src' => 'fx_provider_test',
+        ]);
+
         $this->authenticateAs($this->userId);
     }
 
@@ -62,6 +77,9 @@ final class WalletConvertEndpointTest extends TestCase
     {
         Response::enableTestMode(false);
         unset($_SERVER['HTTP_AUTHORIZATION'], $_SERVER['HTTP_X_NEXUS_ENVIRONMENT']);
+        // Taux de test retiré (isolation entre tests).
+        $this->pdo->prepare('DELETE FROM fx_rates_cache WHERE source = :s')
+            ->execute(['s' => 'fx_provider_test']);
 
         foreach ($this->created as $uid) {
             // `ledger_entries` n'a pas de `user_id` : il se rattache à

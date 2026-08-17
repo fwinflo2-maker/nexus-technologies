@@ -12,6 +12,8 @@ use Nexus\Models\TransferRequest;
 use Nexus\Execution\ExecutionContext;
 use Nexus\Core\HttpException;
 use Nexus\Core\Response;
+use Nexus\Services\FXService;
+use Nexus\Services\IdempotencyService;
 use Nexus\Services\WalletService;
 
 /**
@@ -31,9 +33,6 @@ final class WalletController
 {
     /** Nombre de transactions renvoyées par l'historique rapide. */
     private const TX_LIMIT = 10;
-
-    /** Taux fixe MVP : 1 EUR = 655,957 XAF (sera remplacé par un service FX réel). */
-    private const EUR_TO_XAF = 655.957;
 
     /**
      * POST /api/wallets/convert
@@ -61,6 +60,11 @@ final class WalletController
         $sourceCurrency = strtoupper(trim((string) $request->input('source_currency', '')));
         $destCurrency   = strtoupper(trim((string) $request->input('dest_currency', '')));
         $idemKey        = trim((string) $request->input('idempotency_key', ''));
+        // Liens vers la quote de conversion (optionnel) : quand il est fourni,
+        // l'exécution honore le TAUX VERROUILLÉ de la quote au lieu de
+        // re-résoudre le taux courant (garantie « taux vu = taux appliqué »).
+        $quoteId        = trim((string) $request->input('quote_id', ''));
+        $routeId        = trim((string) $request->input('route_id', ''));
 
         // Validation d'entrée : 422, jamais 500. Ces refus sont la faute du
         // client, et le message doit lui permettre de corriger.
@@ -113,6 +117,99 @@ final class WalletController
         // configuration du serveur au moment de l'exécution.
         $context = ExecutionContext::fromRequest($request, $user);
 
+        // ── Exécution au taux garanti d'une quote (optionnel) ──
+        $lockedRate = null;
+        $fxSource   = null;
+        if ($quoteId !== '') {
+            // Un replay idempotent d'une conversion DÉJÀ exécutée doit
+            // renvoyer la réponse d'origine, pas un 409 : la quote est certes
+            // EXECUTED, mais l'utilisateur n'a rien fait de nouveau. Le
+            // contrôle de statut ci-dessous ne s'applique qu'aux nouvelles
+            // tentatives.
+            if ($idemKey !== '') {
+                $cached = IdempotencyService::check($idemKey, $userId, $context->environmentValue());
+                if ($cached !== null && $cached['status'] === 'completed') {
+                    Response::success(['conversion' => $cached['response_json']]);
+                }
+                if ($cached !== null && $cached['status'] === 'error') {
+                    Response::error(
+                        (string) ($cached['response_json']['error'] ?? 'Opération précédente en échec.'),
+                        409,
+                        'IDEMPOTENCY_ERROR'
+                    );
+                }
+            }
+
+            $pdo   = Database::getConnection();
+            $stmt  = $pdo->prepare(
+                'SELECT id, status, expires_at, amount_sent, source_currency, dest_currency, routes_json
+                 FROM quotes
+                 WHERE id = :id AND user_id = :uid AND environment = :env
+                 LIMIT 1'
+            );
+            $stmt->execute([
+                'id'  => $quoteId,
+                'uid' => $userId,
+                'env' => $context->environmentValue(),
+            ]);
+            $quote = $stmt->fetch();
+
+            if ($quote === false) {
+                Response::notFound('Quote introuvable.');
+            }
+            if ($quote['status'] === 'EXECUTED') {
+                Response::error('Cette quote a déjà été exécutée.', 409, 'QUOTE_ALREADY_EXECUTED');
+            }
+            if (strtotime((string) $quote['expires_at'] . ' UTC') <= time()) {
+                $pdo->prepare("UPDATE quotes SET status = 'EXPIRED' WHERE id = :id")
+                    ->execute(['id' => $quoteId]);
+                Response::error(
+                    'Cette quote a expiré. Relancez une demande de conversion pour obtenir un taux actuel.',
+                    409,
+                    'QUOTE_EXPIRED'
+                );
+            }
+            if ($quote['status'] !== 'QUOTED') {
+                Response::error('Cette quote n\'est plus exécutable.', 409, 'QUOTE_NOT_EXECUTABLE');
+            }
+
+            // Cohérence : la conversion doit correspondre EXACTEMENT à la
+            // quote (devises et montant). Une quote n'est valable que pour
+            // l'intention qui l'a produite.
+            if (strtoupper((string) $quote['source_currency']) !== $sourceCurrency
+                || strtoupper((string) $quote['dest_currency']) !== $destCurrency
+                || bccomp((string) $quote['amount_sent'], (string) $amount, 8) !== 0
+            ) {
+                Response::error(
+                    'La demande ne correspond pas à la quote (devises ou montant différents).',
+                    422,
+                    'QUOTE_MISMATCH'
+                );
+            }
+
+            $routes = json_decode((string) $quote['routes_json'], true);
+            $route  = null;
+            foreach ((array) $routes as $r) {
+                if ($routeId === '' || (string) ($r['id'] ?? '') === $routeId) {
+                    $route = $r;
+                    break;
+                }
+            }
+            if ($route === null) {
+                Response::error('Route introuvable dans cette quote.', 404, 'ROUTE_NOT_FOUND');
+            }
+
+            $lockedRate = (string) ($route['locked_rate'] ?? $route['fx_rate'] ?? '');
+            if ($lockedRate === '') {
+                Response::error(
+                    'Cette quote ne contient pas de taux exécutable.',
+                    409,
+                    'QUOTE_NOT_EXECUTABLE'
+                );
+            }
+            $fxSource = 'convert_quote';
+        }
+
         try {
             $result = WalletService::transferMultiCurrency(new TransferRequest(
                 userId:         $userId,
@@ -125,9 +222,17 @@ final class WalletController
                 idempotencyKey: $idemKey !== '' ? $idemKey : null,
                 description:    (string) $request->input('description', 'Conversion de devises'),
                 metadata:       null,
-                fxSource:       null,
-                context:        $context
+                fxSource:       $fxSource,
+                context:        $context,
+                fxRate:         $lockedRate
             ));
+
+            // La quote a été honorée : elle ne peut plus être ré-exécutée.
+            if ($quoteId !== '') {
+                Database::getConnection()
+                    ->prepare("UPDATE quotes SET selected_route_id = :rid, status = 'EXECUTED' WHERE id = :id")
+                    ->execute(['rid' => $routeId !== '' ? $routeId : 'INT', 'id' => $quoteId]);
+            }
 
         } catch (HttpException $e) {
             Response::error($e->getMessage(), $e->statusCode(), $e->errorCode());
@@ -356,6 +461,10 @@ final class WalletController
             $byCurrency[$wallet['currency']] = $wallet;
         }
 
+        // L'environnement du contexte détermine les taux utilisables pour
+        // les équivalents : un taux sandbox ne convertit pas une vue réelle.
+        $context = ExecutionContext::fromRequest($request, $user);
+
         $wallets = [];
         $totals  = [
             'total_ref'      => 0.0,
@@ -376,13 +485,19 @@ final class WalletController
             $inTransit  = $wallet !== null ? (float) $wallet['in_transit_balance'] : 0.0;
             $settlement = $wallet !== null ? (float) $wallet['settlement_balance'] : 0.0;
 
-            $rateRef = Currency::rateToRef($currency);
-
-            $totals['total_ref']      += $balance * $rateRef;
-            $totals['available_ref']  += $available * $rateRef;
-            $totals['pending_ref']    += $pending * $rateRef;
-            $totals['in_transit_ref'] += $inTransit * $rateRef;
-            $totals['settlement_ref'] += $settlement * $rateRef;
+            // Équivalent EUR : taux RÉEL de l'environnement, ou null si
+            // indisponible — jamais une valeur inventée (§7, §9).
+            $rateRef = FXService::rateToRef($currency, $context->environment);
+            $refEquivalent = $rateRef !== null && $rateRef > 0.0
+                ? round($balance / $rateRef, 2)
+                : null;
+            if ($rateRef !== null && $rateRef > 0.0) {
+                $totals['total_ref']      += $balance / $rateRef;
+                $totals['available_ref']  += $available / $rateRef;
+                $totals['pending_ref']    += $pending / $rateRef;
+                $totals['in_transit_ref'] += $inTransit / $rateRef;
+                $totals['settlement_ref'] += $settlement / $rateRef;
+            }
             if ($balance > 0) {
                 $currenciesWithFunds++;
             }
@@ -394,7 +509,7 @@ final class WalletController
                 'pending'        => round($pending, 2),
                 'in_transit'     => round($inTransit, 2),
                 'settlement'     => round($settlement, 2),
-                'ref_equivalent' => round($balance * $rateRef, 2),
+                'ref_equivalent' => $refEquivalent,
                 'has_funds'      => $balance > 0,
             ];
         }
@@ -418,15 +533,32 @@ final class WalletController
     /**
      * GET /api/wallets/rates
      *
-     * Taux de conversion EUR de référence (MVP : taux fixe EUR → XAF).
+     * Taux EUR → XAF de la source FX RÉELLE, scopé par l'environnement de la
+     * requête. Quand aucun taux n'est disponible, `fx_rate_xaf` vaut null et
+     * `available` vaut false : le frontend affiche « indisponible » au lieu
+     * d'une valeur inventée (§7).
      */
     public static function rates(Request $request): void
     {
         $request = AuthMiddleware::handle($request);
+        $user    = $request->attribute('user');
+
+        $context = ExecutionContext::fromRequest($request, $user);
+        $rate    = FXService::rate('EUR', 'XAF', $context->environment);
+
+        if ($rate === null) {
+            Response::success([
+                'base'        => Currency::REF,
+                'fx_rate_xaf' => null,
+                'available'   => false,
+                'updated_at'  => null,
+            ]);
+        }
 
         Response::success([
             'base'        => Currency::REF,
-            'fx_rate_xaf' => self::EUR_TO_XAF,
+            'fx_rate_xaf' => $rate,
+            'available'   => true,
             'updated_at'  => date(DATE_ATOM),
         ]);
     }

@@ -94,3 +94,5 @@
 2026_08_16_business_kyb.sql
 # 0.32 — KYB : infos entreprise vers Sumsub + niveau de risque (low/medium/high)
 2026_08_16_kyb_company_risk.sql
+# 0.33 — Journal des webhooks providers (idempotence, §13)
+2026_08_17_provider_webhook_events.sql

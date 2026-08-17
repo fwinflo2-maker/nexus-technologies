@@ -21,8 +21,8 @@ use Throwable;
  * Deux défauts distincts, tous deux graves.
  *
  * 1. LE TAUX IGNORAIT LA SOURCE FX RÉELLE. Le dépôt possède pourtant une
- *    infrastructure complète — `FXService` → `FXRateCache` →
- *    `ManualRateProvider`, adossée à la table `fx_rates_cache` — et
+ *    infrastructure complète — `FXService` → `FXRateCache`, adossée à la
+ *    table `fx_rates_cache` (aucun repli codé en dur) — et
  *    `WalletService::transferMultiCurrency()` (Convert) l'utilise déjà.
  *    Vérifié en HTTP pendant l'audit : en injectant `EUR→XAF = 100` dans
  *    `fx_rates_cache`, Convert appliquait bien 100 et traçait
