@@ -10,6 +10,16 @@ ensure_mysql() {
   sudo mkdir -p /var/run/mysqld
   sudo chown mysql:mysql /var/run/mysqld 2>/dev/null || true
 
+  # Defensive: ensure the container/FUSE-compatible InnoDB settings exist even
+  # if this boot's base image predates the install script writing them.
+  if [ ! -f /etc/mysql/mysql.conf.d/zz-cloud-agent.cnf ]; then
+    sudo tee /etc/mysql/mysql.conf.d/zz-cloud-agent.cnf >/dev/null <<'CNF'
+[mysqld]
+innodb_use_native_aio = 0
+innodb_flush_method = fsync
+CNF
+  fi
+
   for attempt in 1 2 3 4; do
     sudo service mysql start >/dev/null 2>&1 || true
     for _ in $(seq 1 45); do

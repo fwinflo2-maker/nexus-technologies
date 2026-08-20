@@ -19,6 +19,17 @@ if ! command -v composer >/dev/null 2>&1; then
   rm -f /tmp/composer-setup.php
 fi
 
+echo "==> Configure MySQL for container/FUSE filesystems"
+# Cloud Agent VMs back /var/lib/mysql with a container/FUSE filesystem that does
+# not support Linux native AIO or O_DIRECT. Without this, InnoDB aborts startup
+# with "Operating system error number 22 ... Invalid argument". Simulated AIO +
+# buffered fsync writes are compatible everywhere (and fine for a dev DB).
+sudo tee /etc/mysql/mysql.conf.d/zz-cloud-agent.cnf >/dev/null <<'CNF'
+[mysqld]
+innodb_use_native_aio = 0
+innodb_flush_method = fsync
+CNF
+
 echo "==> Start MySQL and wait for readiness"
 # The SysV init script only pings for ~30s and can time out on cold snapshot
 # disk I/O, so poll for readiness ourselves and re-issue start across attempts.
