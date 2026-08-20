@@ -1574,9 +1574,29 @@ export async function apiControlCredentials(): Promise<ApiResponse<{
 }
 
 export async function apiControlKyc(): Promise<ApiResponse<{
-  counters: ControlOverview['kyc']; applicants: Array<Record<string, unknown>>;
+  counters: ControlOverview['kyc'];
+  applicants: Array<Record<string, unknown>>;
+  can_manual_override?: boolean;
 }>> {
   return request('GET', '/control/kyc');
+}
+
+/** Override KYC/KYB exclusif Super Admin (secours Sumsub). */
+export async function apiControlKycOverride(payload: {
+  decision: 'approve' | 'reject' | 'resubmission';
+  reason: string;
+  verification_id?: number;
+  user_id?: number;
+  subject_type?: 'individual' | 'company';
+}): Promise<ApiResponse<{
+  verification_id: number;
+  user_id: number;
+  status: string;
+  subject_type: string;
+  provider: string;
+  created: boolean;
+}>> {
+  return request('POST', '/control/kyc/override', payload);
 }
 
 export async function apiControlWebhooks(): Promise<ApiResponse<{
@@ -1669,6 +1689,29 @@ export interface ControlClientDetail {
 
 export async function apiControlClient(id: number): Promise<ApiResponse<{ client: ControlClientDetail }>> {
   return request<{ client: ControlClientDetail }>('GET', `/control/clients/${id}`);
+}
+
+/** Suspension, ban (CLOSED) ou réactivation — exclusif superadmin, motif requis si restriction. */
+export async function apiControlClientStatus(
+  id: number,
+  status: 'ACTIVE' | 'SUSPENDED' | 'CLOSED',
+  reason = '',
+): Promise<ApiResponse<{ id: number; status: string }>> {
+  return request('POST', `/control/clients/${id}/status`, { status, reason });
+}
+
+export interface LinkedClientGroup {
+  signal: string;
+  detail: string;
+  risk: string;
+  members: Array<{ id: number; full_name: string; status: string }>;
+}
+
+export async function apiControlLinkedClients(): Promise<ApiResponse<{
+  groups: LinkedClientGroup[];
+  total: number;
+}>> {
+  return request('GET', '/control/clients/linked');
 }
 
 // --- Super Admin — cockpit (données réelles, RBAC superadmin côté serveur) ---

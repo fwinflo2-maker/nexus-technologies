@@ -259,6 +259,201 @@ final class KycService
         )->execute(['lvl' => 'none'] + $params);
     }
 
+    /**
+     * Décision manuelle exclusive Super Admin — secours quand Sumsub est HS.
+     *
+     * Ne remplace pas le flux provider : c'est un override audité, réservé au
+     * Super Admin, pour débloquer un compte lorsque le provider KYC est
+     * indisponible ou renvoie un état incohérent. Le motif est obligatoire.
+     *
+     * @return array{
+     *   verification_id: int,
+     *   user_id: int,
+     *   status: string,
+     *   subject_type: string,
+     *   provider: string,
+     *   created: bool
+     * }
+     */
+    public static function applyManualOverride(
+        PDO $pdo,
+        int $actorId,
+        string $decision,
+        string $reason,
+        ?int $verificationId = null,
+        ?int $userId = null,
+        ?string $subjectType = null,
+        string $environment = 'sandbox'
+    ): array {
+        $decision = strtolower(trim($decision));
+        $reason = trim($reason);
+        if ($reason === '') {
+            throw new \InvalidArgumentException('Un motif est obligatoire pour un override KYC manuel.');
+        }
+        if (strlen($reason) > 500) {
+            throw new \InvalidArgumentException('Motif trop long (500 caractères max).');
+        }
+
+        $status = match ($decision) {
+            'approve' => KycStatus::VERIFIED,
+            'reject' => KycStatus::REJECTED,
+            'resubmission' => KycStatus::RESUBMISSION_REQUESTED,
+            default => throw new \InvalidArgumentException('Décision KYC invalide.'),
+        };
+
+        $env = in_array($environment, ['sandbox', 'production'], true) ? $environment : 'sandbox';
+        $created = false;
+
+        if ($verificationId !== null && $verificationId > 0) {
+            $stmt = $pdo->prepare('SELECT * FROM kyc_verifications WHERE id = :id FOR UPDATE');
+            $stmt->execute(['id' => $verificationId]);
+            $row = $stmt->fetch();
+            if ($row === false) {
+                throw new \RuntimeException('Vérification introuvable.');
+            }
+        } else {
+            if ($userId === null || $userId <= 0) {
+                throw new \InvalidArgumentException('user_id ou verification_id requis.');
+            }
+            $userStmt = $pdo->prepare('SELECT id, account_type FROM users WHERE id = :id FOR UPDATE');
+            $userStmt->execute(['id' => $userId]);
+            $user = $userStmt->fetch();
+            if ($user === false) {
+                throw new \RuntimeException('Utilisateur introuvable.');
+            }
+
+            $type = $subjectType
+                ?? (((string) ($user['account_type'] ?? 'personal') === 'business')
+                    ? KycSubjectType::COMPANY->value
+                    : KycSubjectType::INDIVIDUAL->value);
+            if (!in_array($type, [KycSubjectType::INDIVIDUAL->value, KycSubjectType::COMPANY->value], true)) {
+                throw new \InvalidArgumentException('subject_type invalide.');
+            }
+
+            // Priorité : dossier Sumsub existant pour ce sujet / env, sinon manuel.
+            $find = $pdo->prepare(
+                'SELECT * FROM kyc_verifications
+                  WHERE user_id = :uid AND environment = :e AND subject_type = :t
+                  ORDER BY CASE provider WHEN \'sumsub\' THEN 0 WHEN \'manual\' THEN 1 ELSE 2 END, id DESC
+                  LIMIT 1
+                  FOR UPDATE'
+            );
+            $find->execute(['uid' => $userId, 'e' => $env, 't' => $type]);
+            $row = $find->fetch();
+
+            if ($row === false) {
+                $applicantId = 'manual-' . $userId . '-' . bin2hex(random_bytes(6));
+                $ins = $pdo->prepare(
+                    'INSERT INTO kyc_verifications
+                        (user_id, provider, environment, subject_type, applicant_id, level_name, status, reason, reviewed_at)
+                     VALUES (:uid, \'manual\', :e, :t, :aid, \'superadmin_manual\', :st, :reason, NOW())'
+                );
+                $ins->execute([
+                    'uid'    => $userId,
+                    'e'      => $env,
+                    't'      => $type,
+                    'aid'    => $applicantId,
+                    'st'     => $status->value,
+                    'reason' => $reason,
+                ]);
+                $verificationId = (int) $pdo->lastInsertId();
+                $created = true;
+                $row = [
+                    'id'           => $verificationId,
+                    'user_id'      => $userId,
+                    'provider'     => 'manual',
+                    'environment'  => $env,
+                    'subject_type' => $type,
+                    'applicant_id' => $applicantId,
+                ];
+            }
+        }
+
+        $vid = (int) $row['id'];
+        $uid = (int) $row['user_id'];
+        $subject = (string) $row['subject_type'];
+
+        if (!$created) {
+            $pdo->prepare(
+                'UPDATE kyc_verifications
+                    SET status = :st, reason = :reason, reviewed_at = NOW(),
+                        level_name = COALESCE(level_name, \'superadmin_manual\')
+                  WHERE id = :id'
+            )->execute([
+                'st'     => $status->value,
+                'reason' => $reason,
+                'id'     => $vid,
+            ]);
+        }
+
+        self::projectManualOverrideOntoUser($pdo, $uid, $subject, $status);
+
+        $pdo->prepare(
+            'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, metadata)
+             VALUES (:user, :action, \'kyc_verifications\', :id, :metadata)'
+        )->execute([
+            'user'   => $actorId,
+            'action' => match ($decision) {
+                'approve' => 'kyc.approve',
+                'reject' => 'kyc.reject',
+                default => 'kyc.resubmission',
+            },
+            'id'     => $vid,
+            'metadata' => json_encode([
+                'source'         => 'superadmin_manual_override',
+                'decision'       => $decision,
+                'reason'         => $reason,
+                'user_id'        => $uid,
+                'subject_type'   => $subject,
+                'provider'       => (string) $row['provider'],
+                'environment'    => (string) $row['environment'],
+                'created_dossier'=> $created,
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        ]);
+
+        return [
+            'verification_id' => $vid,
+            'user_id'         => $uid,
+            'status'          => $status->value,
+            'subject_type'    => $subject,
+            'provider'        => (string) $row['provider'],
+            'created'         => $created,
+        ];
+    }
+
+    private static function projectManualOverrideOntoUser(
+        PDO $pdo,
+        int $userId,
+        string $subjectType,
+        KycStatus $status
+    ): void {
+        if ($subjectType === KycSubjectType::COMPANY->value) {
+            if ($status->isVerified()) {
+                $pdo->prepare(
+                    'UPDATE users SET kyb_status = :st, kyb_verified_at = NOW() WHERE id = :id'
+                )->execute(['st' => KycStatus::VERIFIED->value, 'id' => $userId]);
+            } elseif ($status->isFinalRejection() || $status === KycStatus::RESUBMISSION_REQUESTED) {
+                $pdo->prepare(
+                    'UPDATE users SET kyb_status = :st, kyb_verified_at = NULL WHERE id = :id'
+                )->execute([
+                    'st' => $status->isFinalRejection() ? 'rejected' : 'pending',
+                    'id' => $userId,
+                ]);
+            }
+            return;
+        }
+
+        if ($status->isVerified()) {
+            $pdo->prepare(
+                "UPDATE users SET kyc_level = 'standard', kyc_verified_at = NOW() WHERE id = :id"
+            )->execute(['id' => $userId]);
+        } elseif ($status->isFinalRejection() || $status === KycStatus::RESUBMISSION_REQUESTED) {
+            $pdo->prepare(
+                "UPDATE users SET kyc_level = 'none', kyc_verified_at = NULL WHERE id = :id"
+            )->execute(['id' => $userId]);
+        }
+    }
+
     /** Nature du sujet porté par l'applicant (lecture projetée, non sensible). */
     private static function subjectTypeOf(PDO $pdo, KycWebhookEvent $event): ?string
     {

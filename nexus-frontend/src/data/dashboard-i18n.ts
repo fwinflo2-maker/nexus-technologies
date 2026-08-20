@@ -465,8 +465,6 @@ const fr: Dict = {
   'cards.success.create': 'Demande de carte enregistrée.',
   'cards.error.load': 'Impossible de charger les cartes.',
   'cards.error.create': 'Impossible de créer la demande de carte.',
-  'dash.quick.cards': 'Carte virtuelle',
-  'dash.quick.cards.sub': 'Créer une carte',
   'settings.error.profile': 'Erreur lors de la mise à jour du profil.',
   'settings.error.password': 'Erreur lors du changement de mot de passe.',
   'settings.error.session': 'Erreur lors de la révocation de la session.',

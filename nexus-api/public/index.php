@@ -188,6 +188,7 @@ $router->get('/control/providers/{slug}', [ControlCenterController::class, 'prov
 $router->get('/control/credentials', [ControlCenterController::class, 'credentials']);
 $router->get('/control/public-keys', [ControlCenterController::class, 'publicKeys']);
 $router->get('/control/kyc', [ControlCenterController::class, 'kyc']);
+$router->post('/control/kyc/override', [ControlCenterController::class, 'kycOverride']);
 $router->get('/control/webhooks', [ControlCenterController::class, 'webhooks']);
 $router->get('/control/audit', [ControlCenterController::class, 'audit']);
 $router->get('/control/clients', [ControlCenterController::class, 'clients']);

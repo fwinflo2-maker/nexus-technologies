@@ -19,6 +19,7 @@ const navPersonal = [
   { to: '/receive', icon: '↙', label: 'nav.receive' },
   { to: '/convert', icon: '⇄', label: 'nav.convert' },
   { to: '/history', icon: '≡', label: 'nav.history' },
+  { to: '/kyc', icon: '✓', label: 'nav.kyc' },
 ];
 
 const navBusiness = [
@@ -34,9 +35,17 @@ const navBusiness = [
   { to: '/approvals', icon: '✓', label: 'nav.approvals' },
   { to: '/beneficiaries', icon: '👥', label: 'nav.beneficiaries' },
   { to: '/reconciliation', icon: '⇌', label: 'nav.reconciliation' },
-  { to: '/reporting', icon: '≡', label: 'nav.reporting' },
   { to: '/team', icon: '⊕', label: 'nav.team' },
   { to: '/kyc', icon: '✓', label: 'nav.kyc' },
+];
+
+/** Super Admin dans l'espace client : évite /dashboard → boucle /admin. */
+const navSuperAdmin = [
+  { to: '/admin', icon: '👑', label: 'nav.dashboard' },
+  { to: '/wallet', icon: '◉', label: 'nav.wallet' },
+  { to: '/send', icon: '↗', label: 'nav.send' },
+  { to: '/convert', icon: '⇄', label: 'nav.convert' },
+  { to: '/history', icon: '≡', label: 'nav.history' },
 ];
 
 // NB: /providers est une fonctionnalité du Back Office, absente des dashboards personal/business.
@@ -63,7 +72,8 @@ export default function Sidebar({ mode }: SidebarProps) {
   // Super Admin : espace client sous identité « Super Admin », jamais
   // « Compte personnel » — il opère son propre wallet sans restriction.
   const effectiveMode = isSuperAdmin ? 'admin' : (isPersonalOnly ? 'personal' : mode);
-  const nav = effectiveMode === 'business' ? navBusiness : navPersonal;
+  const nav = isSuperAdmin ? navSuperAdmin : (effectiveMode === 'business' ? navBusiness : navPersonal);
+  const homePath = isSuperAdmin ? '/admin' : '/dashboard';
 
   const closeMenu = () => setMenuOpen(false);
 
@@ -109,7 +119,7 @@ export default function Sidebar({ mode }: SidebarProps) {
     <>
       {/* Barre mobile : logo + bouton ☰ */}
       <header className="sidebar-mobilebar">
-        <NavLink to="/dashboard" className="navbar-logo" aria-label={t('sidebar.logo.aria')} onClick={closeMenu}>
+        <NavLink to={homePath} className="navbar-logo" aria-label={t('sidebar.logo.aria')} onClick={closeMenu}>
           <div className="logo-box">N</div>
           <div className="logo-txt">
             NEXUS
@@ -168,7 +178,7 @@ export default function Sidebar({ mode }: SidebarProps) {
             <NavLink
               key={item.to + item.label}
               to={item.to}
-              end={item.to === '/dashboard'}
+              end={item.to === '/dashboard' || item.to === '/admin'}
               onClick={closeMenu}
               className={({ isActive }) =>
                 `nav-item ${isActive ? (effectiveMode === 'business' ? 'active-gold' : 'active') : ''}`

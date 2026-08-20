@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { countries } from '../../data/countries';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import './AuthPages.css';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useI18n } from '../../context/I18nContext';
 import { useAuth } from '../../context/AuthContext';
 import { apiRegister } from '../../api/client';
@@ -577,7 +577,7 @@ export function RegisterPage({ onSwitchToLogin, onBackHome }: RegisterPageProps)
             </motion.form>
 
             <motion.div variants={authEnter} initial="hidden" animate="visible" custom={6} className="auth-terms">
-              {t('reg_terms_prefix')} <a href="#">{t('reg_terms_terms')}</a> {t('reg_terms_and')} <a href="#">{t('reg_terms_privacy')}</a>
+              {t('reg_terms_prefix')} <Link to="/terms">{t('reg_terms_terms')}</Link> {t('reg_terms_and')} <Link to="/privacy">{t('reg_terms_privacy')}</Link>
             </motion.div>
 
             <motion.p variants={authEnter} initial="hidden" animate="visible" custom={7} className="auth-footer">
