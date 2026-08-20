@@ -20,11 +20,28 @@ if ! command -v composer >/dev/null 2>&1; then
 fi
 
 echo "==> Start MySQL and wait for readiness"
-sudo service mysql start
-for _ in $(seq 1 30); do
-  sudo mysqladmin ping --silent 2>/dev/null && break
-  sleep 1
+# The SysV init script only pings for ~30s and can time out on cold snapshot
+# disk I/O, so poll for readiness ourselves and re-issue start across attempts.
+sudo mkdir -p /var/run/mysqld
+sudo chown mysql:mysql /var/run/mysqld 2>/dev/null || true
+mysql_ready=0
+for attempt in 1 2 3 4; do
+  sudo service mysql start >/dev/null 2>&1 || true
+  for _ in $(seq 1 45); do
+    if sudo mysqladmin ping --silent 2>/dev/null; then
+      mysql_ready=1
+      break
+    fi
+    sleep 1
+  done
+  [ "$mysql_ready" = 1 ] && break
+  echo "    MySQL not ready after attempt ${attempt}; retrying..."
 done
+if [ "$mysql_ready" != 1 ]; then
+  echo "MySQL did not become ready." >&2
+  sudo tail -n 30 /var/log/mysql/error.log 2>/dev/null || true
+  exit 1
+fi
 
 echo "==> Configure MySQL users (dev defaults: root/empty + nexus/nexus_dev_pw)"
 # root over TCP resolves to root@localhost via reverse DNS; give both an empty
