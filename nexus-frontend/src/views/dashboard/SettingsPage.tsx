@@ -1,20 +1,38 @@
-import { safeStorage } from '../../lib/safeStorage';
 import { useState, useEffect } from 'react';
 import { apiGetUserProfile, apiUpdateProfile, apiUpdatePassword, apiGetSessions, apiRevokeSession, type UserProfile, type UserSession } from '../../api/client';
 import { useDashT, localeFor } from '../../data/dashboard-i18n';
 import { useI18n } from '../../context/I18nContext';
+import { countries } from '../../data/countries';
+import { useAuth } from '../../context/AuthContext';
+
+/** Libellé lisible d'un rôle plateforme interne (uniquement affiché pour les
+ *  rôles non-client ; un compte client standard voit toujours `user`). */
+function roleLabel(role: string): string {
+  const labels: Record<string, string> = {
+    superadmin: 'Super Admin',
+    compliance_officer: 'Compliance',
+    provider_engineer: 'Provider Engineer',
+    support_operator: 'Support',
+    sre_operator: 'SRE',
+  };
+  return labels[role] ?? role;
+}
 
 /**
  * Page Paramètres — Gestion complète du compte utilisateur.
  * Sections : Profil, Sécurité, Sessions, Préférences.
  * Tous les textes visibles passent par l'i18n (dashTranslate).
+ *
+ * `hideHeader` : utilisé quand la page est embarquée dans une autre surface
+ * (ex. console Super Admin) qui fournit déjà son propre en-tête.
  */
-export default function SettingsPage() {
+export default function SettingsPage({ hideHeader = false }: { hideHeader?: boolean }) {
   const t = useDashT();
   const { lang } = useI18n();
   const locale = localeFor(lang);
+  const { refreshSession } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'sessions' | 'preferences'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'sessions'>('profile');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -44,13 +62,6 @@ export default function SettingsPage() {
   const [sessions, setSessions] = useState<UserSession[]>([]);
   const [revokedCount, setRevokedCount] = useState(0);
 
-  // Préférences (locales pour l'instant)
-  const [preferences, setPreferences] = useState({
-    language: 'fr',
-    theme: 'dark',
-    notifications_enabled: true,
-  });
-
   // Charger le profil au montage
   useEffect(() => {
     loadProfile();
@@ -69,7 +80,7 @@ export default function SettingsPage() {
         setFormData({
           full_name: user.full_name || '',
           phone: user.phone || '',
-          country_of_residence: '',
+          country_of_residence: user.country_of_residence || '',
         });
       }
     } catch (err) {
@@ -152,6 +163,7 @@ export default function SettingsPage() {
       if (response.success) {
         setSuccess(t('settings.success.profile'));
         setEditMode(false);
+        await refreshSession();
         loadProfile();
       }
     } catch (err: any) {
@@ -321,15 +333,17 @@ export default function SettingsPage() {
               className="input-field"
             >
               <option value="">{t('settings.profile.selectCountry')}</option>
-              <option value="CG">🇨🇬 Congo</option>
-              <option value="CM">🇨🇲 Cameroun</option>
-              <option value="GA">🇬🇦 Gabon</option>
-              <option value="FR">🇫🇷 France</option>
-              <option value="SN">🇸🇳 Sénégal</option>
-              <option value="CI">🇨🇮 Côte d'Ivoire</option>
+              {countries.map((c) => (
+                <option key={c.code} value={c.code}>{c.name} ({c.code})</option>
+              ))}
             </select>
           ) : (
-            <div className="static-value">{profile.kyc_level === 'none' ? t('settings.profile.notSet') : t('settings.profile.set')}</div>
+            <div className="static-value">
+              {profile.country_of_residence
+                ? (countries.find((c) => c.code === profile.country_of_residence)?.name
+                  ?? profile.country_of_residence)
+                : t('settings.profile.notSet')}
+            </div>
           )}
         </div>
 
@@ -337,6 +351,9 @@ export default function SettingsPage() {
           <label className="form-label">{t('settings.profile.accountType')}</label>
           <div className="static-value">
             {profile.account_type === 'business' ? t('settings.profile.business') : t('settings.profile.personal')}
+            {profile.platform_role && profile.platform_role !== 'user' && (
+              <span style={{ color: 'var(--cyan)', fontWeight: 600 }}> · {roleLabel(profile.platform_role)}</span>
+            )}
           </div>
         </div>
 
@@ -508,73 +525,17 @@ export default function SettingsPage() {
     );
   }
 
-  function renderPreferencesSection() {
-    return (
-      <div className="settings-section animate-up">
-        <h3 className="section-title">{t('settings.preferences.title')}</h3>
-
-        <div className="form-group">
-          <label className="form-label">{t('settings.preferences.language')}</label>
-          <select
-            value={preferences.language}
-            onChange={(e) => setPreferences({ ...preferences, language: e.target.value })}
-            className="input-field"
-          >
-            <option value="fr">Français</option>
-            <option value="en">English</option>
-          </select>
-          <small className="form-hint">{t('settings.preferences.languageHint')}</small>
-        </div>
-
-        <div className="form-group">
-          <label className="form-label">{t('settings.preferences.theme')}</label>
-          <select
-            value={preferences.theme}
-            onChange={(e) => setPreferences({ ...preferences, theme: e.target.value })}
-            className="input-field"
-          >
-            <option value="dark">{t('settings.preferences.theme.dark')}</option>
-            <option value="light">{t('settings.preferences.theme.light')}</option>
-            <option value="auto">{t('settings.preferences.theme.auto')}</option>
-          </select>
-        </div>
-
-        <div className="form-group">
-          <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <input
-              type="checkbox"
-              checked={preferences.notifications_enabled}
-              onChange={(e) => setPreferences({ ...preferences, notifications_enabled: e.target.checked })}
-            />
-            {t('settings.preferences.notifications')}
-          </label>
-        </div>
-
-        <div className="form-actions" style={{ marginTop: 24 }}>
-          <button
-            className="btn btn-primary"
-            onClick={() => {
-              safeStorage.set('local', 'nexus_preferences', JSON.stringify(preferences));
-              setSuccess(t('settings.success.preferences'));
-              setTimeout(() => setSuccess(null), 3000);
-            }}
-          >
-            {t('settings.preferences.save')}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="page">
-      <div className="page-header animate-up">
-        <div className="page-label">{t('settings.pageLabel')}</div>
-        <div className="page-title">{t('settings.title')}</div>
-        <p className="page-subtitle" style={{ marginTop: 10, fontSize: 14, color: 'var(--text-mid)', maxWidth: 600 }}>
-          {t('settings.subtitle')}
-        </p>
-      </div>
+      {!hideHeader && (
+        <div className="page-header animate-up">
+          <div className="page-label">{t('settings.pageLabel')}</div>
+          <div className="page-title">{t('settings.title')}</div>
+          <p className="page-subtitle" style={{ marginTop: 10, fontSize: 14, color: 'var(--text-mid)', maxWidth: 600 }}>
+            {t('settings.subtitle')}
+          </p>
+        </div>
+      )}
 
       {/* Conteneur central : onglets + sections */}
       <div style={{
@@ -615,19 +576,12 @@ export default function SettingsPage() {
         >
           {t('settings.tab.sessions')}
         </button>
-        <button
-          className={`tab ${activeTab === 'preferences' ? 'active' : ''}`}
-          onClick={() => setActiveTab('preferences')}
-        >
-          {t('settings.tab.preferences')}
-        </button>
       </div>
 
       {/* Contenu des sections */}
       {activeTab === 'profile' && renderProfileSection()}
       {activeTab === 'security' && renderSecuritySection()}
       {activeTab === 'sessions' && renderSessionsSection()}
-      {activeTab === 'preferences' && renderPreferencesSection()}
 
       </div>
     </div>

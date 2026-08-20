@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { EASE } from '../../components/anim/Premium';
+import TechLoader from '../../components/anim/TechLoader';
 import {
   apiIntentCoverage,
   apiAuthorizedOrigins,
@@ -10,10 +12,14 @@ import {
   type IntentCoverageData,
   type IntentCountry,
   type AuthorizedOriginsData,
+  type AccountLimits,
 } from '../../api/client';
 import RouteSelectionStep from './RouteSelectionStep';
+import { CurrencyLogo } from '../../components/dashboard/CurrencyLogo';
+import AddFundsModal from '../../components/dashboard/AddFundsModal';
 import { useDashT, localeFor } from '../../data/dashboard-i18n';
 import { useI18n } from '../../context/I18nContext';
+import { useAuth } from '../../context/AuthContext';
 
 /**
  * SendPage — Moteur de transfert NEXUS (i-tech engine).
@@ -91,6 +97,24 @@ function formatCurrencyDisplay(val: number, cur: string, locale: string): string
     maximumFractionDigits: 2,
   });
   return `${formatted} ${cur}`;
+}
+
+/** Réseaux proposés selon l'actif crypto de réception. Fiat → liste complète. */
+const CRYPTO_NETWORKS_BY_ASSET: Record<string, string[]> = {
+  ETH:  ['Ethereum'],
+  BTC:  ['Bitcoin'],
+  USDT: ['Ethereum', 'Tron', 'BNB Smart Chain', 'Polygon', 'Arbitrum', 'Optimism', 'Solana', 'Base'],
+  USDC: ['Ethereum', 'Polygon', 'Arbitrum', 'Optimism', 'Solana', 'Base'],
+};
+
+function isCryptoDestCurrency(code: string): boolean {
+  return code in CRYPTO_NETWORKS_BY_ASSET;
+}
+
+function networksForDestCurrency(destCurrency: string, all: string[]): string[] {
+  const allowed = CRYPTO_NETWORKS_BY_ASSET[destCurrency];
+  if (!allowed) return all;
+  return all.filter(n => allowed.includes(n));
 }
 
 // ─── Animations (framer-motion) ─────────────────────────────────────────────
@@ -232,6 +256,8 @@ function Corridor({
 function TelemetryPanel({
   residenceCountry,
   kycLevel,
+  limits,
+  locale,
   originsCount,
   coverageCount,
   sourceCurrenciesCount,
@@ -239,14 +265,19 @@ function TelemetryPanel({
 }: {
   residenceCountry: string | null;
   kycLevel: string;
+  limits: AccountLimits | null;
+  locale: string;
   originsCount: number;
   coverageCount: number;
   sourceCurrenciesCount: number;
   step: Step;
 }) {
   const t = useDashT();
-  const kycColor = kycLevel === 'verified' ? 'var(--green)' : kycLevel === 'pending' ? 'var(--gold)' : 'var(--red)';
-  const kycLabel = kycLevel === 'verified' ? t('send.kyc.verified') : kycLevel === 'pending' ? t('send.kyc.pending') : t('send.kyc.unverified');
+  // Niveaux KYC réels (backend) : standard/advanced = vérifié documentaire.
+  // none/basic = non vérifié. Aucun niveau vérifié ne doit apparaître rouge.
+  const kycOk = ['standard', 'advanced'].includes(kycLevel);
+  const kycColor = kycOk ? 'var(--green)' : kycLevel === 'pending' ? 'var(--gold)' : 'var(--red)';
+  const kycLabel = kycOk ? t('send.kyc.verified') : kycLevel === 'pending' ? t('send.kyc.pending') : t('send.kyc.unverified');
   const statusLabel = step === 1 ? 'CONFIGURATION' : step === 2 ? 'VALIDATION' : 'ROUTING ACTIF';
 
   return (
@@ -271,6 +302,19 @@ function TelemetryPanel({
           {kycLabel}
         </span>
       </div>
+
+      {/* Plafond mensuel réel — visible tant que le compte n'est pas vérifié. */}
+      {limits && !limits.verified && (
+        <div className="se-tele-row">
+          <span className="se-tele-k">{t('send.monthlyLimit')}</span>
+          <span className="se-tele-v" style={{ color: 'var(--gold)', fontFamily: 'var(--font-mono)', fontSize: 10 }}>
+            {t('send.monthlyLimit.remaining', {
+              amount: formatCurrencyDisplay(limits.monthly_remaining_eur, 'EUR', locale),
+              limit: formatCurrencyDisplay(limits.monthly_limit_eur, 'EUR', locale),
+            })}
+          </span>
+        </div>
+      )}
 
       <div style={{ height: 1, background: 'var(--border-soft)', margin: '8px 0' }} />
 
@@ -355,7 +399,7 @@ function CountrySelector({
             <span className="mono" style={{ fontSize: 9, color: 'var(--text-dim)' }}>{selected.code}</span>
           </>
         ) : (
-          <span style={{ fontSize: 12, color: 'var(--text-dim)', flex: 1 }}>            {placeholder || t('send.selectCountry')}</span>
+          <span style={{ fontSize: 12, color: 'var(--text-dim)', flex: 1 }}>{placeholder || t('send.selectCountry')}</span>
         )}
         <span style={{ fontSize: 9, color: 'var(--text-dim)', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>▼</span>
       </div>
@@ -376,7 +420,7 @@ function CountrySelector({
           </div>
           {filtered.length === 0 ? (
             <div style={{ padding: '16px 8px', textAlign: 'center', fontSize: 11, color: 'var(--text-dim)' }}>
-              Aucun pays trouvé pour « {query} »
+              {t('send.noCountry', { query })}
             </div>
           ) : (
             filtered.map(c => (
@@ -410,12 +454,15 @@ function CountrySelector({
 export default function SendPage() {
   const t = useDashT();
   const { lang } = useI18n();
+  const { user: authUser } = useAuth();
+  const isSuperAdmin = authUser?.platform_role === 'superadmin';
   const locale = localeFor(lang);
   const [step, setStep] = useState<Step>(1);
   const [completedSteps, setCompletedSteps] = useState<Step[]>([]);
 
   const [amount, setAmount] = useState('');
   const [fundingType, setFundingType] = useState<'wallet' | 'provider'>('wallet');
+  const [fundModalOpen, setFundModalOpen] = useState(false);
   const [sourceCurrency, setSourceCurrency] = useState('');
   const [originCountry, setOriginCountry] = useState('');
   const [destCountry, setDestCountry] = useState('');
@@ -469,8 +516,19 @@ export default function SendPage() {
   const destCurrencies = useMemo(() => selectedCountry?.currencies ?? [], [selectedCountry]);
   const selectedDestCurrency = useMemo(() => destCurrencies.find(c => c.code === destCurrency) ?? null, [destCurrencies, destCurrency]);
   const availableMethods = useMemo(() => selectedDestCurrency?.methods ?? [], [selectedDestCurrency]);
+  const isCryptoDest = isCryptoDestCurrency(destCurrency);
+  // Rails locaux seulement : le mode « crypto » (logo ₿) n'est plus proposé.
+  // USDT / USDC / ETH / BTC se choisissent comme devises, pas comme mode.
+  const railMethods = useMemo(
+    () => (isCryptoDest ? [] : availableMethods.filter(m => m.type !== 'crypto')),
+    [availableMethods, isCryptoDest],
+  );
   const selectedMethod = useMemo(() => availableMethods.find(m => m.type === receivingMethod) ?? null, [availableMethods, receivingMethod]);
   const mobileOperators = useMemo(() => selectedMethod?.type === 'mobile_money' ? (selectedMethod.operators ?? []) : [], [selectedMethod]);
+  const cryptoNetworks = useMemo(
+    () => networksForDestCurrency(destCurrency, coverage?.crypto_networks ?? []),
+    [coverage, destCurrency],
+  );
 
   const estimatedReceived = useMemo(() => {
     if (!coverage || !amount || !sourceCurrency || !destCurrency) return 0;
@@ -480,10 +538,15 @@ export default function SendPage() {
   }, [coverage, amount, sourceCurrency, destCurrency]);
 
   const estimatedFees = useMemo(() => {
-    if (!coverage || !amount || !sourceCurrency) return 0;
+    // L'API /intent/countries ne fournit pas fee_estimate_pct : aucun pourcentage
+    // n'est alors disponible et l'affichage doit dire « estimation indisponible »
+    // (jamais NaN EUR — pas de chiffre inventé, §12).
+    if (!coverage || !amount || !sourceCurrency) return null;
     const num = parseFloat(amount);
-    if (isNaN(num) || num <= 0) return 0;
-    return num * (coverage.fee_estimate_pct / 100);
+    if (isNaN(num) || num <= 0) return null;
+    const pct = coverage.fee_estimate_pct;
+    if (typeof pct !== 'number' || !isFinite(pct)) return null;
+    return num * (pct / 100);
   }, [coverage, amount, sourceCurrency]);
 
   const selectedOrigin = useMemo(() => authorizedOrigins?.origins.find(o => o.country === originCountry) ?? null, [authorizedOrigins, originCountry]);
@@ -495,10 +558,26 @@ export default function SendPage() {
     if (step === 1) {
       const num = parseFloat(amount);
       if (!amount || isNaN(num) || num <= 0) errors.amount = t('send.validation.amount');
+      // Solde insuffisant — contrôlé côté client pour l'UX, TOUJOURS
+      // revalidé par PolicyEngine côté serveur (le frontend ne décide pas).
+      if (fundingType === 'wallet' && sourceCurrency) {
+        const w = wallets.find(x => x.currency === sourceCurrency);
+        const available = w ? w.available : 0;
+        if (!isNaN(num) && num > 0 && num > available) {
+          errors.amount = t('send.insufficientBalance.detail', {
+            amount: formatCurrencyDisplay(available, sourceCurrency, locale),
+          });
+        }
+      }
       if (fundingType === 'wallet') {
         if (!sourceCurrency) errors.sourceCurrency = t('send.validation.walletCurrency');
       } else {
-        if (!originCountry) errors.originCountry = t('send.validation.provider');
+        if (!sourceCurrency) errors.sourceCurrency = t('send.validation.walletCurrency');
+        const w = wallets.find(x => x.currency === sourceCurrency);
+        const available = w ? w.available : 0;
+        if (!isNaN(num) && num > 0 && num > available) {
+          errors.amount = t('send.funding.collectFirst');
+        }
       }
       if (!destCountry) errors.destCountry = t('send.validation.destCountry');
       if (destCountry && !destCurrency) errors.destCurrency = t('send.validation.destCurrency');
@@ -510,7 +589,7 @@ export default function SendPage() {
       }
     }
     return errors;
-  }, [step, amount, fundingType, sourceCurrency, originCountry, destCountry, destCurrency, receivingMethod, beneficiary]);
+  }, [step, amount, fundingType, sourceCurrency, wallets, originCountry, destCountry, destCurrency, receivingMethod, beneficiary, t, locale]);
 
   const [errors, setErrors] = useState<FormErrors>({});
 
@@ -531,9 +610,57 @@ export default function SendPage() {
 
   // ─── Réinitialisations ──────────────────────────────────────────────
 
-  useEffect(() => { setDestCurrency(''); setReceivingMethod(''); setBeneficiary({ name: '', reference: '', secondaryRef: '', operator: '' }); }, [destCountry]);
+  useEffect(() => { setReceivingMethod(''); setBeneficiary({ name: '', reference: '', secondaryRef: '', operator: '' }); }, [destCountry]);
   useEffect(() => { setReceivingMethod(''); setBeneficiary({ name: '', reference: '', secondaryRef: '', operator: '' }); }, [destCurrency]);
   useEffect(() => { setBeneficiary({ name: '', reference: '', secondaryRef: '', operator: '' }); }, [receivingMethod]);
+
+  // Le sélecteur de devise source affiche un défaut sans jamais le
+  // sélectionner : l'état resterait vide et la validation échouerait
+  // (« choisissez une devise ») alors qu'un wallet financé existe.
+  // On sélectionne RÉELLEMENT la première devise disponible.
+  useEffect(() => {
+    if (fundingType === 'wallet' && !sourceCurrency && sourceCurrencies.length > 0) {
+      setSourceCurrency(sourceCurrencies[0]);
+    }
+  }, [fundingType, sourceCurrency, sourceCurrencies]);
+
+  // Pays : devise locale en premier (défaut). Un changement de pays
+  // réinitialise vers cette devise ; un choix USDT/USDC/ETH est conservé
+  // tant que le pays (et donc le défaut) ne change pas.
+  const defaultDestCurrency = destCurrencies[0]?.code ?? '';
+  useEffect(() => {
+    setDestCurrency(defaultDestCurrency);
+  }, [destCountry, defaultDestCurrency]);
+
+  // Crypto dest : le rail est implicite (wallet). Fiat : une seule méthode locale → auto.
+  useEffect(() => {
+    if (isCryptoDest) {
+      setReceivingMethod('crypto');
+      return;
+    }
+    if (railMethods.length === 1) setReceivingMethod(railMethods[0].type);
+  }, [isCryptoDest, railMethods]);
+
+  // §4 — En mode wallet, l'origine des fonds est TOUJOURS dérivée des
+  // sources de financement vérifiées (résidence KYC en tête dans la
+  // réponse du serveur). Jamais vide, jamais choisie arbitrairement :
+  // si l'origine courante n'est plus autorisée, on retombe sur la
+  // première origine autorisée.
+  useEffect(() => {
+    if (fundingType !== 'wallet' || !authorizedOrigins || authorizedOrigins.origins.length === 0) return;
+    setOriginCountry(prev => {
+      if (prev && authorizedOrigins.origins.some(o => o.country === prev)) return prev;
+      return authorizedOrigins.origins[0].country;
+    });
+  }, [fundingType, authorizedOrigins]);
+
+  // Super Admin : aucune source vérifiée requise, origine libre. On fixe un
+  // pays par défaut (couverture providers) pour que la quote ait une origine.
+  useEffect(() => {
+    if (isSuperAdmin && coverage && !originCountry) {
+      setOriginCountry(coverage.countries[0]?.code ?? '');
+    }
+  }, [isSuperAdmin, coverage, originCountry]);
 
   // ─── États de chargement / erreur ────────────────────────────────────
 
@@ -545,8 +672,7 @@ export default function SendPage() {
           <div className="page-title">Initialisation <span className="gc">du moteur…</span></div>
         </div>
         <div className="se-boot">
-          <div className="se-boot-ring"><div className="se-boot-core" /></div>
-          <div className="se-boot-log">Recherche des options disponibles…</div>
+          <TechLoader label="Recherche des options disponibles…" />
         </div>
         <div className="shimmer-bg" style={{ height: 80, borderRadius: 16, marginTop: 20 }} />
         <div className="shimmer-bg" style={{ height: 400, borderRadius: 16, marginTop: 16 }} />
@@ -618,25 +744,26 @@ export default function SendPage() {
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-                    {/* Source des fonds : wallet OU proposition du provider */}
+                    {/* Source des fonds : wallet (défaut) OU payer via provider */}
                     <motion.div {...stagger(0)}>
                       <div className="se-field-label">{t('send.source')}</div>
 
-                      {/* Toggle Wallet / Provider */}
                       <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
                         <button
-                          onClick={() => { setFundingType('wallet'); setOriginCountry(''); }}
+                          type="button"
+                          onClick={() => setFundingType('wallet')}
                           className={`se-chip ${fundingType === 'wallet' ? 'se-chip-selected' : ''}`}
                           style={{ flex: 1, padding: '9px 12px' }}
                         >
-                          💼 Mon wallet
+                          💼 {t('send.funding.wallet')}
                         </button>
                         <button
-                          onClick={() => { setFundingType('provider'); setSourceCurrency(''); }}
+                          type="button"
+                          onClick={() => setFundingType('provider')}
                           className={`se-chip ${fundingType === 'provider' ? 'se-chip-selected' : ''}`}
                           style={{ flex: 1, padding: '9px 12px' }}
                         >
-                          🏦 Proposition du provider
+                          🏦 {t('send.funding.provider')}
                         </button>
                       </div>
 
@@ -655,11 +782,61 @@ export default function SendPage() {
                             </select>
                             <input type="text" value={amount} onChange={e => setAmount(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="0.00" />
                           </div>
+
+                          {sourceCurrency && (() => {
+                            const w = wallets.find(x => x.currency === sourceCurrency);
+                            const available = w ? w.available : 0;
+                            const num = parseFloat(amount);
+                            const short = !isNaN(num) && num > 0 && num > available;
+                            return (
+                              <>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+                                  <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>
+                                    {t('send.available')} : <strong style={{ color: short ? 'var(--red)' : 'var(--green)', fontFamily: 'var(--font-mono)' }}>{formatCurrencyDisplay(available, sourceCurrency, locale)}</strong>
+                                  </span>
+                                  {short && (
+                                    <span style={{ fontSize: 10, color: 'var(--red)', fontWeight: 600 }}>
+                                      {t('send.insufficientBalance')} ⚠️
+                                    </span>
+                                  )}
+                                </div>
+                                {short && (
+                                  <motion.div
+                                    initial={{ opacity: 0, y: 6 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    style={{
+                                      marginTop: 8, padding: '10px 14px', borderRadius: 10,
+                                      background: 'linear-gradient(135deg, rgba(255,69,96,0.10), rgba(255,150,60,0.06))',
+                                      border: '1px solid rgba(255,69,96,0.35)',
+                                      display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+                                    }}
+                                  >
+                                    <span style={{ fontSize: 16 }}>⚠️</span>
+                                    <div style={{ flex: 1, minWidth: 160 }}>
+                                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--red)' }}>{t('send.insufficientBalance')}</div>
+                                      <div style={{ fontSize: 10, color: 'var(--text-mid)', marginTop: 1 }}>
+                                        {t('send.insufficientBalance.detail', { amount: formatCurrencyDisplay(available, sourceCurrency, locale) })}
+                                      </div>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      className="btn btn-cyan"
+                                      style={{ fontSize: 10, padding: '6px 12px' }}
+                                      onClick={() => setFundModalOpen(true)}
+                                    >
+                                      + {t('wallet.addFunds')}
+                                    </button>
+                                  </motion.div>
+                                )}
+                              </>
+                            );
+                          })()}
                           {wallets.length > 0 && (
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
                               {wallets.filter(w => w.available > 0 || w.has_funds).map(w => (
                                 <button
                                   key={w.currency}
+                                  type="button"
                                   onClick={() => setSourceCurrency(w.currency)}
                                   className={`se-chip ${sourceCurrency === w.currency ? 'se-chip-selected' : ''}`}
                                   style={{ fontSize: 10, padding: '5px 10px' }}
@@ -670,53 +847,75 @@ export default function SendPage() {
                             </div>
                           )}
                           {errors.sourceCurrency && <ErrorText>{errors.sourceCurrency}</ErrorText>}
+
+                          {isSuperAdmin ? (
+                            <div className="se-residence" style={{ marginTop: 8 }}>
+                              <span style={{ fontSize: 9, color: 'var(--text-dim)' }}>{t('send.superadmin.origin')}</span>
+                              <CountrySelector countries={coverage.countries} selectedCode={originCountry} onSelect={setOriginCountry} placeholder={t('send.selectCountry')} />
+                              <span className="se-lock">👑 {t('send.superadmin.badge')}</span>
+                            </div>
+                          ) : authorizedOrigins && authorizedOrigins.origins.length === 0 ? (
+                            <motion.div
+                              initial={{ opacity: 0, y: 6 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              style={{
+                                marginTop: 8, padding: '14px 16px', borderRadius: 12,
+                                background: 'linear-gradient(135deg, rgba(255,180,60,0.08), rgba(255,120,60,0.04))',
+                                border: '1px solid rgba(255,180,60,0.30)',
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <span style={{ fontSize: 18 }}>🛡️</span>
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--gold)' }}>{t('send.verifyAccount')}</div>
+                                  <div style={{ fontSize: 10.5, color: 'var(--text-mid)', marginTop: 2 }}>{t('send.noVerifiedSource')}</div>
+                                </div>
+                              </div>
+                              <Link to="/kyc" className="btn btn-gold" style={{ marginTop: 10, fontSize: 10.5, width: '100%' }}>
+                                {t('send.verifyAccount')} →
+                              </Link>
+                            </motion.div>
+                          ) : selectedOrigin && (
+                            <div className="se-residence" style={{ marginTop: 8 }}>
+                              <span style={{ fontSize: 9, color: 'var(--text-dim)' }}>{t('send.originDerived')}</span>
+                              <strong>{selectedOrigin.flag} {selectedOrigin.countryName}</strong>
+                              <span className="se-lock">🔒 {t('send.originLocked')}</span>
+                            </div>
+                          )}
                         </>
                       ) : (
                         <>
-                          {authorizedOrigins?.country_of_residence && (
-                            <div className="se-residence" style={{ marginBottom: 8 }}>
-                              <span style={{ fontSize: 9, color: 'var(--text-dim)' }}>Résidence KYC :</span>
-                              <strong>{authorizedOrigins.country_of_residence}</strong>
-                              <span className="se-lock">🔒 non modifiable</span>
-                            </div>
-                          )}
-
-                          {authorizedOrigins && authorizedOrigins.origins.length === 0 ? (
-                            <div style={{
-                              padding: '12px 14px', background: 'rgba(255,100,100,0.04)',
-                              border: '1px solid rgba(255,100,100,0.2)', borderRadius: 10,
-                              fontSize: 11, color: 'var(--red)',
-                            }}>
-                              Aucune source de financement vérifiée. Ajoutez et vérifiez un moyen de paiement pour envoyer des fonds.
-                            </div>
-                          ) : authorizedOrigins && authorizedOrigins.origins.length === 1 ? (
-                            <div className="se-chip se-chip-locked">
-                              <span style={{ fontSize: 16 }}>{authorizedOrigins.origins[0].flag}</span>
-                              <span>{authorizedOrigins.origins[0].countryName}</span>
-                              <span className="se-chip-sub">{authorizedOrigins.origins[0].sources[0]?.kindLabel}</span>
-                            </div>
-                          ) : (
-                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                              {authorizedOrigins?.origins.map((origin, i) => (
-                                <motion.button
-                                  key={origin.country}
-                                  className={`se-chip ${originCountry === origin.country ? 'se-chip-selected' : ''}`}
-                                  onClick={() => { setOriginCountry(origin.country); if (origin.currency) setSourceCurrency(origin.currency); }}
-                                  {...stagger(i, 0.05)}
-                                >
-                                  <span style={{ fontSize: 14 }}>{origin.flag}</span>
-                                  <span>{origin.countryName}</span>
-                                  {origin.sources.length > 0 && (
-                                    <span className="se-chip-sub">{origin.sources[0].kindLabel}</span>
-                                  )}
-                                  {originCountry === origin.country && (
-                                    <span className="pill p-c" style={{ fontSize: 7, marginLeft: 'auto' }}>✓</span>
-                                  )}
-                                </motion.button>
+                          <p style={{ fontSize: 12, color: 'var(--text-mid)', marginBottom: 12, lineHeight: 1.5 }}>
+                            {t('send.funding.providerHint')}
+                          </p>
+                          <div className="se-amount" style={{ marginBottom: 12 }}>
+                            <select
+                              value={sourceCurrency || (sourceCurrencies[0] ?? 'EUR')}
+                              onChange={e => setSourceCurrency(e.target.value)}
+                              style={{ padding: '11px 10px', background: 'var(--panel2)', color: 'var(--cyan)', fontWeight: 700, fontSize: 12, outline: 'none', border: 'none', borderRight: '1px solid var(--border)', cursor: 'pointer' }}
+                            >
+                              {(sourceCurrencies.length ? sourceCurrencies : ['EUR', 'USD', 'XAF']).map(c => (
+                                <option key={c} value={c}>{c}</option>
                               ))}
+                            </select>
+                            <input type="text" value={amount} onChange={e => setAmount(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="0.00" />
+                          </div>
+                          <button
+                            type="button"
+                            className="se-cta"
+                            style={{ width: '100%', fontSize: 12 }}
+                            onClick={() => setFundModalOpen(true)}
+                            disabled={!amount || Number(amount) <= 0}
+                          >
+                            🏦 {t('send.funding.chooseProvider')}
+                          </button>
+                          {selectedOrigin && (
+                            <div className="se-residence" style={{ marginTop: 10 }}>
+                              <span style={{ fontSize: 9, color: 'var(--text-dim)' }}>{t('send.originDerived')}</span>
+                              <strong>{selectedOrigin.flag} {selectedOrigin.countryName}</strong>
+                              <span className="se-lock">🔒 {t('send.originLocked')}</span>
                             </div>
                           )}
-                          {errors.originCountry && <ErrorText>{errors.originCountry}</ErrorText>}
                         </>
                       )}
                       {errors.amount && <ErrorText>{errors.amount}</ErrorText>}
@@ -749,32 +948,42 @@ export default function SendPage() {
                       {errors.destCountry && <ErrorText>{errors.destCountry}</ErrorText>}
                     </motion.div>
 
-                    {/* Devise réception */}
+                    {/* Devise réception — logos cliquables */}
                     {destCountry && destCurrencies.length > 0 && (
                       <motion.div {...stagger(3)}>
                         <div className="se-field-label">{t('send.destCurrency')}</div>
-                        {destCurrencies.length === 1 ? (
-                          <div className="se-chip se-chip-locked">
-                            <span className="pill p-c" style={{ fontSize: 8 }}>{destCurrencies[0].code}</span>
-                            <span>{destCurrencies[0].name}</span>
-                            <span style={{ fontSize: 9, color: 'var(--text-dim)', marginLeft: 'auto' }}>{destCurrencies[0].symbol}</span>
-                          </div>
-                        ) : (
-                          <select className="se-input" value={destCurrency} onChange={e => setDestCurrency(e.target.value)} style={{ cursor: 'pointer' }}>
-                            <option value="">— Choisir —</option>
-                            {destCurrencies.map(c => <option key={c.code} value={c.code}>{c.code} — {c.name}</option>)}
-                          </select>
-                        )}
+                        <div className="se-ccy-grid" role="listbox" aria-label={t('send.destCurrency')}>
+                          {destCurrencies.map(c => {
+                            const selected = destCurrency === c.code;
+                            return (
+                              <motion.button
+                                key={c.code}
+                                type="button"
+                                role="option"
+                                aria-selected={selected}
+                                aria-label={`${c.code} — ${c.name}`}
+                                title={`${c.code} — ${c.name}`}
+                                className={`se-ccy ${selected ? 'se-ccy-selected' : ''}`}
+                                onClick={() => setDestCurrency(c.code)}
+                                whileHover={{ y: -2 }}
+                                whileTap={{ scale: 0.96 }}
+                              >
+                                <span className="se-ccy-logo"><CurrencyLogo code={c.code} size={32} /></span>
+                                <span className="se-ccy-code">{c.code}</span>
+                              </motion.button>
+                            );
+                          })}
+                        </div>
                         {errors.destCurrency && <ErrorText>{errors.destCurrency}</ErrorText>}
                       </motion.div>
                     )}
 
-                    {/* Mode de réception */}
-                    {destCurrency && availableMethods.length > 0 && (
+                    {/* Mode de réception — rails locaux uniquement (pas le logo ₿). */}
+                    {destCurrency && !isCryptoDest && railMethods.length > 0 && (
                       <motion.div {...stagger(4)}>
                         <div className="se-field-label">{t('send.method')}</div>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
-                          {availableMethods.map(m => (
+                          {railMethods.map(m => (
                             <motion.button
                               key={m.type}
                               className={`se-method ${receivingMethod === m.type ? 'se-method-selected' : ''}`}
@@ -829,7 +1038,7 @@ export default function SendPage() {
                               <div className="se-field-label" style={{ marginBottom: 4 }}>{fields.secondaryLabel}</div>
                               <select className="se-input" value={beneficiary.secondaryRef} onChange={e => setBeneficiary(b => ({ ...b, secondaryRef: e.target.value }))}>
                                 <option value="">— Réseau —</option>
-                                {coverage.crypto_networks.map(n => <option key={n} value={n}>{n}</option>)}
+                                {cryptoNetworks.map(n => <option key={n} value={n}>{n}</option>)}
                               </select>
                             </div>
                           )}
@@ -895,7 +1104,7 @@ export default function SendPage() {
                       [t('send.youSend'), formatCurrencyDisplay(parseFloat(amount) || 0, sourceCurrency, locale), 'var(--white)', true],
                       [t('send.source'), fundingType === 'wallet'
                         ? t('send.walletSrc', { currency: sourceCurrency })
-                        : t('send.originSrc', { flag: selectedOrigin?.flag ?? '', name: selectedOrigin?.countryName ?? originCountry }), 'var(--green)', false],
+                        : t('send.funding.provider'), 'var(--green)', false],
                       [t('send.destination'), `${selectedCountry?.flag ?? ''} ${selectedCountry?.name ?? destCountry}`, 'var(--text-bright)', false],
                       [t('send.receiveCurrency'), destCurrency, 'var(--cyan)', true],
                       [t('send.method'), `${selectedMethod?.icon ?? ''} ${selectedMethod?.label ?? ''}${beneficiary.operator ? ` — ${beneficiary.operator}` : ''}`, 'var(--text-bright)', false],
@@ -931,7 +1140,9 @@ export default function SendPage() {
                     <motion.div className="trow" {...stagger(7)}>
                       <span style={{ fontSize: 11, color: 'var(--text-mid)' }}>{t('send.estFees')}</span>
                       <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--gold)', fontFamily: 'var(--font-mono)' }}>
-                        {formatCurrencyDisplay(estimatedFees, sourceCurrency, locale)}
+                        {estimatedFees !== null
+                          ? formatCurrencyDisplay(estimatedFees, sourceCurrency, locale)
+                          : <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>{t('send.estUnavailable')}</span>}
                       </span>
                     </motion.div>
 
@@ -965,6 +1176,8 @@ export default function SendPage() {
               <TelemetryPanel
                 residenceCountry={authorizedOrigins?.country_of_residence ?? null}
                 kycLevel={authorizedOrigins?.kyc_level ?? 'none'}
+                limits={authorizedOrigins?.limits ?? null}
+                locale={locale}
                 originsCount={authorizedOrigins?.origins.length ?? 0}
                 coverageCount={coverage.countries.length}
                 sourceCurrenciesCount={sourceCurrencies.length}
@@ -1010,6 +1223,20 @@ export default function SendPage() {
           />
         </motion.div>
       )}
+
+      <AddFundsModal
+        open={fundModalOpen}
+        onClose={() => setFundModalOpen(false)}
+        onSuccess={async (cur) => {
+          setSourceCurrency(cur);
+          setFundingType('wallet');
+          const walletsRes = await apiWalletsList();
+          if (walletsRes.success && walletsRes.data) setWallets(walletsRes.data.wallets);
+        }}
+        initialCurrency={sourceCurrency || 'EUR'}
+        initialAmount={amount || '100'}
+        startAtProviders={fundingType === 'provider'}
+      />
     </div>
   );
 }

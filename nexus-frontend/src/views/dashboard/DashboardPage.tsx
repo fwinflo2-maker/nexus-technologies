@@ -14,10 +14,12 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useI18n } from '../../context/I18nContext';
 import { useDashT, localeFor } from '../../data/dashboard-i18n';
+import { isAccountVerified } from '../../lib/accountStatus';
 import AnimatedCounter from '../../components/AnimatedCounter';
 import Avatar from '../../components/Avatar';
+import { EASE } from '../../components/anim/Premium';
 
-type Mode = 'personal' | 'business';
+type Mode = 'personal' | 'business' | 'admin';
 type Period = '7d' | '30d' | '12m';
 
 interface DashboardProps {
@@ -67,11 +69,11 @@ function formatRelativeTime(isoString: string, t: TFunc, locale: string): string
 }
 
 const fadeInUp = {
-  hidden: { opacity: 0, y: 30 },
+  hidden: { opacity: 0, y: 22 },
   visible: (i: number) => ({
     opacity: 1,
     y: 0,
-    transition: { delay: i * 0.1, duration: 0.6, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] },
+    transition: { delay: i * 0.07, duration: 0.5, ease: EASE },
   }),
 };
 
@@ -138,87 +140,153 @@ export default function DashboardPage({ mode }: DashboardProps) {
     );
   }
 
-  const { user, wallets, totals, kpis, recent, banner } = summary;
+  const { user, wallets, totals, kpis, recent, banner, limits } = summary;
   const displayName = authUser?.full_name || user.full_name || '';
   const series = activity?.series || [];
   const maxVol = Math.max(...series.map((s) => s.volume), 1);
 
+  const verified = isAccountVerified(authUser);
+  const kycPending = user.status === 'PENDING';
+
+  // Libellés et cible du bandeau — composés depuis l'i18n (le backend ne
+  // renvoie que `type` / `reason` / `href`, jamais de texte codé en dur).
+  const bannerContent = (() => {
+    if (!banner?.type) return null;
+    if (banner.type === 'kyc') {
+      return {
+        title: t(isBiz ? 'dash.banner.kyb.title' : 'dash.banner.kyc.title'),
+        message: t(isBiz ? 'dash.banner.kyb.message' : 'dash.banner.kyc.message'),
+        action: t(isBiz ? 'dash.banner.kyb.action' : 'dash.banner.kyc.action'),
+        tone: 'kyc' as const,
+        href: banner.href ?? '/kyc',
+      };
+    }
+    if (banner.type === 'limits' && banner.reason === 'restricted') {
+      return {
+        title: t('dash.banner.restricted.title'),
+        message: t('dash.banner.restricted.message'),
+        action: t('dash.banner.restricted.action'),
+        tone: 'limits' as const,
+        href: banner.href ?? '/support',
+      };
+    }
+    if (banner.type === 'limits') {
+      const pct = limits.monthly_limit_eur > 0
+        ? Math.min(100, (limits.monthly_used_eur / limits.monthly_limit_eur) * 100)
+        : 0;
+      return {
+        title: t('dash.banner.limits.title'),
+        message: t('dash.banner.limits.message'),
+        action: t('dash.banner.limits.action'),
+        tone: 'limits' as const,
+        href: banner.href ?? '/kyc',
+        pct,
+        used: limits.monthly_used_eur,
+        limit: limits.monthly_limit_eur,
+        remaining: limits.monthly_remaining_eur,
+      };
+    }
+    return {
+      title: t('dash.banner.corridor.title'),
+      message: t('dash.banner.corridor.message'),
+      action: t('dash.banner.corridor.action'),
+      tone: 'corridor' as const,
+      href: banner.href ?? '/wallet',
+    };
+  })();
+
   const quickActions = [
     { icon: '↗', label: t('dash.quick.send'), sub: t('dash.quick.send.sub'), cls: 'ib-c', href: '/send' },
     { icon: '↙', label: t('dash.quick.receive'), sub: t('dash.quick.receive.sub'), cls: 'ib-gr', href: '/receive' },
-    { icon: '⇌', label: t('dash.quick.fund'), sub: t('dash.quick.fund.sub'), cls: 'ib-g', href: '/wallet' },
+    { icon: '⇌', label: t('dash.quick.fund'), sub: t('dash.quick.fund.sub'), cls: 'ib-g', href: '/wallet?fund=1' },
     { icon: '⇄', label: t('dash.quick.convert'), sub: t('dash.quick.convert.sub'), cls: 'ib-v', href: '/convert' },
     { icon: '👥', label: t('dash.quick.beneficiaries'), sub: t('dash.quick.beneficiaries.sub'), cls: 'ib-p', href: '/payments' },
   ];
 
-  if (user.status === 'PENDING') quickActions.push({ icon: '🛡️', label: t('dash.quick.kyc'), sub: t('dash.quick.kyc.sub'), cls: 'ib-v', href: '/kyc' });
+  if (kycPending) quickActions.push({ icon: '🛡️', label: t('dash.quick.kyc'), sub: t('dash.quick.kyc.sub'), cls: 'ib-v', href: '/kyc' });
   else if (user.account_type === 'business') quickActions.push({ icon: '🏢', label: t('dash.quick.pay'), sub: t('dash.quick.pay.sub'), cls: 'ib-v', href: '/payments' });
   else quickActions.push({ icon: '≡', label: t('dash.quick.history'), sub: t('dash.quick.history.sub'), cls: 'ib-v', href: '/history' });
 
   return (
     <div className="page" style={{ overflowX: 'hidden' }}>
+      {/* ═══ 1. En-tête : salutation + état de vérification réel ═════════ */}
+      <motion.div variants={fadeInUp} initial="hidden" animate="visible" custom={0} className="page-header" style={{ marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+          <Avatar avatar={authUser?.avatar} accountType={isBiz ? 'business' : 'personal'} size={58} />
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div className="page-label">{t(isBiz ? 'dash.business.title' : 'dash.personal.title')}</div>
+            <div className="page-title" style={{ fontSize: 'clamp(26px, 3vw, 38px)' }}>
+              {t('dash.hello')} <span className={isBiz ? 'gg' : 'gc'}>{displayName}</span>
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+            <span className={`pill ${kycPending ? 'p-g' : verified ? 'p-gr' : 'p-g'}`} style={{ fontSize: 9 }}>
+              {kycPending ? t('dash.verification.required') : verified ? t('dash.verification.ok') : t('common.verificationRequired')}
+            </span>
+            {!verified && !kycPending && (
+              <Link to="/kyc" className="btn btn-ghost" style={{ fontSize: 10, padding: '5px 12px' }}>
+                {t('dash.verification.view')} →
+              </Link>
+            )}
+          </div>
+        </div>
+      </motion.div>
+
+      {/* ═══ 2. Bandeau de statut — uniquement si pertinent ════════════ */}
+      {/* Un compte vérifié n'a PAS de bandeau « limites actives » : rien
+          à annoncer. Le bandeau n'apparaît que pour une action requise. */}
       <AnimatePresence>
-        {banner && banner.type && (
-          <motion.div initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ opacity: 0 }}
-            className={`card ${banner.type === 'kyc' ? 'card-hi-g' : banner.type === 'limits' ? 'card-hi-v' : 'card-hi-c'}`}
-            style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-              <div className={`ib ${banner.type === 'kyc' ? 'ib-g' : 'ib-v'}`} style={{ width: 40, height: 40, borderRadius: 10, fontSize: 20 }}>
-                {banner.type === 'kyc' ? '🛡️' : banner.type === 'limits' ? '⚡' : '💡'}
+        {bannerContent && (
+          <motion.div
+            initial={{ y: -20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className={`card ${bannerContent.tone === 'kyc' ? 'card-hi-g' : bannerContent.tone === 'limits' ? 'card-hi-v' : 'card-hi-c'}`}
+            style={{ marginBottom: 22, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, flex: 1, minWidth: 240 }}>
+              <div className={`ib ${bannerContent.tone === 'kyc' ? 'ib-g' : bannerContent.tone === 'limits' ? 'ib-v' : 'ib-c'}`} style={{ width: 40, height: 40, borderRadius: 10, fontSize: 20, flexShrink: 0 }}>
+                {bannerContent.tone === 'kyc' ? '🛡️' : bannerContent.tone === 'limits' ? '⚡' : '💡'}
               </div>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-bright)' }}>{banner.title}</div>
-                <div style={{ fontSize: 11, color: 'var(--text-mid)', marginTop: 2 }}>{banner.message}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-bright)' }}>{bannerContent.title}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-mid)', marginTop: 2 }}>{bannerContent.message}</div>
+                {bannerContent.tone === 'limits' && 'pct' in bannerContent && bannerContent.pct !== undefined && (
+                  <div style={{ marginTop: 10, maxWidth: 420 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9.5, color: 'var(--text-dim)', marginBottom: 4 }}>
+                      <span>{formatCurrency(bannerContent.used, 'EUR', locale)} {t('dash.limits.used')} · {t('dash.limits.of')} {formatCurrency(bannerContent.limit, 'EUR', locale)}</span>
+                      <span style={{ color: 'var(--gold)', fontWeight: 700 }}>{formatCurrency(bannerContent.remaining, 'EUR', locale)} {t('dash.limits.remaining')}</span>
+                    </div>
+                    <div style={{ height: 5, background: 'var(--panel2)', borderRadius: 3, overflow: 'hidden' }}>
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${bannerContent.pct}%` }}
+                        transition={{ duration: 1, ease: 'easeOut' }}
+                        style={{ height: '100%', background: 'linear-gradient(90deg, var(--gold), var(--violet))', borderRadius: 3 }}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
-            {banner.action && (
-              <Link to={banner.type === 'kyc' ? '/kyc' : '/wallet'} className={`btn ${banner.type === 'kyc' ? 'btn-gold' : 'btn-cyan'}`} style={{ fontSize: 11 }}>
-                {banner.action} →
+            {bannerContent.action && (
+              <Link to={bannerContent.href} className={`btn ${bannerContent.tone === 'kyc' ? 'btn-gold' : 'btn-cyan'}`} style={{ fontSize: 11 }}>
+                {bannerContent.action} →
               </Link>
             )}
           </motion.div>
         )}
       </AnimatePresence>
 
-      <motion.div variants={fadeInUp} initial="hidden" animate="visible" custom={0} className="page-header" style={{ marginBottom: 30 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-          <Avatar avatar={authUser?.avatar} accountType={isBiz ? 'business' : 'personal'} size={58} />
-          <div>
-            <div className="page-label">{t(isBiz ? 'dash.business.title' : 'dash.personal.title')}</div>
-            <div className="page-title" style={{ fontSize: 'clamp(26px, 3vw, 38px)' }}>
-              {t('dash.hello')} <span className={isBiz ? 'gg' : 'gc'}>{displayName}</span>
-            </div>
-          </div>
-        </div>
-      </motion.div>
-
-      {/* Quick actions — barre d'actions premium */}
-      <motion.div variants={staggerContainer} initial="hidden" animate="visible"
-        style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 26 }}>
-        {quickActions.map((qa, i) => (
-          <motion.div key={qa.href + qa.label} variants={fadeInUp} custom={i + 1}>
-            <Link to={qa.href} className="btn btn-ghost" style={{
-              display: 'inline-flex', alignItems: 'center', gap: 10, padding: '10px 16px', textDecoration: 'none',
-              fontSize: 12, borderRadius: 12, border: '1px solid var(--border)',
-            }}>
-              <span className={`ib ${qa.cls}`} style={{ width: 30, height: 30, borderRadius: 8, fontSize: 14 }}>{qa.icon}</span>
-              <span style={{ textAlign: 'left' }}>
-                <span style={{ display: 'block', fontWeight: 700, color: 'var(--text-bright)' }}>{qa.label}</span>
-                <span style={{ display: 'block', fontSize: 9, color: 'var(--text-dim)' }}>{qa.sub}</span>
-              </span>
-            </Link>
-          </motion.div>
-        ))}
-      </motion.div>
-
-      <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="g4" style={{ marginBottom: 30, perspective: '1000px' }}>
+      {/* ═══ 3. KPIs ═══════════════════════════════════════════════════ */}
+      <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="g4" style={{ marginBottom: 26, perspective: '1000px' }}>
         {[{ l: t('dash.total'), v: totals.total_ref, fmt: (n: number) => formatCurrency(n, totals.ref_currency, locale), c: 'var(--cyan)', icon: '💰' },
           { l: t('dash.transactions'), v: kpis.transactions_month, fmt: (n: number) => `${n}`, c: 'var(--green)', icon: '🔄' },
           { l: t('dash.volume30d'), v: kpis.volume_xaf, fmt: (n: number) => formatXAF(n, locale), c: 'var(--gold)', icon: '📊' },
           { l: t('dash.avgTime'), v: kpis.avg_exec_time_sec ?? 0, fmt: (n: number) => `${Math.round(n)}s`, c: 'var(--violet)', icon: '⏱️' }
         ].map((kpi, i) => (
           <motion.div key={i} variants={fadeInUp} custom={i + 1} whileHover={{ y: -5, scale: 1.02 }}
-            className="card glass-card stat-card" style={{ padding: 24, transformStyle: 'preserve-3d' }}>
+            className="card glass-card stat-card" style={{ padding: 22, transformStyle: 'preserve-3d' }}>
             <div className="stat-label">{kpi.l}</div>
             <div className="stat-value" style={{ color: kpi.c, fontSize: 28 }}>
               <AnimatedCounter value={kpi.v} format={kpi.fmt} />
@@ -228,7 +296,8 @@ export default function DashboardPage({ mode }: DashboardProps) {
         ))}
       </motion.div>
 
-      <div className="g3 animate-up delay-2" style={{ marginBottom: 30, gap: 20 }}>
+      {/* ═══ 4. Soldes par devise ══════════════════════════════════════ */}
+      <div className="g3 animate-up delay-2" style={{ marginBottom: 26, gap: 20 }}>
         {wallets.map((w: DashboardWallet, i: number) => {
           const meta = CURRENCY_META[w.currency] || { flag: '🌐', symbol: w.currency, label: w.currency };
           return (
@@ -259,50 +328,27 @@ export default function DashboardPage({ mode }: DashboardProps) {
         })}
       </div>
 
-        {/* Taux de change */}
-        {rates && (
-          <div className="card glass-card" style={{ padding: 24, marginBottom: 30 }}>
-            <div className="page-label">{t('dash.rates')}</div>
-            <div style={{ fontSize: 16, fontWeight: 600, marginTop: 8 }}>{rates.base} → XAF</div>
-            <div style={{ fontSize: 14, color: 'var(--text-dim)', marginTop: 4 }}>
-              {rates.fx_rate_xaf !== null && rates.fx_rate_xaf > 0
-                ? t('dash.rates.one', { base: rates.base, rate: rates.fx_rate_xaf.toLocaleString(locale, { maximumFractionDigits: 3 }) })
-                : t('dash.rates.unavailable')}
-            </div>
-            <Link to="/wallet" className="btn btn-ghost" style={{ marginTop: 12, fontSize: 10 }}>{t('wallet.convert')}</Link>
-          </div>
-        )}
+      {/* ═══ 5. Actions rapides ═════════════════════════════════════════ */}
+      <motion.div variants={staggerContainer} initial="hidden" animate="visible"
+        style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 26 }}>
+        {quickActions.map((qa, i) => (
+          <motion.div key={qa.href + qa.label} variants={fadeInUp} custom={i + 1}>
+            <Link to={qa.href} className="btn btn-ghost" style={{
+              display: 'inline-flex', alignItems: 'center', gap: 10, padding: '9px 14px', textDecoration: 'none',
+              fontSize: 12, borderRadius: 12, border: '1px solid var(--border)',
+            }}>
+              <span className={`ib ${qa.cls}`} style={{ width: 28, height: 28, borderRadius: 8, fontSize: 13 }}>{qa.icon}</span>
+              <span style={{ textAlign: 'left' }}>
+                <span style={{ display: 'block', fontWeight: 700, color: 'var(--text-bright)' }}>{qa.label}</span>
+                <span style={{ display: 'block', fontSize: 9, color: 'var(--text-dim)' }}>{qa.sub}</span>
+              </span>
+            </Link>
+          </motion.div>
+        ))}
+      </motion.div>
 
-        {/* Vérification du compte */}
-        <div className="card glass-card" style={{ padding: 24, marginBottom: 30 }}>
-          <div className="page-label">{t('dash.verification')}</div>
-          {summary.user.status === 'PENDING' ? (
-            <div className="pill p-r" style={{ fontSize: 10, marginTop: 8 }}>{t('dash.verification.required')}</div>
-          ) : (
-            <div className="pill p-gr" style={{ fontSize: 10, marginTop: 8 }}>{t('dash.verification.ok')}</div>
-          )}
-          <Link to="/kyc" className="btn btn-ghost" style={{ marginTop: 12, fontSize: 10 }}>{t('dash.verification.view')}</Link>
-        </div>
-
-        {/* Nexus AI */}
-        <div className="card glass-card" style={{ padding: 24, marginBottom: 30 }}>
-          <div className="page-label">{t('dash.ai.title')}</div>
-          <p style={{ marginTop: 8, fontSize: 14, color: 'var(--text-mid)' }}>{t('dash.ai.text')}</p>
-          <Link to="/agents" className="btn btn-ghost" style={{ marginTop: 12, fontSize: 10 }}>{t('dash.ai.cta')}</Link>
-        </div>
-
-        {/* Nexus Intelligence — le routing est une capacité du Core */}
-        <div className="card glass-card" style={{ padding: 24, marginBottom: 30 }}>
-          <div className="page-label">{t('dash.routing.title')}</div>
-          <p style={{ marginTop: 8, fontSize: 14, color: 'var(--text-mid)' }}>
-            {t('dash.routing.text')}
-          </p>
-          <Link to="/send" className="btn btn-ghost" style={{ marginTop: 12, fontSize: 10 }}>{t('dash.routing.cta')}</Link>
-        </div>
-
-        {/* Activité et activité récente */}
-        <div className="g2 animate-up delay-3" style={{ alignItems: 'start', gap: 20 }}>
-
+      {/* ═══ 6. Activité + transactions récentes ═══════════════════════ */}
+      <div className="g2 animate-up delay-3" style={{ alignItems: 'start', gap: 20 }}>
         <div className="card glass-card" style={{ padding: 24 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
             <div>
@@ -343,6 +389,36 @@ export default function DashboardPage({ mode }: DashboardProps) {
               </div>
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* ═══ 7. Bandeau secondaire : taux + AI + routing ═══════════════ */}
+      <div className="g3 animate-up delay-3" style={{ alignItems: 'stretch', gap: 16, marginTop: 20 }}>
+        {rates && (
+          <div className="card glass-card" style={{ padding: 20 }}>
+            <div className="page-label">{t('dash.rates')}</div>
+            <div style={{ fontSize: 15, fontWeight: 600, marginTop: 8 }}>{rates.base} → XAF</div>
+            <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 4 }}>
+              {rates.fx_rate_xaf !== null && rates.fx_rate_xaf > 0
+                ? t('dash.rates.one', { base: rates.base, rate: rates.fx_rate_xaf.toLocaleString(locale, { maximumFractionDigits: 3 }) })
+                : t('dash.rates.unavailable')}
+            </div>
+            <Link to="/wallet" className="btn btn-ghost" style={{ marginTop: 10, fontSize: 10 }}>{t('wallet.convert')}</Link>
+          </div>
+        )}
+
+        <div className="card glass-card" style={{ padding: 20 }}>
+          <div className="page-label">{t('dash.ai.title')}</div>
+          <p style={{ marginTop: 8, fontSize: 13, color: 'var(--text-mid)' }}>{t('dash.ai.text')}</p>
+          <Link to="/agents" className="btn btn-ghost" style={{ marginTop: 10, fontSize: 10 }}>{t('dash.ai.cta')}</Link>
+        </div>
+
+        <div className="card glass-card" style={{ padding: 20 }}>
+          <div className="page-label">{t('dash.routing.title')}</div>
+          <p style={{ marginTop: 8, fontSize: 13, color: 'var(--text-mid)' }}>
+            {t('dash.routing.text')}
+          </p>
+          <Link to="/send" className="btn btn-ghost" style={{ marginTop: 10, fontSize: 10 }}>{t('dash.routing.cta')}</Link>
         </div>
       </div>
     </div>

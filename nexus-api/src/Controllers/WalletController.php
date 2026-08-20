@@ -12,9 +12,12 @@ use Nexus\Models\TransferRequest;
 use Nexus\Execution\ExecutionContext;
 use Nexus\Core\HttpException;
 use Nexus\Core\Response;
+use Nexus\Providers\ProviderConfig;
+use Nexus\Services\FundingService;
 use Nexus\Services\FXService;
 use Nexus\Services\IdempotencyService;
 use Nexus\Services\WalletService;
+use Throwable;
 
 /**
  * Wallet : portefeuille multi-devises branché sur MySQL.
@@ -612,6 +615,95 @@ final class WalletController
             'currency' => $currency,
             'limit'    => self::TX_LIMIT,
             'items'    => $items,
+        ]);
+    }
+
+    /**
+     * POST /api/wallets/topup
+     *
+     * Crédit sandbox (développement) : crédite immédiatement le wallet
+     * via FundingService (ledger + settlement). Refusé en production
+     * et hors environnement sandbox — jamais d’argent réel via cette route.
+     *
+     * Body : { currency, amount, idempotency_key? }
+     */
+    public static function topUp(Request $request): void
+    {
+        $request = AuthMiddleware::handle($request);
+        $user    = $request->attribute('user');
+        $userId  = (int) $user['id'];
+
+        // Fail-closed : production (APP_ENV ou PROVIDERS_ENV) = refus.
+        $appEnv = defined('APP_ENV') ? (string) APP_ENV : (string) (getenv('APP_ENV') ?: '');
+        if (strtolower(trim($appEnv)) === 'production' || ProviderConfig::defaultEnvironment() === 'production') {
+            Response::error(
+                'Le crédit sandbox n’est pas disponible en production.',
+                403,
+                'TOPUP_PRODUCTION_FORBIDDEN'
+            );
+        }
+
+        $currency = strtoupper(trim((string) $request->input('currency', '')));
+        $amount   = trim((string) $request->input('amount', ''));
+        $idemKey  = trim((string) $request->input('idempotency_key', ''));
+
+        if ($currency === '' || !preg_match('/^[A-Z]{3,5}$/', $currency)) {
+            Response::error('Devise invalide.', 422, 'INVALID_CURRENCY');
+        }
+        if ($amount === '' || !is_numeric($amount) || (float) $amount <= 0) {
+            Response::error('Le montant doit être un nombre strictement positif.', 422, 'INVALID_AMOUNT');
+        }
+        // Plafond sandbox pour éviter les abus accidentels.
+        if (bccomp($amount, '100000', 8) > 0) {
+            Response::error('Montant sandbox trop élevé (max 100 000).', 422, 'AMOUNT_TOO_HIGH');
+        }
+
+        $context = ExecutionContext::fromRequest($request, $user);
+        if ($context->environmentValue() !== 'sandbox') {
+            Response::error(
+                'Le crédit instantané n’est autorisé qu’en sandbox.',
+                403,
+                'TOPUP_SANDBOX_ONLY'
+            );
+        }
+
+        if ($idemKey === '') {
+            $idemKey = 'sandbox-topup:' . $userId . ':' . $currency . ':' . bin2hex(random_bytes(8));
+        }
+
+        $wallet = WalletService::ensureWallet($userId, $currency);
+
+        try {
+            $result = FundingService::recordDeposit(
+                $userId,
+                (int) $wallet['id'],
+                $currency,
+                $amount,
+                'nexus_sandbox',
+                $idemKey,
+                'sandbox_topup_' . bin2hex(random_bytes(6)),
+                ['source' => 'sandbox_topup', 'ui' => true],
+                $context
+            );
+            // Disponibilité immédiate en sandbox (pas d’attente settlement provider).
+            FundingService::settleDeposit($result['operation_id'], $userId, $context);
+            $updated = WalletService::getWallet($userId, $currency);
+        } catch (HttpException $e) {
+            Response::error($e->getMessage(), $e->statusCode(), $e->errorCode());
+        } catch (Throwable $e) {
+            error_log('[NEXUS wallet/topup] ' . $e->getMessage());
+            Response::error('Erreur lors du crédit sandbox.', 500, 'TOPUP_INTERNAL_ERROR');
+        }
+
+        Response::success([
+            'topup' => [
+                'operation_id' => $result['operation_id'],
+                'currency'     => $currency,
+                'amount'       => $amount,
+                'status'       => 'completed',
+            ],
+            'wallet' => $updated,
+            'message' => 'Fonds sandbox crédités et disponibles.',
         ]);
     }
 

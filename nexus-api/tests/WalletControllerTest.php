@@ -365,7 +365,7 @@ PHP;
         $this->assertSame('EUR', $response['ref_currency']);
         $this->assertArrayHasKey('totals', $response);
         $this->assertArrayHasKey('wallets', $response);
-        $this->assertCount(6, $response['wallets'], 'La grille doit contenir exactement 6 devises.');
+        $this->assertCount(8, $response['wallets'], 'La grille doit contenir exactement 8 devises.');
     }
 
     public function test_index_devises_sans_wallet_sont_a_zero(): void
@@ -377,7 +377,7 @@ PHP;
         $response = $data['data'];
 
         $currencies = array_column($response['wallets'], 'currency');
-        $this->assertSame(['EUR', 'USD', 'GBP', 'XAF', 'USDT', 'USDC'], $currencies);
+        $this->assertSame(['EUR', 'USD', 'GBP', 'XAF', 'USDT', 'USDC', 'ETH', 'BTC'], $currencies);
 
         foreach ($response['wallets'] as $wallet) {
             $this->assertSame(0.0, $wallet['balance']);
@@ -563,12 +563,14 @@ PHP;
         $this->createWallet($u, 'XAF',  '10000.00');
         $this->createWallet($u, 'USDT', '500.00');
         $this->createWallet($u, 'USDC', '600.00');
+        $this->createWallet($u, 'ETH',  '1.50');
+        $this->createWallet($u, 'BTC',  '0.05');
 
         $result = $this->runController('index', $u);
         $data = json_decode($result['output'], true);
         $response = $data['data'];
 
-        $this->assertCount(6, $response['wallets']);
+        $this->assertCount(8, $response['wallets']);
 
         $byCurrency = [];
         foreach ($response['wallets'] as $wallet) {
@@ -581,6 +583,8 @@ PHP;
         $this->assertSame(10000.0, $byCurrency['XAF']['balance']);
         $this->assertSame(500.0, $byCurrency['USDT']['balance']);
         $this->assertSame(600.0, $byCurrency['USDC']['balance']);
+        $this->assertSame(1.5, $byCurrency['ETH']['balance']);
+        $this->assertSame(0.05, $byCurrency['BTC']['balance']);
 
         foreach ($response['wallets'] as $wallet) {
             $this->assertTrue($wallet['has_funds']);

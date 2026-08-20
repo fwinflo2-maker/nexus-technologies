@@ -33,7 +33,7 @@ use Nexus\Services\IdempotencyService;
 final class WalletService
 {
     /** Devises supportées (alignées avec Currency::ALL). */
-    private const SUPPORTED_CURRENCIES = ['EUR', 'USD', 'GBP', 'XAF', 'USDT', 'USDC'];
+    private const SUPPORTED_CURRENCIES = ['EUR', 'USD', 'GBP', 'XAF', 'USDT', 'USDC', 'ETH', 'BTC'];
 
     /**
      * Tolérance d'arrondi de la projection `wallets.hold_balance` (DECIMAL(20,2)).
@@ -154,7 +154,9 @@ final class WalletService
         ?string $idempotencyKey = null,
         ?string $description = null,
         ?array $metadata = null,
-        ?ExecutionContext $context = null
+        ?ExecutionContext $context = null,
+        ?string $fee = null,
+        ?int $providerAccountId = null
     ): array {
         self::assertUserId($userId);
         self::assertWalletId($walletId);
@@ -269,9 +271,12 @@ final class WalletService
                 $ttl = 1800; // 30 minutes
             }
             $expiresAt = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->modify('+' . (int)$ttl . ' seconds')->format('Y-m-d H:i:s');
+            // Les frais (isolés, jamais bundlés) et le compte provider sont
+            // tracés sur l'opération pour le règlement ultérieur.
+            $feeDec = $fee !== null && $fee !== '' ? bcadd($fee, '0', 8) : null;
             $stmtOp = $pdo->prepare(
-                'INSERT INTO wallet_operations (id, user_id, type, status, source_wallet_id, source_currency, source_amount, description, metadata, idempotency_key, environment, expires_at)
-                 VALUES (:id, :uid, \'hold\', \'pending\', :swid, :scur, :samt, :desc, :meta, :idem, :env, :expires_at)'
+                'INSERT INTO wallet_operations (id, user_id, type, status, source_wallet_id, source_currency, source_amount, fee_amount, fee_currency, provider_account_id, description, metadata, idempotency_key, environment, expires_at)
+                 VALUES (:id, :uid, \'hold\', \'pending\', :swid, :scur, :samt, :fee, :feecur, :pacc, :desc, :meta, :idem, :env, :expires_at)'
             );
             $stmtOp->execute([
                 'id' => $operationId,
@@ -279,6 +284,9 @@ final class WalletService
                 'swid' => $walletId,
                 'scur' => $currency,
                 'samt' => $amountDec,
+                'fee' => $feeDec ?? '0.00000000',
+                'feecur' => $feeDec !== null ? $currency : null,
+                'pacc' => $providerAccountId,
                 'desc' => $description,
                 'meta' => $metadata ? json_encode($metadata) : null,
                 'idem' => $idempotencyKey ?? ('auto:' . $operationId),
@@ -437,21 +445,17 @@ final class WalletService
                 throw new RuntimeException("Hold balance insuffisante pour la capture.");
             }
 
-            // 3. Comptabilisation financière via LedgerService (débit définitif).
-            // Le montant était déjà gelé : balance -= amount, available inchangé.
-            LedgerService::recordHoldCapture(
-                walletId: $walletId,
-                amount: $amount,
-                currency: $currency,
-                operationId: $operationId,
-                description: 'Capture de hold',
-                metadata: $op['metadata'] !== null ? json_decode((string) $op['metadata'], true) : null
-            );
-
-            // 4. Mise à jour hold_balance (le débit balance a été appliqué par LedgerService)
+            // 3. Modèle cible (buckets) : la capture transforme la RÉSERVATION en
+            // TRANSIT — hold_balance -> in_transit_balance. AUCUN posting n'est
+            // écrit ici : le débit de position n'a lieu qu'au RÈGLEMENT provider
+            // (LedgerService::postOutboundDebit, appelé par ExecutionEngine ou
+            // ExecutionSettlementService). L'invariant
+            // balance = available + hold + pending + in_transit + settlement
+            // reste vérifié : balance inchangé, available inchangé.
             $newHold = bcsub((string)$wallet['hold_balance'], $amount, 8);
-            $upd = $pdo->prepare('UPDATE wallets SET hold_balance = :hold WHERE id = :id');
-            $upd->execute(['hold' => $newHold, 'id' => $walletId]);
+            $newInTransit = bcadd((string)$wallet['in_transit_balance'], $amount, 8);
+            $upd = $pdo->prepare('UPDATE wallets SET hold_balance = :hold, in_transit_balance = :in_transit WHERE id = :id');
+            $upd->execute(['hold' => $newHold, 'in_transit' => $newInTransit, 'id' => $walletId]);
 
             // 5. Mise à jour opération
             $updOp = $pdo->prepare('UPDATE wallet_operations SET status = \'completed\', completed_at = NOW() WHERE id = :id');

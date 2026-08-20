@@ -299,6 +299,7 @@
 }
 .nexus-dash .nb-user-name { font-size: 13px; font-weight: 700; color: var(--text-bright); }
 .nexus-dash .nb-user-verified { font-size: 9px; color: var(--green); font-family: var(--font-mono); }
+.nexus-dash .nb-user-unverified { font-size: 9px; color: var(--gold); font-family: var(--font-mono); }
 .nexus-dash .nb-logout {
   width: 100%; padding: 10px; border-radius: 9px;
   border: 1px solid var(--border); background: transparent;
@@ -474,6 +475,8 @@
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  position: relative;
+  z-index: 2;
 }
 
 /* ── Topbar ── */
@@ -556,6 +559,23 @@
 .nexus-dash .card-hi-gr { border-color: rgba(0,207,160,0.22); background: rgba(0,207,160,0.03); }
 .nexus-dash .card-hi-v { border-color: rgba(139,92,246,0.22); background: rgba(139,92,246,0.03); }
 
+/* Dropdowns / menus absoulus à l'intérieur d'une card (Convert, etc.) */
+.nexus-dash .card.card-overflow-visible { overflow: visible; }
+.nexus-dash .cvt-swap {
+  width: 42px; height: 42px; flex-shrink: 0; margin-bottom: 2px;
+  border-radius: 12px; border: 1px solid rgba(0,200,255,0.35);
+  background: rgba(0,200,255,0.08); color: var(--cyan);
+  font-size: 18px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 18px rgba(0,200,255,0.12);
+}
+.nexus-dash .cvt-swap:hover { background: rgba(0,200,255,0.16); border-color: rgba(0,200,255,0.55); }
+.nexus-dash .cvt-ccy-panel {
+  overflow: auto !important;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0,200,255,0.35) transparent;
+}
+
 /* ── Stat Card ── */
 .nexus-dash .stat-card {
   display: flex;
@@ -602,6 +622,7 @@
 }
 .nexus-dash .p-c  { background: rgba(0,200,255,.07); border-color: rgba(0,200,255,.25); color: var(--cyan); }
 .nexus-dash .p-g  { background: rgba(234,184,48,.07); border-color: rgba(234,184,48,.25); color: var(--gold); }
+.nexus-dash .p-b  { background: rgba(59,130,246,.08); border-color: rgba(59,130,246,.3); color: #7FB4FF; }
 .nexus-dash .p-gr { background: rgba(0,207,160,.07); border-color: rgba(0,207,160,.25); color: var(--green); }
 .nexus-dash .p-v  { background: rgba(139,92,246,.07); border-color: rgba(139,92,246,.25); color: var(--violet); }
 .nexus-dash .p-r  { background: rgba(255,69,96,.07); border-color: rgba(255,69,96,.25); color: var(--red); }
@@ -1063,12 +1084,6 @@ html.light-mode .nexus-dash .status-dot {
   border: 1px solid var(--border); position: relative; overflow: hidden;
   margin-bottom: 36px;
 }
-.nexus-dash .se-corridor::after {
-  content: ''; position: absolute; inset: 0; pointer-events: none;
-  background: linear-gradient(180deg, transparent 0%, rgba(0,200,255,0.05) 50%, transparent 100%);
-  background-size: 100% 5px; animation: se-scan 4s linear infinite;
-}
-@keyframes se-scan { 0% { background-position-y: -140px; } 100% { background-position-y: 140px; } }
 .nexus-dash .se-corridor-end { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
 .nexus-dash .se-corridor-flag { font-size: 30px; line-height: 1; filter: drop-shadow(0 0 14px rgba(0,200,255,0.35)); }
 .nexus-dash .se-corridor-name { font-size: 11px; color: var(--text-bright); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
@@ -1184,6 +1199,33 @@ html.light-mode .nexus-dash .status-dot {
 .nexus-dash .se-method:hover { border-color: rgba(0,200,255,0.35); transform: translateY(-2px); }
 .nexus-dash .se-method.se-method-selected { border-color: rgba(0,200,255,0.55); background: rgba(0,200,255,0.08); box-shadow: 0 0 18px rgba(0,200,255,0.12); }
 .nexus-dash .se-method-icon { font-size: 22px; filter: drop-shadow(0 0 8px rgba(0,200,255,0.25)); }
+
+/* ── Devises de réception : logos cliquables ── */
+.nexus-dash .se-ccy-grid {
+  display: flex; flex-wrap: wrap; gap: 8px;
+}
+.nexus-dash .se-ccy {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  min-width: 72px; padding: 10px 10px 8px; border-radius: 12px; cursor: pointer;
+  background: var(--panel2); border: 1px solid var(--border); transition: all 0.18s ease;
+}
+.nexus-dash .se-ccy:hover { border-color: rgba(0,200,255,0.35); transform: translateY(-2px); }
+.nexus-dash .se-ccy.se-ccy-selected {
+  border-color: rgba(0,200,255,0.55); background: rgba(0,200,255,0.08);
+  box-shadow: 0 0 18px rgba(0,200,255,0.14);
+}
+.nexus-dash .se-ccy-logo {
+  width: 32px; height: 32px; border-radius: 50%; overflow: hidden;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.08), 0 4px 12px rgba(0,0,0,0.35);
+  display: flex; align-items: center; justify-content: center;
+}
+.nexus-dash .se-ccy.se-ccy-selected .se-ccy-logo { box-shadow: 0 0 0 1px rgba(0,200,255,0.45), 0 0 14px rgba(0,200,255,0.28); }
+.nexus-dash .se-ccy-code {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+  font-family: var(--font-mono); color: var(--text-bright);
+}
+.nexus-dash .se-ccy.se-ccy-selected .se-ccy-code { color: var(--cyan); }
+.nexus-dash .se-ccy:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
 
 /* ── CTA moteur ── */
 .nexus-dash .se-cta {

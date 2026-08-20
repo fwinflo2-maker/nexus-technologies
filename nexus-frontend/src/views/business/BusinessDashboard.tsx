@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 
 import { useDashT } from '../../data/dashboard-i18n';
 import { AnimatedNumber, EASE, RevealGroup, HoverCard, SectionTransition } from '../../components/anim/Premium';
+import TechLoader from '../../components/anim/TechLoader';
 
 /** Business Dashboard — Financial Operations Console (données 100 % backend). */
 export default function BusinessDashboard() {
@@ -35,12 +36,19 @@ export default function BusinessDashboard() {
   useEffect(() => { fetch(); }, [fetch]);
 
   if (loading) {
-    return <div className="card card-hi-c" style={{ padding: 48, textAlign: 'center' }}><div className="nexus-spinner" /><p style={{ marginTop: 14, color: 'var(--text-mid)' }}>Chargement de la console financière…</p></div>;
+    return <div className="card card-hi-c" style={{ padding: 48, textAlign: 'center' }}><TechLoader label="Chargement de la console financière…" /></div>;
   }
   if (error) {
     return <div className="card card-hi-g" style={{ padding: 40, textAlign: 'center' }}><div style={{ fontSize: 30, marginBottom: 10 }}>⚠️</div><p style={{ color: 'var(--text-mid)', marginBottom: 14 }}>{error}</p><button className="se-cta" onClick={fetch}>↻ Réessayer</button></div>;
   }
-  if (!data) return null;
+  if (!data) {
+    return (
+      <div className="card card-hi-g" style={{ padding: 40, textAlign: 'center' }}>
+        <p style={{ color: 'var(--text-mid)', marginBottom: 14 }}>Aucune donnée disponible.</p>
+        <button className="se-cta" onClick={fetch}>↻ Réessayer</button>
+      </div>
+    );
+  }
 
   const t = data.totals;
   const kpis: Array<{ label: string; value: number; suffix?: string; decimals?: number; color: string }> = [
@@ -136,12 +144,16 @@ export default function BusinessDashboard() {
         <div className="page-label" style={{ marginBottom: 12 }}>Vos opérations</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
           {[
+            { to: '/wallet', icon: '◉', label: td('nav.wallet') },
+            { to: '/treasury', icon: '▣', label: td('nav.treasury') },
+            { to: '/send', icon: '↗', label: td('nav.send') },
             { to: '/payments', icon: '↗', label: td('nav.payments') },
             { to: '/convert', icon: '⇄', label: td('page.convert') },
             { to: '/history', icon: '🕘', label: td('nav.history') },
             { to: '/approvals', icon: '✓', label: td('nav.approvals') },
             { to: '/beneficiaries', icon: '👥', label: td('nav.beneficiaries') },
             { to: '/reconciliation', icon: '⇌', label: td('nav.reconciliation') },
+            { to: '/reporting', icon: '≡', label: td('nav.reporting') },
             { to: '/team', icon: '⊕', label: td('nav.team') },
           ].map((a) => (
             <motion.div key={a.to} whileHover={{ y: -4, scale: 1.02 }} whileTap={{ scale: 0.97 }}

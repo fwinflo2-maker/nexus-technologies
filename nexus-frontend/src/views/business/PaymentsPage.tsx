@@ -6,6 +6,7 @@ import {
 } from '../../api/client';
 import { fmtMoney, pillForStatus, labelForStatus } from './ui';
 import { useDashT } from '../../data/dashboard-i18n';
+import TechLoader from '../../components/anim/TechLoader';
 
 /** Paiements Business — workflow réel : créer → quote → approbation → exécution. */
 export default function PaymentsPage() {
@@ -25,7 +26,7 @@ export default function PaymentsPage() {
   const fetch = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const [pRes, bRes] = await Promise.all([apiPaymentsList({ per_page: 50 }), apiBeneficiariesList()]);
+    const [pRes, bRes] = await Promise.all([apiPaymentsList({ per_page: 50 }), apiBeneficiariesList(undefined, 'active')]);
     if (!pRes.success || !pRes.data) { setError(pRes.error || 'Erreur de chargement des paiements.'); setLoading(false); return; }
     setPayments(pRes.data.items);
     if (bRes.success && bRes.data) setBeneficiaries(bRes.data.items);
@@ -106,7 +107,7 @@ export default function PaymentsPage() {
 
       {/* Liste */}
       {loading ? (
-        <div className="card card-hi-c" style={{ padding: 40, textAlign: 'center' }}><div className="nexus-spinner" /></div>
+        <div className="card card-hi-c" style={{ padding: 40, textAlign: 'center' }}><TechLoader /></div>
       ) : error ? (
         <div className="card card-hi-g" style={{ padding: 40, textAlign: 'center' }}><p style={{ color: 'var(--text-mid)', marginBottom: 12 }}>{error}</p><button className="se-cta" onClick={fetch}>↻ Réessayer</button></div>
       ) : payments.length === 0 ? (

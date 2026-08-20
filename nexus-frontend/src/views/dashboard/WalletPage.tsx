@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ScrollReveal, TiltCard, EASE } from '../../components/anim/Premium';
 import {
@@ -17,6 +17,8 @@ import AnimatedCounter from '../../components/AnimatedCounter';
 import EmptyState from '../../components/EmptyState';
 import { useI18n } from '../../context/I18nContext';
 import { useDashT, localeFor } from '../../data/dashboard-i18n';
+import { CurrencyLogo } from '../../components/dashboard/CurrencyLogo';
+import AddFundsModal from '../../components/dashboard/AddFundsModal';
 
 /**
  * WalletPage — Vue unifiée multi-devises (données réelles).
@@ -38,13 +40,15 @@ type Tab = 'devises' | 'sources' | 'destinations';
 
 // ─── Données statiques de présentation ───────────────────────────────────────
 
-const CURRENCY_META: Record<string, { flag: string; symbol: string; crypto?: boolean; label: string }> = {
+const CURRENCY_META: Record<string, { flag: string; symbol: string; crypto?: boolean; stablecoin?: boolean; label: string }> = {
   EUR:  { flag: '🇪🇺', symbol: '€', label: 'Euro' },
   USD:  { flag: '🇺🇸', symbol: '$', label: 'US Dollar' },
   GBP:  { flag: '🇬🇧', symbol: '£', label: 'Livre Sterling' },
   XAF:  { flag: '🌍', symbol: 'XAF', label: 'Franc CFA (CEMAC)' },
-  USDT: { flag: '🔵', symbol: 'USDT', crypto: true, label: 'Tether USD' },
-  USDC: { flag: '🔵', symbol: 'USDC', crypto: true, label: 'USD Coin' },
+  USDT: { flag: '🔵', symbol: 'USDT', crypto: true, stablecoin: true, label: 'Tether USD' },
+  USDC: { flag: '🔵', symbol: 'USDC', crypto: true, stablecoin: true, label: 'USD Coin' },
+  ETH:  { flag: '🔷', symbol: 'ETH', crypto: true, label: 'Ethereum' },
+  BTC:  { flag: '🟠', symbol: 'BTC', crypto: true, label: 'Bitcoin' },
 };
 
 /** Devises à venir : présentes dans le sélecteur mais grisées « Bientôt ». */
@@ -53,8 +57,6 @@ const COMING_SOON = [
   { cur: 'NGN', flag: '🇳🇬', label: 'Naira nigérian' },
   { cur: 'GHS', flag: '🇬🇭', label: 'Cedi ghanéen' },
   { cur: 'KES', flag: '🇰🇪', label: 'Shilling kényan' },
-  { cur: 'ETH', flag: '🔷', label: 'Ethereum' },
-  { cur: 'BTC', flag: '🟠', label: 'Bitcoin' },
 ];
 
 /** États d'un wallet : clé i18n + couleur du design system. */
@@ -73,9 +75,11 @@ type TFunc = (key: string, params?: Record<string, string | number>) => string;
 
 function formatCurrency(val: number, cur: string, locale: string): string {
   const meta = CURRENCY_META[cur];
+  const isCrypto = Boolean(meta?.crypto);
+  const isBtcEth = cur === 'BTC' || cur === 'ETH';
   const formatted = val.toLocaleString(locale, {
-    minimumFractionDigits: meta?.crypto || cur === 'EUR' || cur === 'USD' || cur === 'GBP' ? 2 : 0,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: isBtcEth ? 4 : (isCrypto || cur === 'EUR' || cur === 'USD' || cur === 'GBP' ? 2 : 0),
+    maximumFractionDigits: isBtcEth ? 8 : 2,
   });
   if (cur === 'EUR') return `€ ${formatted}`;
   if (cur === 'USD') return `$ ${formatted}`;
@@ -123,7 +127,13 @@ export default function WalletPage() {
   const t = useDashT();
   const { lang } = useI18n();
   const locale = localeFor(lang);
-  const [tab, setTab] = useState<Tab>('devises');
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [tab, setTab] = useState<Tab>(() => {
+    const q = searchParams.get('tab');
+    if (q === 'sources' || q === 'destinations' || q === 'devises') return q;
+    return 'devises';
+  });
 
   // Données serveur
   const [wallets, setWallets] = useState<WalletState[] | null>(null);
@@ -138,6 +148,9 @@ export default function WalletPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [fundOpen, setFundOpen] = useState(() => searchParams.get('fund') === '1');
+  const fundCurrencyPrefill = searchParams.get('currency') || selected;
+  const fundAmountPrefill = searchParams.get('amount') || '100';
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -153,9 +166,48 @@ export default function WalletPage() {
     // Le taux est secondaire : la page reste utilisable sans lui.
     if (ratesRes.success && ratesRes.data) setRates(ratesRes.data);
     setLoading(false);
-  }, []);
+  }, [t]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  // Deep-link : ?tab=destinations|sources|devises & ?fund=1
+  useEffect(() => {
+    const q = searchParams.get('tab');
+    if (q === 'sources' || q === 'destinations' || q === 'devises') setTab(q);
+    if (searchParams.get('fund') === '1') setFundOpen(true);
+  }, [searchParams]);
+
+  const openFund = () => {
+    setFundOpen(true);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('fund', '1');
+      if (!next.get('currency')) next.set('currency', selected);
+      return next;
+    }, { replace: true });
+  };
+
+  const closeFund = () => {
+    setFundOpen(false);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('fund');
+      next.delete('amount');
+      next.delete('currency');
+      next.delete('returnTo');
+      return next;
+    }, { replace: true });
+  };
+
+  const handleTab = (id: Tab) => {
+    setTab(id);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (id === 'devises') next.delete('tab');
+      else next.set('tab', id);
+      return next;
+    }, { replace: true });
+  };
 
   /** Historique rapide de la devise sélectionnée. */
   const fetchTxs = useCallback(async (currency: string) => {
@@ -229,8 +281,8 @@ export default function WalletPage() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => setPickerOpen(true)}>+ {t('wallet.addFunds')}</button>
-            <Link to="/send" className="btn btn-cyan" style={{ fontSize: 12, textDecoration: 'none' }}>↗ {t('wallet.convert')}</Link>
+            <button className="btn btn-ghost" style={{ fontSize: 12 }} type="button" onClick={openFund}>+ {t('wallet.addFunds')}</button>
+            <Link to="/convert" className="btn btn-cyan" style={{ fontSize: 12, textDecoration: 'none' }}>⇄ {t('wallet.convert')}</Link>
           </div>
         </div>
       </div>
@@ -277,7 +329,7 @@ export default function WalletPage() {
           <motion.button
             key={id}
             className={`account-tab ${tab === id ? 'active-personal' : ''}`}
-            onClick={() => setTab(id)}
+            onClick={() => handleTab(id)}
             style={{ fontSize: 11, fontWeight: 600 }}
             layout
             whileTap={{ scale: 0.96 }}
@@ -430,8 +482,8 @@ export default function WalletPage() {
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
                       {isSelected && <span className="pill p-c" style={{ fontSize: 7 }}>✓ {t('wallet.tab.selected')}</span>}
-                      <div className={`pill ${meta.crypto ? 'p-v' : 'p-c'}`} style={{ fontSize: 7, height: 22, flexShrink: 0 }}>
-                        {meta.crypto ? t('dash.stablecoin') : t('dash.fiat')}
+                      <div className={`pill ${meta.stablecoin ? 'p-v' : meta.crypto ? 'p-g' : 'p-c'}`} style={{ fontSize: 7, height: 22, flexShrink: 0 }}>
+                        {meta.stablecoin ? t('dash.stablecoin') : meta.crypto ? t('method.crypto').toUpperCase() : t('dash.fiat')}
                       </div>
                     </div>
                   </div>
@@ -501,8 +553,12 @@ export default function WalletPage() {
                     </div>
                   </div>
                 </div>
-                <div className={`pill ${CURRENCY_META[selectedWallet.currency]?.crypto ? 'p-v' : 'p-c'}`} style={{ fontSize: 8, flexShrink: 0 }}>
-                  {CURRENCY_META[selectedWallet.currency]?.crypto ? t('dash.stablecoin') : t('dash.fiat')}
+                <div className={`pill ${CURRENCY_META[selectedWallet.currency]?.stablecoin ? 'p-v' : CURRENCY_META[selectedWallet.currency]?.crypto ? 'p-g' : 'p-c'}`} style={{ fontSize: 8, flexShrink: 0 }}>
+                  {CURRENCY_META[selectedWallet.currency]?.stablecoin
+                    ? t('dash.stablecoin')
+                    : CURRENCY_META[selectedWallet.currency]?.crypto
+                      ? t('method.crypto').toUpperCase()
+                      : t('dash.fiat')}
                 </div>
               </div>
 
@@ -640,6 +696,23 @@ export default function WalletPage() {
           <AccountsPanel role="destination" />
         </div>
       )}
+
+      <AddFundsModal
+        open={fundOpen}
+        onClose={() => {
+          const returnTo = searchParams.get('returnTo');
+          closeFund();
+          if (returnTo && returnTo.startsWith('/')) {
+            navigate(returnTo);
+          }
+        }}
+        onSuccess={(cur) => {
+          setSelected(cur);
+          fetchAll();
+        }}
+        initialCurrency={fundCurrencyPrefill}
+        initialAmount={fundAmountPrefill}
+      />
     </div>
   );
 }

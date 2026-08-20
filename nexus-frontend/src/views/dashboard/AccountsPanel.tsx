@@ -6,13 +6,16 @@ import {
   apiAccountsDelete,
   apiAccountsSetDefault,
   apiCryptoNetworks,
+  apiFundingPaymentMethods,
   type PaymentAccount,
   type AccountKind,
   type AccountPayload,
 } from '../../api/client';
 import { countries } from '../../data/countries';
 import { getOperatorsForCountry } from '../../data/mobile-money';
+import { paymentModesForCountry } from '../../data/payment-modes';
 import { useDashT } from '../../data/dashboard-i18n';
+import { useAuth } from '../../context/AuthContext';
 
 type AccountRole = 'source' | 'destination';
 
@@ -35,6 +38,15 @@ function kindIcon(kind: AccountKind, role: AccountRole): string {
   return role === 'destination' ? meta.iconDest : meta.icon;
 }
 
+function kindsForCountry(country: string, role: AccountRole): { kinds: AccountKind[]; currency: string } {
+  const local = paymentModesForCountry(country);
+  if (!local) return { kinds: ['bank_iban', 'crypto_wallet'], currency: 'EUR' };
+  return {
+    kinds: local.account_kinds[role],
+    currency: local.default_currency,
+  };
+}
+
 /**
  * AccountsPanel — CRUD des sources de financement / destinations.
  *
@@ -43,13 +55,23 @@ function kindIcon(kind: AccountKind, role: AccountRole): string {
  * - Définit un compte par défaut et le supprime (avec promotion du suivant).
  * - Toutes les données sensibles (IBAN, PAN, téléphone, adresse) sont
  *   chiffrées côté serveur et masquées à l'affichage.
+ * - Les kinds proposés suivent le pays d’enregistrement (sources) ou le pays saisi (destinations).
  */
 export default function AccountsPanel({ role }: AccountsPanelProps) {
   const t = useDashT();
+  const { user } = useAuth();
+  const registrationCountry = (user?.country_of_residence ?? '').toUpperCase();
   const [items, setItems] = useState<PaymentAccount[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [networks, setNetworks] = useState<string[]>([]);
+  const [allowedKinds, setAllowedKinds] = useState<AccountKind[]>(() =>
+    kindsForCountry(registrationCountry || '', role).kinds
+  );
+  const [defaultCurrency, setDefaultCurrency] = useState(() =>
+    kindsForCountry(registrationCountry || '', role).currency
+  );
+  const [modesHint, setModesHint] = useState<string | null>(null);
 
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -70,7 +92,7 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
     }
     setItems(res.data.items);
     setLoading(false);
-  }, [role]);
+  }, [role, t]);
 
   useEffect(() => { fetch(); }, [fetch]);
 
@@ -80,12 +102,79 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
     });
   }, []);
 
+  const applyModes = useCallback((country: string, message?: string | null) => {
+    const local = kindsForCountry(country, role);
+    setAllowedKinds(local.kinds);
+    setDefaultCurrency(local.currency);
+    if (!country || country.length !== 2) {
+      setModesHint('Complétez le pays d’enregistrement (Paramètres / KYC) pour adapter les modes de paiement.');
+      return;
+    }
+    setModesHint(message ?? null);
+  }, [role]);
+
+  const loadPaymentModes = useCallback(async (country: string) => {
+    // Miroir local d’abord (instantané, correct même si l’API est down).
+    applyModes(country);
+    const res = await apiFundingPaymentMethods(country || undefined);
+    if (!res.success || !res.data) return;
+    const apiCountry = (res.data.country || country || '').toUpperCase();
+    const kinds = (res.data.account_kinds?.[role] ?? []) as AccountKind[];
+    if (kinds.length > 0) {
+      setAllowedKinds(kinds);
+      if (res.data.default_currency) setDefaultCurrency(res.data.default_currency);
+      setModesHint(res.data.message ?? null);
+      return;
+    }
+    applyModes(apiCountry, res.data.message);
+  }, [role, applyModes]);
+
+  // Sources : pays d’enregistrement. Destinations : pays du formulaire ou enregistrement.
+  useEffect(() => {
+    if (role === 'source') {
+      void loadPaymentModes(registrationCountry);
+      return;
+    }
+    const c = (formData.country || registrationCountry || '').toUpperCase();
+    void loadPaymentModes(c.length === 2 ? c : registrationCountry);
+  }, [role, registrationCountry, formData.country, loadPaymentModes]);
+
+  // Si le kind sélectionné n’est plus autorisé, bascule sur le premier dispo.
+  useEffect(() => {
+    if (!modalOpen || editTarget) return;
+    if (allowedKinds.length > 0 && !allowedKinds.includes(formKind)) {
+      setFormKind(allowedKinds[0]);
+    }
+  }, [allowedKinds, formKind, modalOpen, editTarget]);
+
+  const kindChoices = allowedKinds;
+
   const openCreate = () => {
+    if (role === 'source' && registrationCountry.length !== 2) {
+      setFormError('Définissez d’abord votre pays d’enregistrement dans Paramètres.');
+      setModalOpen(true);
+      setEditTarget(null);
+      setFormData({ role });
+      return;
+    }
+    const country = role === 'source'
+      ? registrationCountry
+      : (registrationCountry || '');
+    const { kinds, currency } = kindsForCountry(country, role);
     setEditTarget(null);
-    setFormKind('bank_iban');
-    setFormData({ role, country: 'FR', currency: 'EUR', label: '', holder_name: '' });
+    setFormKind(kinds[0] ?? 'bank_iban');
+    setAllowedKinds(kinds);
+    setDefaultCurrency(currency);
+    setFormData({
+      role,
+      country: country || '',
+      currency,
+      label: '',
+      holder_name: '',
+    });
     setFormError(null);
     setModalOpen(true);
+    if (country) void loadPaymentModes(country);
   };
 
   const openEdit = (account: PaymentAccount) => {
@@ -105,6 +194,7 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
     });
     setFormError(null);
     setModalOpen(true);
+    if (account.country) void loadPaymentModes(account.country);
   };
 
   /** Validation côté client avant envoi. Retourne un message d'erreur ou null. */
@@ -333,6 +423,25 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
                 )}
               </div>
 
+              {/* Statut de vérification + éligibilité au transfert */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                <span className={`pill ${
+                  account.verification_status === 'verified' ? 'p-gr'
+                    : account.verification_status === 'pending' ? 'p-g'
+                    : account.verification_status === 'rejected' ? 'p-r' : 'p-v'
+                }`} style={{ fontSize: 7.5 }}>
+                  {account.verification_status === 'verified' ? t('accounts.verif.verified')
+                    : account.verification_status === 'pending' ? t('accounts.verif.pending')
+                    : account.verification_status === 'rejected' ? t('accounts.verif.rejected')
+                    : t('accounts.verif.unverified')}
+                </span>
+                {role === 'source' && (
+                  <span className={`pill ${account.supported_for_transfer ? 'p-gr' : 'p-g'}`} style={{ fontSize: 7.5 }}>
+                    {account.supported_for_transfer ? t('accounts.transferOk') : t('accounts.transferBlocked')}
+                  </span>
+                )}
+              </div>
+
               {/* Actions */}
               <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                 {!account.is_default && (
@@ -400,14 +509,12 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
                   {t('accounts.modal.type')}
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
-                  {(role === 'source'
-                    ? ['bank_iban', 'mobile_money', 'crypto_wallet', 'card', 'virtual_iban'] as AccountKind[]
-                    : ['bank_iban', 'mobile_money', 'crypto_wallet', 'cash_pickup'] as AccountKind[]
-                  ).map(k => {
+                  {kindChoices.map(k => {
                     const m = KIND_META[k];
                     return (
                       <button
                         key={k}
+                        type="button"
                         className={`pill ${formKind === k ? m.pillCls : ''}`}
                         style={{
                           fontSize: 8, padding: '6px 4px', cursor: 'pointer',
@@ -424,6 +531,14 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
                     );
                   })}
                 </div>
+                {kindChoices.length === 0 && (
+                  <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 8 }}>
+                    Aucun mode disponible pour ce pays. Vérifiez le pays d’enregistrement (KYC).
+                  </div>
+                )}
+                {modesHint && (
+                  <div style={{ fontSize: 11, color: 'var(--gold)', marginTop: 8 }}>{modesHint}</div>
+                )}
               </div>
             )}
 
@@ -437,7 +552,15 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
                   <FormLabel>{t('accounts.country')}</FormLabel>
                   <select
                     value={formData.country ?? ''}
-                    onChange={e => setFormData(d => ({ ...d, country: e.target.value }))}
+                    onChange={e => {
+                      const next = e.target.value;
+                      setFormData(d => ({
+                        ...d,
+                        country: next,
+                        operator: '',
+                      }));
+                    }}
+                    disabled={role === 'source' && !!registrationCountry && !editTarget}
                     style={selectStyle}
                   >
                     <option value="">—</option>
@@ -445,6 +568,11 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
                     <option key={c.code} value={c.code}>{c.name}</option>
                   ))}
                   </select>
+                  {role === 'source' && registrationCountry && !editTarget && (
+                    <div style={{ fontSize: 9, color: 'var(--text-dim)', marginTop: 4 }}>
+                      Aligné sur le pays de création du compte ({registrationCountry}).
+                    </div>
+                  )}
                 </div>
                 <div>
                   <FormLabel>{t('accounts.currency')}</FormLabel>
