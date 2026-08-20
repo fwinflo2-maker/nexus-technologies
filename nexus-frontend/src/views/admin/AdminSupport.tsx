@@ -1,9 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ClipboardEvent } from 'react';
 import {
   apiSupportConversations, apiSupportMessages, apiSupportSendMessage, apiSupportSetStatus, apiSupportUpload,
   type SupportConversation, type SupportMessage,
 } from '../../api/client';
 import { Stat } from './adminUi';
+
+function isImageAttachment(url: string | null, name: string | null): boolean {
+  return /\.(png|jpe?g|gif|webp)(\?|$)/i.test(`${url ?? ''} ${name ?? ''}`);
+}
 
 /** Console support agent (Super Admin) : tickets, réponses, notes internes, pièces jointes, temps de réponse. */
 export default function AdminSupport() {
@@ -71,6 +75,21 @@ export default function AdminSupport() {
       created_at: new Date().toISOString(), customer_name: null, agent_name: 'Vous',
     }]);
     await apiSupportSendMessage(activeId, body, { is_internal: internal, attachment_name: attName, attachment_url: attUrl });
+  }
+
+  function onPaste(e: ClipboardEvent) {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of Array.from(items)) {
+      if (item.kind === 'file' && item.type.startsWith('image/')) {
+        const blob = item.getAsFile();
+        if (!blob) continue;
+        e.preventDefault();
+        const ext = blob.type === 'image/jpeg' ? 'jpg' : 'png';
+        setFile(new File([blob], `capture-${Date.now()}.${ext}`, { type: blob.type || 'image/png' }));
+        return;
+      }
+    }
   }
 
   async function setStatus(status: string) {
@@ -161,7 +180,14 @@ export default function AdminSupport() {
                         {m.body}
                         {m.attachment_url && (
                           <div style={{ marginTop: 6 }}>
-                            <a href={m.attachment_url} target="_blank" rel="noreferrer" className="chat-attach">📎 {m.attachment_name ?? 'pièce jointe'}</a>
+                            {isImageAttachment(m.attachment_url, m.attachment_name) ? (
+                              <a href={m.attachment_url} target="_blank" rel="noreferrer" className="chat-attach-preview">
+                                <img src={m.attachment_url} alt={m.attachment_name ?? 'Image'} loading="lazy" />
+                                <span>{m.attachment_name ?? 'Image'}</span>
+                              </a>
+                            ) : (
+                              <a href={m.attachment_url} target="_blank" rel="noreferrer" className="chat-attach">📎 {m.attachment_name ?? 'pièce jointe'}</a>
+                            )}
                           </div>
                         )}
                       </div>
@@ -171,12 +197,21 @@ export default function AdminSupport() {
                 })}
               </div>
 
-              <div className="chat-panel-input" style={{ borderTop: '1px solid var(--border-soft)', marginTop: 10 }}>
-                <button className="chat-file-btn" onClick={() => fileRef.current?.click()} title="Joindre un fichier">📎</button>
-                {file && <span className="chat-file-tag">{file.name} ✕</span>}
+              <div className="chat-panel-input" style={{ borderTop: '1px solid var(--border-soft)', marginTop: 10 }} onPaste={onPaste}>
+                <button className="chat-file-btn" onClick={() => fileRef.current?.click()} title="Joindre un fichier ou une capture" type="button">📎</button>
+                {file && (
+                  <button type="button" className="chat-file-tag" onClick={() => setFile(null)} title="Retirer">
+                    {file.name} ✕
+                  </button>
+                )}
                 <input ref={fileRef} type="file" hidden accept="image/*,.pdf,.txt" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-                <input placeholder={internal ? 'Note interne (visible agents uniquement)…' : "Répondre en tant qu'agent…"} value={draft} onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) void send(); }} />
+                <input
+                  placeholder={internal ? 'Note interne (visible agents uniquement)…' : 'Répondre — Ctrl+V pour coller une capture…'}
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onPaste={onPaste}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) void send(); }}
+                />
                 <label className="chat-internal-toggle">
                   <input type="checkbox" checked={internal} onChange={(e) => setInternal(e.target.checked)} />
                   <span>Interne</span>

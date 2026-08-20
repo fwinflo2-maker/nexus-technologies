@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ClipboardEvent, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   apiSupportConversations, apiSupportMessages, apiSupportSendMessage, apiSupportUnread, apiSupportBot,
@@ -11,6 +11,8 @@ interface BotMsg { sender: 'customer' | 'bot'; body: string; quickReplies?: stri
 
 const CONNECTING_REPLY =
   'Je vous mets en relation avec un conseiller Nexus. Un membre de l’équipe support prendra en charge votre demande sous peu.';
+
+const MAX_PENDING = 8;
 
 /** Affiche le gras **…** et les retours à la ligne (réponses bot), sans HTML brut. */
 function ChatRichBody({ text }: { text: string }) {
@@ -42,6 +44,27 @@ function bubbleClass(m: SupportMessage): string {
   return 'mine';
 }
 
+function isImageUrl(url: string | null | undefined, name?: string | null): boolean {
+  const probe = `${url ?? ''} ${name ?? ''}`.toLowerCase();
+  return /\.(png|jpe?g|gif|webp)(\?|$)/i.test(probe) || probe.includes('capture-');
+}
+
+function AttachmentBlock({ url, name }: { url: string; name: string | null }) {
+  if (isImageUrl(url, name)) {
+    return (
+      <a href={url} target="_blank" rel="noreferrer" className="chat-attach-preview">
+        <img src={url} alt={name ?? 'Capture'} loading="lazy" />
+        <span>{name ?? 'Image'}</span>
+      </a>
+    );
+  }
+  return (
+    <a href={url} target="_blank" rel="noreferrer" className="chat-attach">
+      📎 {name ?? 'pièce jointe'}
+    </a>
+  );
+}
+
 /** Widget de chat support (client). Flux : d'abord un bot pré-ticket, qui
  * escalade vers un ticket + agent humain si le bot ne sait pas répondre ou si
  * l'utilisateur demande un agent. */
@@ -54,10 +77,13 @@ export default function SupportChatWidget() {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [unread, setUnread] = useState(0);
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<Record<string, string>>({});
+  const [attachHint, setAttachHint] = useState<string | null>(null);
   const lastMsgId = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const imageRef = useRef<HTMLInputElement>(null);
 
   const agentConnected = Boolean(activeConv?.assigned_to || activeConv?.assigned_name);
   const agentLabel = activeConv?.assigned_name?.trim() || null;
@@ -122,6 +148,84 @@ export default function SupportChatWidget() {
 
   function historyPayload(msgs: BotMsg[]) {
     return msgs.map((m) => ({ sender: m.sender, body: m.body }));
+  }
+
+  function fileKey(f: File): string {
+    return `${f.name}|${f.size}|${f.lastModified}`;
+  }
+
+  function addFiles(incoming: FileList | File[] | null) {
+    if (!incoming) return;
+    const list = Array.from(incoming);
+    if (list.length === 0) return;
+    setFiles((prev) => {
+      const next = [...prev];
+      const newPreviews: Record<string, string> = {};
+      for (const f of list) {
+        if (next.length >= MAX_PENDING) break;
+        const key = fileKey(f);
+        const dup = next.some((x) => fileKey(x) === key);
+        if (dup) continue;
+        next.push(f);
+        if (f.type.startsWith('image/')) {
+          newPreviews[key] = URL.createObjectURL(f);
+        }
+      }
+      if (Object.keys(newPreviews).length) {
+        setPreviews((p) => ({ ...p, ...newPreviews }));
+      }
+      return next;
+    });
+    setAttachHint(null);
+  }
+
+  function removeFile(index: number) {
+    setFiles((prev) => {
+      const target = prev[index];
+      if (target) {
+        const key = fileKey(target);
+        setPreviews((p) => {
+          const url = p[key];
+          if (url) URL.revokeObjectURL(url);
+          const { [key]: _, ...rest } = p;
+          return rest;
+        });
+      }
+      return prev.filter((_, i) => i !== index);
+    });
+  }
+
+  function clearFiles() {
+    setPreviews((p) => {
+      Object.values(p).forEach((url) => URL.revokeObjectURL(url));
+      return {};
+    });
+    setFiles([]);
+  }
+
+  function onPaste(e: ClipboardEvent) {
+    if (mode !== 'conv') return;
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const pasted: File[] = [];
+    for (const item of Array.from(items)) {
+      if (item.kind === 'file' && item.type.startsWith('image/')) {
+        const blob = item.getAsFile();
+        if (!blob) continue;
+        const ext = blob.type === 'image/jpeg' ? 'jpg' : blob.type === 'image/webp' ? 'webp' : 'png';
+        const named = new File(
+          [blob],
+          `capture-${new Date().toISOString().replace(/[:.]/g, '-')}.${ext}`,
+          { type: blob.type || 'image/png' },
+        );
+        pasted.push(named);
+      }
+    }
+    if (pasted.length) {
+      e.preventDefault();
+      addFiles(pasted);
+      setAttachHint('Capture collée — prête à envoyer.');
+    }
   }
 
   async function escalateToAgent(subject: string, category: string, history: BotMsg[]) {
@@ -193,32 +297,68 @@ export default function SupportChatWidget() {
     }
   }
 
+  function pushOptimistic(convId: number, body: string, attName?: string, attUrl?: string) {
+    setConvMessages((prev) => [...prev, {
+      id: Date.now() + Math.floor(Math.random() * 1000),
+      conversation_id: convId,
+      customer_id: null,
+      agent_id: null,
+      is_bot: false,
+      is_internal: false,
+      body,
+      attachment_name: attName ?? null,
+      attachment_url: attUrl ?? null,
+      read_at: null,
+      created_at: new Date().toISOString(),
+      customer_name: 'Vous',
+      agent_name: null,
+    }]);
+  }
+
   async function sendConv() {
     const text = draft.trim();
-    if ((!text && !file) || !activeConv || sending) return;
+    if ((!text && files.length === 0) || !activeConv || sending) return;
     setDraft('');
     setSending(true);
-    let attName: string | undefined;
-    let attUrl: string | undefined;
-    if (file) {
-      const up = await apiSupportUpload(file);
-      if (up.success && up.data) { attName = up.data.name; attUrl = up.data.url; }
+    setAttachHint(null);
+
+    const pending = [...files];
+    clearFiles();
+
+    const uploads: Array<{ name: string; url: string }> = [];
+    for (const f of pending) {
+      const up = await apiSupportUpload(f);
+      if (up.success && up.data) {
+        uploads.push(up.data);
+      } else {
+        setAttachHint(up.error ?? `Échec d'envoi : ${f.name}`);
+      }
     }
-    setFile(null);
-    if (text) {
-      setConvMessages((prev) => [...prev, {
-        id: Date.now(), conversation_id: activeConv.id, customer_id: null, agent_id: null, is_bot: false, is_internal: false,
-        body: text, attachment_name: attName ?? null, attachment_url: attUrl ?? null, read_at: null,
-        created_at: new Date().toISOString(), customer_name: 'Vous', agent_name: null,
-      }]);
-    } else if (attUrl) {
-      setConvMessages((prev) => [...prev, {
-        id: Date.now(), conversation_id: activeConv.id, customer_id: null, agent_id: null, is_bot: false, is_internal: false,
-        body: `📎 ${attName}`, attachment_name: attName ?? null, attachment_url: attUrl ?? null, read_at: null,
-        created_at: new Date().toISOString(), customer_name: 'Vous', agent_name: null,
-      }]);
+
+    if (text === '' && uploads.length === 0) {
+      setSending(false);
+      return;
     }
-    await apiSupportSendMessage(activeConv.id, text || '', { attachment_name: attName, attachment_url: attUrl });
+
+    // Premier message : texte (+ 1ʳᵉ PJ si présente). Les PJ restantes partent
+    // chacune dans un message dédié pour respecter 1 attachment / message.
+    const first = uploads[0];
+    const firstBody = text || (first ? `📎 ${first.name}` : '');
+    pushOptimistic(activeConv.id, firstBody, first?.name, first?.url);
+    await apiSupportSendMessage(activeConv.id, text || '', {
+      attachment_name: first?.name,
+      attachment_url: first?.url,
+    });
+
+    for (let i = 1; i < uploads.length; i++) {
+      const u = uploads[i];
+      pushOptimistic(activeConv.id, `📎 ${u.name}`, u.name, u.url);
+      await apiSupportSendMessage(activeConv.id, '', {
+        attachment_name: u.name,
+        attachment_url: u.url,
+      });
+    }
+
     setSending(false);
   }
 
@@ -254,12 +394,13 @@ export default function SupportChatWidget() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 24, scale: 0.96 }}
             transition={{ duration: 0.3, ease: EASE }}
+            onPaste={onPaste}
           >
             <div className="chat-panel-head">
               {mode === 'conv' && activeConv && (
                 <button
                   className="chat-back"
-                  onClick={() => { setMode('bot'); setActiveConv(null); setConvMessages([]); setBotHistory([]); }}
+                  onClick={() => { setMode('bot'); setActiveConv(null); setConvMessages([]); setBotHistory([]); clearFiles(); }}
                 >
                   ←
                 </button>
@@ -305,10 +446,12 @@ export default function SupportChatWidget() {
                       {!m.is_bot && m.agent_id && m.agent_name && (
                         <div className="chat-bubble-author">{m.agent_name}</div>
                       )}
-                      <ChatRichBody text={m.body} />
+                      {m.body && !(m.attachment_url && m.body === `📎 ${m.attachment_name}`) && (
+                        <ChatRichBody text={m.body} />
+                      )}
                       {m.attachment_url && (
-                        <div style={{ marginTop: 6 }}>
-                          <a href={m.attachment_url} target="_blank" rel="noreferrer" className="chat-attach">📎 {m.attachment_name ?? 'pièce jointe'}</a>
+                        <div style={{ marginTop: m.body ? 6 : 0 }}>
+                          <AttachmentBlock url={m.attachment_url} name={m.attachment_name} />
                         </div>
                       )}
                       <div className="chat-bubble-time">{new Date(m.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</div>
@@ -318,27 +461,82 @@ export default function SupportChatWidget() {
               )}
             </div>
 
+            {mode === 'conv' && files.length > 0 && (
+              <div className="chat-pending-files" aria-label="Fichiers à envoyer">
+                {files.map((f, i) => {
+                  const preview = previews[fileKey(f)];
+                  return (
+                    <div key={fileKey(f)} className="chat-pending-file">
+                      {preview ? (
+                        <img src={preview} alt="" />
+                      ) : (
+                        <span className="chat-pending-icon">📄</span>
+                      )}
+                      <span className="chat-pending-name" title={f.name}>{f.name}</span>
+                      <button type="button" onClick={() => removeFile(i)} aria-label={`Retirer ${f.name}`}>✕</button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {mode === 'conv' && attachHint && (
+              <div className="chat-attach-hint">{attachHint}</div>
+            )}
+
             <div className="chat-panel-input">
               {mode === 'conv' && (
-                <button className="chat-file-btn" onClick={() => fileRef.current?.click()} title="Joindre un fichier" aria-label="Joindre un fichier">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-                </button>
+                <>
+                  <button
+                    className="chat-file-btn"
+                    onClick={() => fileRef.current?.click()}
+                    title="Joindre un fichier (PDF, image, texte)"
+                    aria-label="Joindre un fichier"
+                    type="button"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                  </button>
+                  <button
+                    className="chat-file-btn"
+                    onClick={() => imageRef.current?.click()}
+                    title="Ajouter une image ou capture d'écran"
+                    aria-label="Ajouter une image ou capture"
+                    type="button"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10.5" r="1.5"/><path d="M21 15l-5-5L5 19"/></svg>
+                  </button>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    hidden
+                    multiple
+                    accept="image/*,.pdf,.txt,application/pdf,text/plain"
+                    onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }}
+                  />
+                  <input
+                    ref={imageRef}
+                    type="file"
+                    hidden
+                    multiple
+                    accept="image/*"
+                    onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }}
+                  />
+                </>
               )}
-              {file && <span className="chat-file-tag">{file.name} ✕</span>}
-              <input ref={fileRef} type="file" hidden accept="image/*,.pdf,.txt" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
               <input
                 placeholder={
                   mode === 'bot'
                     ? 'Écrivez votre besoin…'
                     : agentConnected
-                      ? 'Écrivez votre message…'
-                      : 'Un conseiller va vous rejoindre…'
+                      ? 'Message, fichier ou Ctrl+V pour une capture…'
+                      : 'Fichier / capture OK — un conseiller arrive…'
                 }
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
+                onPaste={onPaste}
                 onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) void (mode === 'bot' ? sendBot() : sendConv()); }}
               />
-              <button onClick={() => void (mode === 'bot' ? sendBot() : sendConv())} disabled={sending || (!draft.trim() && !file)} aria-label="Envoyer">
+              <button onClick={() => void (mode === 'bot' ? sendBot() : sendConv())} disabled={sending || (!draft.trim() && files.length === 0)} aria-label="Envoyer">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/></svg>
               </button>
             </div>
