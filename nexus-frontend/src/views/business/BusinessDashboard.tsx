@@ -170,7 +170,6 @@ export default function BusinessDashboard() {
             { to: '/approvals', icon: '✓', label: td('nav.approvals') },
             { to: '/beneficiaries', icon: '👥', label: td('nav.beneficiaries') },
             { to: '/reconciliation', icon: '⇌', label: td('nav.reconciliation') },
-            { to: '/reporting', icon: '≡', label: td('nav.reporting') },
             { to: '/team', icon: '⊕', label: td('nav.team') },
           ].map((a) => (
             <motion.div key={a.to} whileHover={{ y: -4, scale: 1.02 }} whileTap={{ scale: 0.97 }}

@@ -27,13 +27,13 @@ const navAccountPersonal: NavItem[] = [
 
 const navAccountBusiness: NavItem[] = [
   { to: '/dashboard', icon: '◈', label: 'nav.dashboard', end: true },
-  { to: '/treasury', icon: '◉', label: 'nav.treasury' },
+  { to: '/wallet', icon: '◉', label: 'nav.wallet' },
+  { to: '/treasury', icon: '▣', label: 'nav.treasury' },
   { to: '/payments', icon: '↗', label: 'nav.payments' },
   { to: '/approvals', icon: '✓', label: 'nav.approvals' },
   { to: '/beneficiaries', icon: '👥', label: 'nav.beneficiaries' },
   { to: '/reconciliation', icon: '⇌', label: 'nav.reconciliation' },
   { to: '/team', icon: '⊕', label: 'nav.team' },
-  { to: '/reporting', icon: '≡', label: 'nav.reporting' },
 ];
 
 /* ── Actions financières (uniquement ce qui existe réellement) ── */

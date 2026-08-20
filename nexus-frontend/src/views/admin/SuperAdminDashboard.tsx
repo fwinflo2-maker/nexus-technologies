@@ -13,6 +13,8 @@ import AdminTechnical from './AdminTechnical';
 import AdminTreasury from './AdminTreasury';
 import AdminSecurity from './AdminSecurity';
 import AdminSupport from './AdminSupport';
+import AdminSettings from './AdminSettings';
+import AdminEmployees from './AdminEmployees';
 import { VolumeAreaChart, TransactionsStackChart, AssetDonut, StatusDonut, ProviderTopChart, AuditBarChart } from './CockpitCharts';
 import { Row, Panel, fmtMoney } from './adminUi';
 import { motion } from 'framer-motion';
@@ -159,7 +161,7 @@ export default function SuperAdminDashboard() {
           {/* ═══ COMPTES ═══ */}
           {section === 'accounts' && (
             <>
-              <Header title="Comptes" desc="Tous les clients Nexus classés par secteur (Personnel / Business). Cliquez sur un compte pour le détail complet." />
+              <Header title="Comptes" desc="Registre clients — détail, signaux multi-comptes, suspension / ban / réactivation (motif audité)." />
               <div className="g4" style={{ marginBottom: 20 }}>
                 <Card title="Total" icon="👥"><Num v={ov.accounts.total} /></Card>
                 <Card title="Personnel" icon="👤"><Num v={ov.accounts.personal} /></Card>
@@ -256,16 +258,19 @@ export default function SuperAdminDashboard() {
             </>
           )}
 
+          {/* ═══ EMPLOYÉS ═══ */}
+          {section === 'employees' && (
+            <>
+              <Header title="Employés" desc="Gestion des comptes internes Nexus — rôles RBAC, invitations et statuts." />
+              <AdminEmployees />
+            </>
+          )}
+
           {/* ═══ PARAMÈTRES ═══ */}
           {section === 'settings' && (
             <>
-              <Header title="Paramètres" desc="Configuration de la plateforme Nexus." />
-              <div className="card card-hi-c" style={{ padding: 24, maxWidth: 560 }}>
-                <Row k="Environnement" v="Sandbox" />
-                <Row k="Mode strict" v="Désactivé" />
-                <Row k="Providers configurés" v={ov.providers.configured} />
-                <Row k="Dernière génération" v={new Date(ov.generated_at).toLocaleString('fr-FR')} />
-              </div>
+              <Header title="Paramètres" desc="Configuration de la plateforme Nexus et compte administrateur." />
+              <AdminSettings />
             </>
           )}
         </div>

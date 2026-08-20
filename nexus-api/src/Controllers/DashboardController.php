@@ -346,7 +346,7 @@ final class DashboardController
      *  2. Compte ACTIVE mais KYC faible ou compte restreint → expliquer les limites ;
      *  3. Portefeuille vide       → suggérer le corridor EUR → XAF (MVP).
      *
-     * @return array{type: ?string, title: string, message: string, action: ?string}
+     * @return array{type: ?string, title: string, message: string, action: ?string, reason?: ?string, href?: ?string}
      */
     private static function banner(array $user, float $totalAvailableRef): array
     {
@@ -358,6 +358,7 @@ final class DashboardController
         if ($status === 'PENDING') {
             return [
                 'type'    => 'kyc',
+                'href'    => '/kyc',
                 'title'   => $isBiz ? 'Vérification d\'entreprise requise' : 'Vérification d\'identité requise',
                 'message' => $isBiz
                     ? 'Complétez la procédure KYB pour activer les corridors, relever vos plafonds et débloquer les paiements fournisseurs.'
@@ -366,16 +367,26 @@ final class DashboardController
             ];
         }
 
-        // 2. Compte restreint : KYC faible ou statut bloqué.
+        // 2. Compte restreint (suspendu / fermé) vs plafonds KYC bas.
         $restricted = in_array($status, ['SUSPENDED', 'CLOSED'], true);
         $lowKyc     = in_array($kycLevel, ['none', 'basic'], true);
-        if ($restricted || $lowKyc) {
+        if ($restricted) {
             return [
                 'type'    => 'limits',
+                'reason'  => 'restricted',
+                'href'    => '/support',
+                'title'   => 'Compte restreint',
+                'message' => 'Votre compte est actuellement restreint. Contactez le support NEXUS pour clarifier votre situation avant tout nouvel envoi.',
+                'action'  => 'Contacter le support',
+            ];
+        }
+        if ($lowKyc) {
+            return [
+                'type'    => 'limits',
+                'reason'  => 'low_kyc',
+                'href'    => '/kyc',
                 'title'   => 'Limites de compte actives',
-                'message' => $restricted
-                    ? 'Votre compte est actuellement restreint. Contactez le support NEXUS pour clarifier votre situation avant tout nouvel envoi.'
-                    : 'Votre compte dispose de plafonds limités (montants et volume mensuels) tant que votre vérification n\'est pas finalisée. Relevez vos limites dès maintenant.',
+                'message' => 'Votre compte dispose de plafonds limités (montants et volume mensuels) tant que votre vérification n\'est pas finalisée. Relevez vos limites dès maintenant.',
                 'action'  => 'Relever mes limites',
             ];
         }
@@ -384,6 +395,7 @@ final class DashboardController
         if ($totalAvailableRef <= 0.0) {
             return [
                 'type'    => 'corridor',
+                'href'    => '/wallet?fund=1',
                 'title'   => 'Votre portefeuille est vide',
                 'message' => 'Rechargez votre wallet EUR pour démarrer : le corridor EUR → XAF vers Mobile Money est le chemin recommandé pour votre premier envoi (MVP).',
                 'action'  => 'Recharger mon wallet',
