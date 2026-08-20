@@ -162,7 +162,6 @@ export default function BusinessDashboard() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
           {[
             { to: '/wallet', icon: '◉', label: td('nav.wallet') },
-            { to: '/treasury', icon: '▣', label: td('nav.treasury') },
             { to: '/send', icon: '↗', label: td('nav.send') },
             { to: '/payments', icon: '↗', label: td('nav.payments') },
             { to: '/convert', icon: '⇄', label: td('page.convert') },
@@ -170,7 +169,6 @@ export default function BusinessDashboard() {
             { to: '/approvals', icon: '✓', label: td('nav.approvals') },
             { to: '/beneficiaries', icon: '👥', label: td('nav.beneficiaries') },
             { to: '/reconciliation', icon: '⇌', label: td('nav.reconciliation') },
-            { to: '/reporting', icon: '≡', label: td('nav.reporting') },
             { to: '/team', icon: '⊕', label: td('nav.team') },
           ].map((a) => (
             <motion.div key={a.to} whileHover={{ y: -4, scale: 1.02 }} whileTap={{ scale: 0.97 }}

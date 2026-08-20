@@ -25,7 +25,6 @@ const navBusiness = [
   { to: '/dashboard', icon: '◈', label: 'nav.dashboard' },
   { to: '/wallet', icon: '◉', label: 'nav.wallet' },
   { to: '/cards', icon: '💳', label: 'nav.cards' },
-  { to: '/treasury', icon: '▣', label: 'nav.treasury' },
   { to: '/send', icon: '↗', label: 'nav.send' },
   { to: '/receive', icon: '↙', label: 'nav.receive' },
   { to: '/convert', icon: '⇄', label: 'nav.convert' },
@@ -34,7 +33,6 @@ const navBusiness = [
   { to: '/approvals', icon: '✓', label: 'nav.approvals' },
   { to: '/beneficiaries', icon: '👥', label: 'nav.beneficiaries' },
   { to: '/reconciliation', icon: '⇌', label: 'nav.reconciliation' },
-  { to: '/reporting', icon: '≡', label: 'nav.reporting' },
   { to: '/team', icon: '⊕', label: 'nav.team' },
   { to: '/kyc', icon: '✓', label: 'nav.kyc' },
 ];
