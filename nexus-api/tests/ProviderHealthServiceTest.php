@@ -73,6 +73,27 @@ final class ProviderHealthServiceTest extends TestCase
         self::assertNull($health['last_error_code']);
     }
 
+    public function test_upsert_apres_test_reinitialise_connected(): void
+    {
+        ProviderCredentialService::upsertPlatform(
+            $this->pdo, 'stripe', 'sandbox', ['secret_key' => 'sk_test_old'], 'sandbox_only', $this->userId
+        );
+        ProviderCredentialService::markPlatformTested($this->pdo, 'stripe', 'sandbox', 'sandbox_only', null);
+        $before = ProviderHealthService::healthFor($this->pdo, 'stripe', 'sandbox');
+        self::assertSame('connected', $before['connection']);
+
+        ProviderCredentialService::upsertPlatform(
+            $this->pdo, 'stripe', 'sandbox', ['secret_key' => 'sk_test_new'], 'sandbox_only', $this->userId
+        );
+        $after = ProviderHealthService::healthFor($this->pdo, 'stripe', 'sandbox');
+        self::assertSame(
+            'configured',
+            $after['connection'],
+            'Remplacement des secrets doit nullifier last_tested_at (plus de faux connected).'
+        );
+        self::assertNull($after['last_successful_test']);
+    }
+
     public function test_dernier_test_en_echec_degraded(): void
     {
         ProviderCredentialService::upsertPlatform(

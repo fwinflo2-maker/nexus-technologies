@@ -83,6 +83,7 @@ final class ProviderCatalog
                 ['key' => 'api_user',         'label' => 'API User (UUID)',              'placeholder' => 'c72025f5-5cd1-4630-99e4-8ba4722fad56', 'required' => true, 'type' => 'text'],
                 ['key' => 'api_key',          'label' => 'API Key',                     'placeholder' => 'f1db798c98df4bcf83b538175893bbf0',     'required' => true, 'type' => 'password'],
                 ['key' => 'callback_host',    'label' => 'Callback Host',               'placeholder' => 'https://nexus-corp.com',               'required' => false, 'type' => 'text'],
+                ['key' => 'disbursement_subscription_key', 'label' => 'Disbursement Subscription Key', 'placeholder' => 'Optionnel', 'required' => false, 'type' => 'password'],
             ],
             'doc_url'    => 'https://momodeveloper.mtn.com/api-documentation',
             'countries'  => ['UG','GH','CM','CI','CG','ZM','RW','SN','NE'],
@@ -125,12 +126,12 @@ final class ProviderCatalog
             'name'        => 'Modulr',
             'category'    => 'banking',
             'icon'        => '💳',
-            'auth_type'   => 'oauth2',
-            'base_url'    => 'https://api banking.modulrfinance.com',
+            'auth_type'   => 'hmac',
+            'base_url'    => 'https://api.modulrfinance.com',
             'sandbox_url' => 'https://api-sandbox.modulrfinance.com',
             'credentials' => [
-                ['key' => 'client_id',     'label' => 'Client ID',     'placeholder' => 'Votre client_id Modulr',    'required' => true, 'type' => 'text'],
-                ['key' => 'client_secret', 'label' => 'Client Secret', 'placeholder' => 'Votre client_secret Modulr', 'required' => true, 'type' => 'password'],
+                ['key' => 'api_key',    'label' => 'API Key (keyId)', 'placeholder' => 'Votre API Key Modulr', 'required' => true, 'type' => 'password'],
+                ['key' => 'api_secret', 'label' => 'HMAC Secret',     'placeholder' => 'Votre secret HMAC',    'required' => true, 'type' => 'password'],
             ],
             'doc_url'    => 'https://docs.modulrfinance.com/',
             'countries'  => ['US','GB'],
@@ -139,12 +140,13 @@ final class ProviderCatalog
             'name'        => 'BVNK',
             'category'    => 'banking',
             'icon'        => '🏦',
-            'auth_type'   => 'api_key',
+            'auth_type'   => 'hawk',
             'base_url'    => 'https://api.bvnk.com',
             'sandbox_url' => 'https://sandbox.bvnk.com',
             'credentials' => [
-                ['key' => 'api_key',    'label' => 'API Key',    'placeholder' => 'Votre clé API BVNK',  'required' => true, 'type' => 'password'],
-                ['key' => 'api_secret', 'label' => 'API Secret', 'placeholder' => 'Votre secret BVNK',   'required' => true, 'type' => 'password'],
+                ['key' => 'hawk_auth_id',    'label' => 'Hawk Auth ID',    'placeholder' => 'Hawk Auth ID', 'required' => true, 'type' => 'password'],
+                ['key' => 'hawk_secret_key', 'label' => 'Hawk Secret Key', 'placeholder' => 'Hawk Secret',  'required' => true, 'type' => 'password'],
+                ['key' => 'webhook_secret',  'label' => 'Webhook Secret',  'placeholder' => 'whsec...',     'required' => false, 'type' => 'password'],
             ],
             'doc_url'    => 'https://docs.bvnk.com/',
             'countries'  => ['US','EU'],
@@ -221,7 +223,8 @@ final class ProviderCatalog
             'base_url'    => 'https://api.stripe.com/v1',
             'sandbox_url' => 'https://api.stripe.com/v1',
             'credentials' => [
-                ['key' => 'secret_key', 'label' => 'Secret Key (sk_)', 'placeholder' => 'sk_test_...', 'required' => true, 'type' => 'password'],
+                ['key' => 'secret_key',     'label' => 'Secret Key (sk_)', 'placeholder' => 'sk_test_...', 'required' => true, 'type' => 'password'],
+                ['key' => 'webhook_secret', 'label' => 'Webhook Signing Secret', 'placeholder' => 'whsec_...', 'required' => false, 'type' => 'password'],
             ],
             'doc_url'    => 'https://docs.stripe.com/issuing',
             'countries'  => ['US','EU','GB'],
@@ -234,9 +237,9 @@ final class ProviderCatalog
             'base_url'    => 'https://sandbox-api.marqeta.com/v3',
             'sandbox_url' => 'https://sandbox-api.marqeta.com/v3',
             'credentials' => [
-                ['key' => 'api_key',        'label' => 'API Key',        'placeholder' => 'Votre clé API Marqeta',  'required' => true, 'type' => 'password'],
-                ['key' => 'api_secret',     'label' => 'API Secret',     'placeholder' => 'Votre secret Marqeta',   'required' => true, 'type' => 'password'],
-                ['key' => 'program_config', 'label' => 'Program Config', 'placeholder' => 'program_token',           'required' => false, 'type' => 'text'],
+                ['key' => 'application_token',  'label' => 'Application Token',  'placeholder' => 'application_token', 'required' => true, 'type' => 'password'],
+                ['key' => 'admin_access_token', 'label' => 'Admin Access Token', 'placeholder' => 'admin_access_token', 'required' => true, 'type' => 'password'],
+                ['key' => 'program_config',     'label' => 'Program Token',      'placeholder' => 'program_token',      'required' => false, 'type' => 'text'],
             ],
             'doc_url'    => 'https://www.marqeta.com/docs/core-api/getting-started',
             'countries'  => ['US','AU'],
@@ -252,7 +255,7 @@ final class ProviderCatalog
             'sandbox_url' => 'https://sandbox.api.bridge.xyz',
             'credentials' => [
                 ['key' => 'api_key', 'label' => 'API Key', 'placeholder' => 'Votre clé API Bridge', 'required' => true, 'type' => 'password'],
-                ['key' => 'api_secret', 'label' => 'API Secret', 'placeholder' => 'Votre secret Bridge', 'required' => true, 'type' => 'password'],
+                ['key' => 'webhook_public_key', 'label' => 'Webhook Public Key', 'placeholder' => 'Clé vérif webhook', 'required' => false, 'type' => 'password'],
             ],
             'doc_url'    => 'https://docs.bridge.xyz/',
             'countries'  => ['US','EU'],
@@ -330,6 +333,38 @@ final class ProviderCatalog
             'doc_url'    => 'https://docs.xendit.co/',
             'countries'  => ['ID','PH','SG','MY','TH'],
         ],
+        'tazapay' => [
+            'name'        => 'Tazapay',
+            'category'    => 'payout_network',
+            'icon'        => '🌏',
+            'auth_type'   => 'api_key',
+            // Schéma catalogue : champs courants documentés côté Tazapay.
+            // ProviderCredentialSchema::for('tazapay') reste null (UNKNOWN)
+            // tant qu'une revue officielle champ-par-champ n'est pas faite.
+            'base_url'    => 'https://api.tazapay.com',
+            'sandbox_url' => 'https://api-sandbox.tazapay.com',
+            'credentials' => [
+                ['key' => 'api_key',    'label' => 'API Key',    'placeholder' => 'Votre clé API Tazapay', 'required' => true, 'type' => 'password'],
+                ['key' => 'api_secret', 'label' => 'API Secret', 'placeholder' => 'Votre secret Tazapay',  'required' => true, 'type' => 'password'],
+            ],
+            'doc_url'    => 'https://docs.tazapay.com/',
+            'countries'  => ['IN','SG','AE','GB','US'],
+        ],
+        '2c2p' => [
+            'name'        => '2C2P',
+            'category'    => 'cards',
+            'icon'        => '💳',
+            'auth_type'   => 'api_key',
+            // Schéma catalogue ; ProviderCredentialSchema non vérifié (UNKNOWN).
+            'base_url'    => 'https://pgw.2c2p.com',
+            'sandbox_url' => 'https://sandbox-pgw.2c2p.com',
+            'credentials' => [
+                ['key' => 'merchant_id', 'label' => 'Merchant ID', 'placeholder' => 'Votre merchant ID 2C2P', 'required' => true, 'type' => 'text'],
+                ['key' => 'secret_key',  'label' => 'Secret Key',  'placeholder' => 'Votre secret 2C2P',      'required' => true, 'type' => 'password'],
+            ],
+            'doc_url'    => 'https://developer.2c2p.com/',
+            'countries'  => ['TH','SG','MY','ID','PH','VN'],
+        ],
         'nium' => [
             'name'        => 'Nium',
             'category'    => 'payout_network',
@@ -374,6 +409,21 @@ final class ProviderCatalog
             'doc_url'    => 'https://docs.cashramp.com/',
             'countries'  => ['NG'],
         ],
+        'sumsub' => [
+            'name'        => 'Sumsub',
+            'category'    => 'compliance',
+            'icon'        => '🛡️',
+            'auth_type'   => 'app_token',
+            'base_url'    => 'https://api.sumsub.com',
+            'sandbox_url' => 'https://api.sumsub.com',
+            'credentials' => [
+                ['key' => 'app_token',      'label' => 'App Token',      'placeholder' => 'sbx:…', 'required' => true, 'type' => 'password'],
+                ['key' => 'secret_key',     'label' => 'Secret Key',     'placeholder' => 'Secret Sumsub', 'required' => true, 'type' => 'password'],
+                ['key' => 'webhook_secret', 'label' => 'Webhook Secret', 'placeholder' => 'Secret webhook', 'required' => true, 'type' => 'password'],
+            ],
+            'doc_url'    => 'https://docs.sumsub.com/',
+            'countries'  => ['*'],
+        ],
     ];
 
     /** Catégories de providers et leurs labels d'affichage. */
@@ -387,6 +437,7 @@ final class ProviderCatalog
         'payout_network'=> ['label' => 'Payout Network',   'icon' => '🌍', 'description' => 'Réseaux de paiement émergents'],
         'wallet'        => ['label' => 'Wallet',             'icon' => '🟢', 'description' => 'Portefeuilles numériques'],
         'onramp'        => ['label' => 'On/Off Ramp',        'icon' => '🔀', 'description' => 'Pont fiat ↔ crypto'],
+        'compliance'    => ['label' => 'Compliance / KYC',  'icon' => '🛡️', 'description' => 'Vérification d\'identité'],
     ];
 
     private function __construct() {}

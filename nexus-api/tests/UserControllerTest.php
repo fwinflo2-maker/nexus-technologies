@@ -269,7 +269,9 @@ final class UserControllerTest extends TestCase
         
         // Restaurer l'ancien mot de passe pour les autres tests
         $pdo = Database::getConnection();
-        $stmt = $pdo->prepare('UPDATE users SET password_hash = :hash WHERE id = :id');
+        $stmt = $pdo->prepare(
+            'UPDATE users SET password_hash = :hash, password_changed_at = NULL WHERE id = :id'
+        );
         $stmt->execute([
             ':hash' => password_hash('TestPassword123!', PASSWORD_DEFAULT),
             ':id' => self::$testUserId,

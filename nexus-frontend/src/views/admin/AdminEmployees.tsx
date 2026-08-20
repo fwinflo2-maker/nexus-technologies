@@ -11,7 +11,7 @@ import { Stat, Badge } from './adminUi';
  * Gestion des employés internes — Super Admin.
  *
  * Création des comptes employés de Nexus Technologies selon les standards des
- * grandes fintech : rôle plateforme (platform_role), département, permissions,
+ * grandes fintech : rôle plateforme (platform_role) et département,
  * statut invité/actif/désactivé. Aucun mot de passe ne transite par l'admin :
  * l'employé est invité via un lien d'activation (jeton 30 min, usage unique).
  */
@@ -117,7 +117,6 @@ export default function AdminEmployees() {
         email: form.email.trim().toLowerCase(),
         role: form.role,
         department: form.department,
-        permissions: [form.role],
       });
       if (!res.success || !res.data) {
         setFormError(res.error ?? 'Création impossible.');

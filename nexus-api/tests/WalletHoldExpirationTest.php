@@ -232,7 +232,8 @@ final class WalletHoldExpirationTest extends TestCase
         $w = $this->walletRow($wid);
         $this->assertSame('0.00', (string) $w['hold_balance']);
         $this->assertSame('70.00', (string) $w['available_balance']);
-        $this->assertSame('70.00', (string) $w['balance']);
+        $this->assertSame('70.00', (string) $w['balance'], 'La capture reste le débit définitif.');
+        $this->assertSame('0.00', (string) ($w['in_transit_balance'] ?? '0'));
     }
 
     public function testAlreadyReleasedHoldHasNoWorkerEffect(): void

@@ -61,9 +61,9 @@ export function TorusField({ size = 760, hue = 263 }: TorusFieldProps) {
     const focal = size * 1.7;
     const depthSpan = majorRadius + tubeRadius + quillLength;
 
-    const RINGS = 122;
-    const PER_RING = 18;
-    const BANDS = 26;
+    const RINGS = 96;
+    const PER_RING = 14;
+    const BANDS = 22;
 
     const shafts: number[][] = Array.from({ length: BANDS }, () => []);
     const heads: number[][] = Array.from({ length: BANDS }, () => []);
@@ -71,6 +71,9 @@ export function TorusField({ size = 760, hue = 263 }: TorusFieldProps) {
 
     let angle = 0.9;
     let frameId = 0;
+    let visible = true;
+    let scrolling = false;
+    let scrollIdleTimer = 0;
 
     // Fonctions fléchées et non déclarations : une `function` est hissée en tête
     // de bloc, donc réputée créée AVANT le test de nullité ci-dessus, et le
@@ -185,9 +188,23 @@ export function TorusField({ size = 760, hue = 263 }: TorusFieldProps) {
     // Le mouvement est lent à dessein : un tour complet dure environ trente
     // secondes. Plus rapide, le décor capte le regard que le formulaire réclame.
     const loop = () => {
+      if (!visible || scrolling || document.hidden) {
+        frameId = 0;
+        return;
+      }
       angle += 0.0026;
       render();
       frameId = requestAnimationFrame(loop);
+    };
+
+    const start = () => {
+      if (frameId || !visible || scrolling || document.hidden) return;
+      frameId = requestAnimationFrame(loop);
+    };
+
+    const stop = () => {
+      cancelAnimationFrame(frameId);
+      frameId = 0;
     };
 
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -200,19 +217,42 @@ export function TorusField({ size = 760, hue = 263 }: TorusFieldProps) {
     // requestAnimationFrame, mais l'annulation explicite évite qu'une image en
     // attente reparte au retour et fasse sauter l'angle.
     const onVisibilityChange = () => {
-      cancelAnimationFrame(frameId);
-
-      if (!document.hidden) {
-        frameId = requestAnimationFrame(loop);
-      }
+      stop();
+      if (!document.hidden) start();
     };
 
+    const onScroll = () => {
+      scrolling = true;
+      stop();
+      window.clearTimeout(scrollIdleTimer);
+      scrollIdleTimer = window.setTimeout(() => {
+        scrolling = false;
+        start();
+      }, 140);
+    };
+
+    const io = typeof IntersectionObserver !== 'undefined'
+      ? new IntersectionObserver(
+        ([entry]) => {
+          visible = entry?.isIntersecting ?? true;
+          if (visible) start();
+          else stop();
+        },
+        { rootMargin: '40px', threshold: 0 },
+      )
+      : null;
+    io?.observe(canvas);
+
     document.addEventListener('visibilitychange', onVisibilityChange);
-    frameId = requestAnimationFrame(loop);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    start();
 
     return () => {
-      cancelAnimationFrame(frameId);
+      stop();
+      window.clearTimeout(scrollIdleTimer);
+      io?.disconnect();
       document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('scroll', onScroll);
     };
   }, [size, hue]);
 

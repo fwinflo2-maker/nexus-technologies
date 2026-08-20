@@ -29,7 +29,7 @@ Source : https://docs.pawapay.io
 
 ## testConnection — IMPLEMENTED
 
-`GET /balances` avec le token. Résultats normalisés :
+`GET /v2/public-key/http` with the token. Résultats normalisés :
 `CONNECTION_SUCCESS` / `INVALID_CREDENTIALS` / `PROVIDER_UNAVAILABLE` /
 `PROVIDER_NOT_CONFIGURED`.
 

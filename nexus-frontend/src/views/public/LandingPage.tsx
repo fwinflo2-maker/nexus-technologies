@@ -73,9 +73,10 @@ export function LandingPage({ onLogin, onAdminLogin, onRegister }: LandingPagePr
 
   return (
     <div className="landing-page">
-      <ParticlesBackground density={48} color="#4F6EF7" opacity={0.35} className="lp-particles" />
+      <a href="#main-content" className="lp-skip-link">{t('seo_skip_to_content')}</a>
+      <ParticlesBackground density={28} color="#4F6EF7" opacity={0.28} className="lp-particles" links={false} />
       <div className="lp-scanline" aria-hidden="true" />
-      <nav className="lp-nav">
+      <nav className="lp-nav" aria-label="Primary">
         <div className="lp-nav-inner">
           <div
             className="lp-brand"
@@ -90,9 +91,6 @@ export function LandingPage({ onLogin, onAdminLogin, onRegister }: LandingPagePr
               <path d="M16 10L22 14V22L16 26L10 22V14L16 10Z" fill="#4F6EF7" />
             </svg>
             <span className="lp-brand-text">NEXUS</span>
-            {adminClicks > 0 && (
-              <span className="lp-admin-hint">{3 - adminClicks} clic{3 - adminClicks > 1 ? 's' : ''}</span>
-            )}
           </div>
           <div className="lp-nav-links">
             <a href="#problemes" className="lp-nav-link">{t('landing_pains_label')}</a>
@@ -106,9 +104,10 @@ export function LandingPage({ onLogin, onAdminLogin, onRegister }: LandingPagePr
         </div>
       </nav>
 
-      <section className="lp-hero">
+      <main id="main-content">
+      <section className="lp-hero" aria-labelledby="lp-hero-heading">
         <div className="lp-hero-torus" aria-hidden="true">
-          <TorusField size={820} hue={222} />
+          <TorusField size={640} hue={222} />
         </div>
         {!reduceMotion && <TechOrbits />}
         <div className="lp-hero-grid" aria-hidden="true" />
@@ -119,7 +118,7 @@ export function LandingPage({ onLogin, onAdminLogin, onRegister }: LandingPagePr
           variants={stagger}
         >
           <motion.p variants={rise} className="lp-brand-hero">NEXUS</motion.p>
-          <motion.h1 variants={rise} className="lp-hero-title">{t('landing_hero_title')}</motion.h1>
+          <motion.h1 id="lp-hero-heading" variants={rise} className="lp-hero-title">{t('landing_hero_title')}</motion.h1>
           <motion.p variants={rise} className="lp-hero-lead">{t('landing_hero_subtitle')}</motion.p>
           <motion.div variants={rise} className="lp-hero-actions">
             <motion.button type="button" className="lp-btn lp-btn-primary" onClick={() => onRegister('personal')} {...btnMotion}>
@@ -139,7 +138,7 @@ export function LandingPage({ onLogin, onAdminLogin, onRegister }: LandingPagePr
         <DigitalBrushes className="lp-plexus" reducedMotion={!!reduceMotion} />
 
       <section id="problemes" className="lp-section lp-container">
-        <GsapReveal effect="blurIn">
+        <GsapReveal effect="fadeUp">
           <div className="lp-section-head">
             <p className="lp-kicker">{t('landing_pains_label')}</p>
             <h2>{t('landing_pains_title')}</h2>
@@ -168,7 +167,7 @@ export function LandingPage({ onLogin, onAdminLogin, onRegister }: LandingPagePr
       </section>
 
       <section id="comment-ca-marche" className="lp-section lp-container">
-        <GsapReveal effect="blurIn">
+        <GsapReveal effect="fadeUp">
           <div className="lp-section-head">
             <p className="lp-kicker">{t('landing_steps_label')}</p>
             <h2>{t('landing_steps_title')}</h2>
@@ -198,7 +197,7 @@ export function LandingPage({ onLogin, onAdminLogin, onRegister }: LandingPagePr
       </section>
 
       <section id="personal" className="lp-band">
-        <GsapReveal effect="blurIn">
+        <GsapReveal effect="fadeUp">
           <div className="lp-container lp-split">
             <div>
               <p className="lp-kicker">{t('landing_personal_label')}</p>
@@ -214,7 +213,7 @@ export function LandingPage({ onLogin, onAdminLogin, onRegister }: LandingPagePr
       </section>
 
       <section id="business" className="lp-band lp-band-alt">
-        <GsapReveal effect="blurIn">
+        <GsapReveal effect="fadeUp">
           <div className="lp-container lp-split">
             <div>
               <p className="lp-kicker">{t('landing_business_label')}</p>
@@ -230,7 +229,7 @@ export function LandingPage({ onLogin, onAdminLogin, onRegister }: LandingPagePr
       </section>
 
       <section id="confiance" className="lp-section lp-container">
-        <GsapReveal effect="blurIn">
+        <GsapReveal effect="fadeUp">
           <div className="lp-section-head">
             <p className="lp-kicker">{t('landing_trust_label')}</p>
             <h2>{t('landing_trust_title')}</h2>
@@ -257,7 +256,7 @@ export function LandingPage({ onLogin, onAdminLogin, onRegister }: LandingPagePr
         </motion.div>
       </section>
 
-      <GsapReveal effect="clipReveal" as="section" className="lp-final">
+      <GsapReveal effect="fadeUp" as="section" className="lp-final">
         <div className="lp-container lp-final-inner">
           <h2>{t('landing_cta_section_heading')}</h2>
           <p className="lp-section-lead">{t('landing_cta_section_text')}</p>
@@ -269,7 +268,6 @@ export function LandingPage({ onLogin, onAdminLogin, onRegister }: LandingPagePr
               {t('landing_cta_business')}
             </motion.button>
           </div>
-          <button type="button" className="lp-final-login" onClick={onLogin}>{t('nav_login')}</button>
         </div>
       </GsapReveal>
 
@@ -292,6 +290,17 @@ export function LandingPage({ onLogin, onAdminLogin, onRegister }: LandingPagePr
         </div>
       </footer>
       </div>
+      </main>
+
+      {/* Entrée discrète — login employés (pas de hint visible) */}
+      <Link to="/staff-login" className="lp-staff-entry" aria-label="Espace employés">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3.5" y="7" width="17" height="12.5" rx="2" stroke="currentColor" strokeWidth="1.4" />
+          <path d="M8 7V5.8A2.8 2.8 0 0 1 10.8 3h2.4A2.8 2.8 0 0 1 16 5.8V7" stroke="currentColor" strokeWidth="1.4" />
+          <circle cx="12" cy="13.2" r="1.35" fill="currentColor" />
+          <path d="M9.2 17.2c.6-1.1 1.6-1.7 2.8-1.7s2.2.6 2.8 1.7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+        </svg>
+      </Link>
     </div>
   );
 }

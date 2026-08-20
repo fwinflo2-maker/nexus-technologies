@@ -434,21 +434,32 @@ final class LedgerServiceTest extends TestCase
         // LedgerService ne calcule PAS de taux FX — la colonne doit être NULL.
         $this->assertNull($op['fx_rate'], 'fx_rate ne doit pas être calculé par LedgerService.');
 
-        // 2 écritures avec devises distinctes
+        // 4 écritures avec devises distinctes, équilibrées par FX_TRANSIT.
         $stmt = $this->pdo->prepare(
-            'SELECT entry_type, wallet_currency, amount FROM ledger_entries
+            'SELECT entry_type, account_code, wallet_currency, amount FROM ledger_entries
              WHERE operation_id = :id ORDER BY sequence ASC'
         );
         $stmt->execute(['id' => $operationId]);
         $entries = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        $this->assertCount(2, $entries);
+        $this->assertCount(4, $entries);
         $this->assertSame('debit', $entries[0]['entry_type']);
+        $this->assertSame('USER_POSITION.EUR', $entries[0]['account_code']);
         $this->assertSame('EUR', $entries[0]['wallet_currency']);
         $this->assertSame('100.00000000', (string) $entries[0]['amount']);
         $this->assertSame('credit', $entries[1]['entry_type']);
-        $this->assertSame('XAF', $entries[1]['wallet_currency']);
-        $this->assertSame('65595.70000000', (string) $entries[1]['amount']);
+        $this->assertSame('FX_TRANSIT.EURXAF', $entries[1]['account_code']);
+        $this->assertSame('EUR', $entries[1]['wallet_currency']);
+        $this->assertSame('100.00000000', (string) $entries[1]['amount']);
+        $this->assertSame('debit', $entries[2]['entry_type']);
+        $this->assertSame('FX_TRANSIT.EURXAF', $entries[2]['account_code']);
+        $this->assertSame('XAF', $entries[2]['wallet_currency']);
+        $this->assertSame('65595.70000000', (string) $entries[2]['amount']);
+        $this->assertSame('credit', $entries[3]['entry_type']);
+        $this->assertSame('USER_POSITION.XAF', $entries[3]['account_code']);
+        $this->assertSame('XAF', $entries[3]['wallet_currency']);
+        $this->assertSame('65595.70000000', (string) $entries[3]['amount']);
+        $this->assertTrue(LedgerService::verifyOperation($operationId));
 
         // Soldes
         $this->assertSame('900.00', $this->getBalance($eurId));

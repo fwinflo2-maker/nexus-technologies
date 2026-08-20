@@ -39,14 +39,19 @@ export function DigitalBrushes({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const dprCap = Math.min(window.devicePixelRatio || 1, 1.75);
+    const dprCap = Math.min(window.devicePixelRatio || 1, 1.25);
     let width = 0;
     let height = 0;
     let raf = 0;
     let resizeTimer = 0;
+    let scrollIdleTimer = 0;
     let t0 = performance.now();
     let nodes: Node[] = [];
     let linkDist = 110;
+    let inView = true;
+    let scrolling = false;
+    let lastPaint = 0;
+    const minFrameMs = 1000 / 28;
 
     const parseRgb = (hex: string): [number, number, number] => {
       const h = hex.replace('#', '');
@@ -61,13 +66,13 @@ export function DigitalBrushes({
 
     const seedNodes = () => {
       const area = width * height;
-      // Density scales with viewport; hard cap keeps scroll smooth.
-      const target = Math.min(140, Math.max(48, Math.floor(area / 14000)));
-      const cols = Math.max(6, Math.round(Math.sqrt(target * (width / Math.max(height, 1)))));
-      const rows = Math.max(5, Math.ceil(target / cols));
+      // Density scales with area; hard cap keeps scroll smooth.
+      const target = Math.min(72, Math.max(32, Math.floor(area / 22000)));
+      const cols = Math.max(5, Math.round(Math.sqrt(target * (width / Math.max(height, 1)))));
+      const rows = Math.max(4, Math.ceil(target / cols));
       const cellW = width / cols;
       const cellH = height / rows;
-      linkDist = Math.min(150, Math.max(78, Math.min(cellW, cellH) * 1.85));
+      linkDist = Math.min(130, Math.max(72, Math.min(cellW, cellH) * 1.7));
 
       nodes = [];
       for (let r = 0; r < rows; r += 1) {
@@ -168,7 +173,7 @@ export function DigitalBrushes({
         }
       }
 
-      // Nodes + soft bloom (bloom only on brighter nodes).
+      // Nodes only — skip radial bloom gradients (very costly while scrolling).
       for (let i = 0; i < pts.length; i += 1) {
         const p = pts[i];
         const n = nodes[i];
@@ -177,18 +182,6 @@ export function DigitalBrushes({
         const [rr, gg, bb] = useAccent ? [ar, ag, ab] : [cr, cg, cb];
         const alpha = 0.22 + p.glow * 0.45;
 
-        if (p.glow > 0.55) {
-          const bloom = r * (2.8 + p.glow * 2.2);
-          const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, bloom);
-          grad.addColorStop(0, `rgba(${rr},${gg},${bb},${alpha * 0.35})`);
-          grad.addColorStop(0.45, `rgba(${rr},${gg},${bb},${alpha * 0.08})`);
-          grad.addColorStop(1, `rgba(${rr},${gg},${bb},0)`);
-          ctx.fillStyle = grad;
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, bloom, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
         ctx.fillStyle = `rgba(${rr},${gg},${bb},${Math.min(0.95, alpha + 0.25)})`;
         ctx.beginPath();
         ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
@@ -196,8 +189,25 @@ export function DigitalBrushes({
       }
     };
 
+    const stop = () => {
+      cancelAnimationFrame(raf);
+      raf = 0;
+    };
+
     const loop = (now: number) => {
-      render(now);
+      if (!inView || scrolling || document.hidden) {
+        raf = 0;
+        return;
+      }
+      if (now - lastPaint >= minFrameMs) {
+        lastPaint = now;
+        render(now);
+      }
+      raf = requestAnimationFrame(loop);
+    };
+
+    const start = () => {
+      if (raf || !inView || scrolling || document.hidden || reducedMotion) return;
       raf = requestAnimationFrame(loop);
     };
 
@@ -223,21 +233,45 @@ export function DigitalBrushes({
     }
 
     const onVisibilityChange = () => {
-      cancelAnimationFrame(raf);
-      if (!document.hidden) {
-        raf = requestAnimationFrame(loop);
-      }
+      stop();
+      if (!document.hidden) start();
     };
+
+    const onScroll = () => {
+      scrolling = true;
+      stop();
+      window.clearTimeout(scrollIdleTimer);
+      scrollIdleTimer = window.setTimeout(() => {
+        scrolling = false;
+        start();
+      }, 140);
+    };
+
+    const io = typeof IntersectionObserver !== 'undefined'
+      ? new IntersectionObserver(
+        ([entry]) => {
+          inView = entry?.isIntersecting ?? true;
+          if (inView) start();
+          else stop();
+        },
+        { rootMargin: '80px', threshold: 0 },
+      )
+      : null;
+    io?.observe(canvas);
 
     document.addEventListener('visibilitychange', onVisibilityChange);
     window.addEventListener('resize', onResize);
-    raf = requestAnimationFrame(loop);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    start();
 
     return () => {
-      cancelAnimationFrame(raf);
+      stop();
       window.clearTimeout(resizeTimer);
+      window.clearTimeout(scrollIdleTimer);
+      io?.disconnect();
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('resize', onResize);
+      window.removeEventListener('scroll', onScroll);
     };
   }, [color, accent, reducedMotion]);
 

@@ -122,6 +122,25 @@ final class Request
         return $this->headers[strtolower($name)] ?? $default;
     }
 
+    /**
+     * Identifiant de corrélation : en-tête `X-Request-Id` s'il est sûr,
+     * sinon un identifiant généré pour cette instance.
+     */
+    public function requestId(): string
+    {
+        $existing = $this->attributes['_request_id'] ?? null;
+        if (is_string($existing) && $existing !== '') {
+            return $existing;
+        }
+
+        $header = trim((string) ($this->header('X-Request-Id') ?? ''));
+        $id = preg_match('/^[A-Za-z0-9._-]{8,64}$/', $header) === 1
+            ? $header
+            : bin2hex(random_bytes(8));
+
+        return $this->attributes['_request_id'] = $id;
+    }
+
     /** Token Bearer issu de l'en-tête Authorization, ou null. */
     public function bearerToken(): ?string
     {

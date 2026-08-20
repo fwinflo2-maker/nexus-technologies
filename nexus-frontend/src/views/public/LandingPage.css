@@ -20,9 +20,34 @@
   isolation: isolate;
 }
 
+/* Accessibility: keyboard-only skip link (SEO + a11y signal) */
+.lp-skip-link {
+  position: absolute;
+  left: 1rem;
+  top: -100px;
+  z-index: 100;
+  padding: 0.65rem 1rem;
+  border-radius: 8px;
+  background: var(--lp-signal);
+  color: #fff;
+  font-weight: 600;
+  text-decoration: none;
+  transition: top 0.15s ease;
+}
+
+.lp-skip-link:focus {
+  top: 1rem;
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+/* Hero-only, static — full-page animated scanlines forced continuous compositing. */
 .landing-page .lp-scanline {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100vh;
   z-index: 0;
   pointer-events: none;
   background: repeating-linear-gradient(
@@ -34,13 +59,8 @@
   );
   mask-image: linear-gradient(to bottom, black, transparent 85%);
   -webkit-mask-image: linear-gradient(to bottom, black, transparent 85%);
-  animation: lp-scan-drift 9s linear infinite;
-  opacity: 0.55;
-}
-
-@keyframes lp-scan-drift {
-  from { background-position: 0 0; }
-  to { background-position: 0 48px; }
+  opacity: 0.4;
+  contain: strict;
 }
 
 .lp-container {
@@ -55,9 +75,10 @@
   position: fixed;
   inset: 0 0 auto;
   z-index: 40;
-  background: rgba(10, 14, 23, 0.82);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  background: rgba(10, 14, 23, 0.92);
+  /* Lighter blur — heavy backdrop-filter on a fixed bar repaints every scroll frame. */
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--lp-line);
 }
 
@@ -95,10 +116,29 @@
   font-size: 0.95rem;
 }
 
-.lp-admin-hint {
-  font-size: 0.65rem;
+.lp-staff-entry {
+  position: fixed;
+  left: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 50;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: var(--lp-muted);
+  opacity: 0.38;
+  text-decoration: none;
+  transition: opacity 0.25s ease, color 0.25s ease, background 0.25s ease;
+}
+
+.lp-staff-entry:hover,
+.lp-staff-entry:focus-visible {
+  opacity: 0.9;
   color: var(--lp-signal);
-  font-weight: 600;
+  background: rgba(79, 110, 247, 0.12);
+  outline: none;
 }
 
 .lp-nav-links {
@@ -232,12 +272,6 @@
   background-size: 56px 56px;
   mask-image: radial-gradient(ellipse 70% 60% at 30% 40%, black, transparent 75%);
   -webkit-mask-image: radial-gradient(ellipse 70% 60% at 30% 40%, black, transparent 75%);
-  animation: lp-grid-pulse 6s ease-in-out infinite;
-}
-
-@keyframes lp-grid-pulse {
-  0%, 100% { opacity: 0.28; }
-  50% { opacity: 0.42; }
 }
 
 .lp-hero-content {
@@ -411,11 +445,18 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .lp-scanline,
-  .lp-hero-grid,
   .lp-step-num::after {
     animation: none;
   }
+}
+
+/* Skip painting offscreen section bodies (not hero / plexus host). */
+.lp-section,
+.lp-band,
+.lp-final,
+.lp-footer {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 480px;
 }
 
 .lp-step h3,

@@ -1,6 +1,7 @@
 import { useAuth } from '../../context/AuthContext';
 import { Link } from 'react-router-dom';
 import Avatar from '../../components/Avatar';
+import { ParticlesBackground } from '../../components/ParticlesBackground';
 
 /** Items de navigation du Super Admin (sidebar). */
 export const ADMIN_NAV = [
@@ -39,6 +40,7 @@ export default function AdminLayout({
       {/* Fond */}
       <div className="dash-ambient-bg" aria-hidden="true" />
       <div className="bg-grid" />
+      <ParticlesBackground density={45} color="#3B82F6" opacity={0.45} className="dash-particles" />
       <div className="ambient-vignette" aria-hidden="true" />
 
       {/* Sidebar */}
@@ -94,7 +96,29 @@ export default function AdminLayout({
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-bright)' }}>{user?.name || 'Admin'}</div>
               <div style={{ fontSize: 10, color: '#3B82F6' }}>superadmin</div>
             </div>
-            <button onClick={() => { void logout(); }} className="btn btn-ghost" style={{ fontSize: 11, padding: '6px 12px' }}>⏻</button>
+            <button
+              type="button"
+              onClick={() => { void logout('/admin-login'); }}
+              className="btn btn-ghost admin-logout-btn"
+              aria-label="Déconnexion"
+              title="Déconnexion"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 34,
+                height: 34,
+                padding: 0,
+                borderRadius: 8,
+                color: 'var(--text-dim)',
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+            </button>
           </div>
         </header>
 

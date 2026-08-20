@@ -26,7 +26,7 @@ export default function PaymentsPage() {
   const fetch = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const [pRes, bRes] = await Promise.all([apiPaymentsList({ per_page: 50 }), apiBeneficiariesList(undefined, 'active')]);
+    const [pRes, bRes] = await Promise.all([apiPaymentsList({ per_page: 50 }), apiBeneficiariesList()]);
     if (!pRes.success || !pRes.data) { setError(pRes.error || 'Erreur de chargement des paiements.'); setLoading(false); return; }
     setPayments(pRes.data.items);
     if (bRes.success && bRes.data) setBeneficiaries(bRes.data.items);

@@ -21,6 +21,12 @@ use Nexus\Services\ProviderCatalog;
  * Un webhook N'EST JAMAIS vérifié par une logique générique unique : le
  * contrôleur route vers la vérification déclarée par le provider, et rejette
  * un webhook dont la signature ne correspond pas à SA déclaration.
+ *
+ * Flux funding (POST /api/funding/deposit) — contrat entrant DÉFINI PAR
+ * NEXUS, hors registre provider : signature `hmac_nexus_timestamped`
+ * (X-Nexus-Signature: t=...,v1=..., HMAC couvrant t.corps, tolérance
+ * FundingController::SIGNATURE_TOLERANCE_SECONDS), rejeu par event_id
+ * namespace `funding:` dans provider_webhook_events (Cycle 5).
  */
 final class WebhookRegistry
 {
@@ -33,7 +39,7 @@ final class WebhookRegistry
             'timestamp_validation'  => ['enabled' => true, 'note' => 'Signature-Input date/@created, fenêtre de tolérance'],
             'event_id_field'        => 'payoutId:status (chaque transition est un événement)',
             'idempotency_field'     => 'provider_webhook_events — UNIQUE(provider, environment, event_id)',
-            'implementation'        => 'IMPLEMENTED',
+            'implementation'        => 'CONFIG_REQUIRED', // RFC-9421 helper existe ; contrôleur = HMAC générique
         ],
         'stripe' => [
             'webhook_path'          => '/api/providers/webhook/stripe',
@@ -42,7 +48,7 @@ final class WebhookRegistry
             'timestamp_validation'  => ['enabled' => true, 'note' => 'En-tête Stripe-Signature t=..., tolérance 300 s'],
             'event_id_field'        => 'id (événement Stripe)',
             'idempotency_field'     => 'provider_webhook_events — UNIQUE(provider, environment, event_id)',
-            'implementation'        => 'IMPLEMENTED',
+            'implementation'        => 'CONFIG_REQUIRED', // déclaré Stripe-Signature ; runtime = X-Nexus-Signature
         ],
         'sumsub' => [
             'webhook_path'          => '/api/kyc/webhook',

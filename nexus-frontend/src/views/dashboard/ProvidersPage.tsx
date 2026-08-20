@@ -107,7 +107,7 @@ export default function ProvidersPage() {
   /** Tester la connectivité d'un provider. */
   const testProvider = async (slug: string) => {
     setConfigTestLoading(true);
-    await apiProviderTest(slug);
+    await apiProviderTest(slug, configEnvironment);
     setConfigTestLoading(false);
     fetchAll();
   };

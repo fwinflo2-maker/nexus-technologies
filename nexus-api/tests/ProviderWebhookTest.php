@@ -46,7 +46,7 @@ final class ProviderWebhookTest extends TestCase
     {
         Response::enableTestMode(false);
         putenv('PROVIDER_STRIPE_SANDBOX_WEBHOOK_SECRET');
-        unset($_SERVER['HTTP_X_NEXUS_SIGNATURE']);
+        unset($_SERVER['HTTP_STRIPE_SIGNATURE']);
         $this->pdo->exec('DELETE FROM provider_webhook_events');
     }
 
@@ -58,7 +58,8 @@ final class ProviderWebhookTest extends TestCase
     {
         $raw = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
-        return hash_hmac('sha256', (string) $raw, (string) $secret);
+        $timestamp = time();
+        return 't=' . $timestamp . ',v1=' . hash_hmac('sha256', $timestamp . '.' . (string) $raw, (string) $secret);
     }
 
     /** @return array{status:int, code:?string, data:array<string,mixed>} */
@@ -67,7 +68,7 @@ final class ProviderWebhookTest extends TestCase
         if ($signature === null) {
             $signature = $this->sign($payload);
         }
-        $_SERVER['HTTP_X_NEXUS_SIGNATURE'] = $signature;
+        $_SERVER['HTTP_STRIPE_SIGNATURE'] = $signature;
 
         $request = new Request($payload);
         $request->setParams(['slug' => 'stripe']);
@@ -191,6 +192,90 @@ final class ProviderWebhookTest extends TestCase
 
         $this->assertSame(400, $res['status']);
         $this->assertSame('INVALID_WEBHOOK_PAYLOAD', $res['code']);
+    }
+
+    public function test_webhook_timestamp_trop_ancien_refuse_au_controleur(): void
+    {
+        $payload = ['event_id' => 'evt_stale', 'type' => 'payment_intent.succeeded'];
+        $raw = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $timestamp = time() - 3600;
+        $signature = 't=' . $timestamp . ',v1=' . hash_hmac('sha256', $timestamp . '.' . (string) $raw, self::SECRET);
+
+        $res = $this->send($payload, $signature);
+        $this->assertSame(401, $res['status']);
+        $this->assertSame('INVALID_WEBHOOK_SIGNATURE', $res['code']);
+        $this->assertSame(0, $this->countEvents('evt_stale'));
+    }
+
+    public function test_rotation_plusieurs_v1_accepte_la_signature_valide(): void
+    {
+        $payload = ['event_id' => 'evt_multi_v1', 'type' => 'invoice.paid'];
+        $raw = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $timestamp = time();
+        $valid = hash_hmac('sha256', $timestamp . '.' . (string) $raw, self::SECRET);
+        $header = 't=' . $timestamp . ',v1=' . str_repeat('0', 64) . ',v1=' . $valid;
+
+        $res = $this->send($payload, $header);
+        $this->assertSame(200, $res['status']);
+        $this->assertSame('evt_multi_v1', $res['data']['event_id']);
+        $this->assertNotSame('', $res['data']['request_id'] ?? '');
+    }
+
+    public function test_evenement_stripe_inconnu_est_recu_sans_reglement(): void
+    {
+        $res = $this->send([
+            'id' => 'evt_wrong_type',
+            'type' => 'customer.created',
+            'data' => ['object' => ['id' => 'cus_x']],
+        ]);
+        $this->assertSame(200, $res['status']);
+        $this->assertSame('received', $res['data']['status']);
+        $this->assertNull($res['data']['settlement']);
+    }
+
+    public function test_reference_provider_inconnue_refuse_sans_inventer_succes(): void
+    {
+        $res = $this->send([
+            'id' => 'evt_unknown_pi',
+            'type' => 'payment_intent.succeeded',
+            'data' => ['object' => ['id' => 'pi_does_not_exist', 'amount' => 10000, 'currency' => 'eur']],
+        ]);
+        $this->assertSame(409, $res['status']);
+        $this->assertSame('UNKNOWN_PROVIDER_OPERATION', $res['code']);
+    }
+
+    public function test_montant_stripe_mute_refuse_sans_reglement(): void
+    {
+        $email = 'stripe.fraud.' . bin2hex(random_bytes(3)) . '@nexus.test';
+        $this->pdo->prepare(
+            "INSERT INTO users (full_name,email,password_hash,account_type,status,kyc_level)
+             VALUES ('StripeFraud',?,'x','personal','ACTIVE','none')"
+        )->execute([$email]);
+        $uid = (int) $this->pdo->lastInsertId();
+        $this->pdo->prepare(
+            "INSERT INTO transactions
+                (user_id, type, direction, label, amount, currency, dest_amount, dest_currency,
+                 status, provider, provider_operation_id, provider_status, environment)
+             VALUES (?, 'send', 'out', 'Stripe', '100.00', 'EUR', '100.00', 'EUR',
+                     'processing', 'stripe', 'pi_cycle4_known', 'processing', 'sandbox')"
+        )->execute([$uid]);
+        $txId = (int) $this->pdo->lastInsertId();
+
+        try {
+            $res = $this->send([
+                'id' => 'evt_amt_mismatch',
+                'type' => 'payment_intent.succeeded',
+                'data' => ['object' => ['id' => 'pi_cycle4_known', 'amount' => 1, 'currency' => 'eur']],
+            ]);
+            $this->assertSame(409, $res['status']);
+            $this->assertSame('PROVIDER_AMOUNT_MISMATCH', $res['code']);
+            $status = $this->pdo->query("SELECT status FROM transactions WHERE id = $txId")->fetchColumn();
+            $this->assertSame('processing', $status);
+        } finally {
+            $this->pdo->prepare('DELETE FROM provider_webhook_events WHERE event_id = ?')->execute(['evt_amt_mismatch']);
+            $this->pdo->prepare('DELETE FROM transactions WHERE id = ?')->execute([$txId]);
+            $this->pdo->prepare('DELETE FROM users WHERE id = ?')->execute([$uid]);
+        }
     }
 
 }

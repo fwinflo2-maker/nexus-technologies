@@ -12,19 +12,26 @@ use RuntimeException;
  * Service FX — résolution et conversion de taux (Phase D).
  *
  * Flux de résolution, TOUJOURS dans un environnement donné :
- *   FXService → FXRateCache
+ *   FXService → FXProviderRegistry (sources autoritaires) → FXRateCache
  *
  *   1. `resolve()` tente une entrée valide (non expirée) de
- *      `fx_rates_cache`, POUR CET ENVIRONNEMENT ;
- *   2. si aucune source ne connaît la paire, une RuntimeException est levée.
+ *      `fx_rates_cache`, POUR CET ENVIRONNEMENT — le cache reste prioritaire
+ *      car il porte les paramètres métier (spread, taux opérés) ;
+ *   2. sinon, si une source AUTORITAIRE couvre la paire (Cycle 5 : parité de
+ *      droit EUR↔XAF via OfficialPegFXProvider), un taux frais ATTRIBUÉ est
+ *      dérivé et écrit dans le cache DE CET ENVIRONNEMENT (trace auditable,
+ *      horodatée, expirante) — jamais de repli inter-environnement ;
+ *   3. si aucune source ne connaît la paire, une RuntimeException est levée.
  *
- * AUCUN TAUX CODÉ EN DUR — DANS AUCUN ENVIRONNEMENT
- * ────────────────────────────────────────────────
+ * AUCUN TAUX DE MARCHÉ CODÉ EN DUR — DANS AUCUN ENVIRONNEMENT
+ * ───────────────────────────────────────────────────────────
  * Le repli historique `ManualRateProvider` (jeu de taux codés en dur) est
- * supprimé : un taux écrit dans le code ne peut pas coter de l'argent, pas
- * même en sandbox. La sandbox d'un provider réel n'existe que lorsque ses
- * credentials sandbox sont configurées ; tant qu'aucune source FX réelle
- * n'est branchée, l'absence de taux produit un REFUS explicite
+ * supprimé : un taux de MARCHÉ écrit dans le code ne peut pas coter de
+ * l'argent, pas même en sandbox. La seule constante admise est une PARITÉ
+ * DE DROIT à provenance officielle vérifiable (EUR↔XAF = 655,957, garantie
+ * Trésor français, documentée Banque de France — voir
+ * OfficialPegFXProvider). Pour toute autre paire, tant qu'aucune source FX
+ * réelle n'est branchée, l'absence de taux produit un REFUS explicite
  * (`FX_RATE_NOT_AVAILABLE`), visible et corrigeable — jamais une valeur
  * silencieuse (§7).
  *
@@ -63,9 +70,31 @@ final class FXService
         string $quoteCurrency,
         ExecutionEnvironment $environment
     ): FXRate {
+        // 1) Cache d'abord : il porte les paramètres métier (spread, taux
+        //    opérés), toujours scopé environnement, jamais expiré.
         $cached = FXRateCache::lookup($baseCurrency, $quoteCurrency, $environment);
         if ($cached !== null) {
             return $cached;
+        }
+
+        // 2) Source autoritaire (parité de droit EUR↔XAF) : dérive un taux
+        //    ATTRIBUÉ, horodaté et expirant, écrit dans le cache de CET
+        //    environnement. Aucune paire de marché n'est servie ici.
+        $authoritative = FXProviderRegistry::providerFor($baseCurrency, $quoteCurrency);
+        if ($authoritative !== null) {
+            $fresh = $authoritative->getRate($baseCurrency, $quoteCurrency);
+            if ($fresh !== null) {
+                try {
+                    FXRateCache::store($fresh, $environment);
+                } catch (\PDOException $e) {
+                    // 1062 : dérivation concurrente dans la même seconde
+                    // (UNIQUE base+quote+env+fetched_at) — le taux est identique.
+                    if (($e->errorInfo[1] ?? 0) !== 1062) {
+                        throw $e;
+                    }
+                }
+                return $fresh;
+            }
         }
 
         throw new RuntimeException(sprintf(

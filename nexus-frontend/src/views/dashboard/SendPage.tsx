@@ -16,6 +16,7 @@ import {
 } from '../../api/client';
 import RouteSelectionStep from './RouteSelectionStep';
 import { CurrencyLogo } from '../../components/dashboard/CurrencyLogo';
+import { NetworkLogo, networkShortLabel } from '../../components/dashboard/NetworkLogo';
 import AddFundsModal from '../../components/dashboard/AddFundsModal';
 import { useDashT, localeFor } from '../../data/dashboard-i18n';
 import { useI18n } from '../../context/I18nContext';
@@ -58,6 +59,7 @@ interface FormErrors {
   receivingMethod?: string;
   beneficiaryName?: string;
   beneficiaryRef?: string;
+  network?: string;
 }
 
 // ─── Constantes ─────────────────────────────────────────────────────────────
@@ -107,6 +109,21 @@ const CRYPTO_NETWORKS_BY_ASSET: Record<string, string[]> = {
   USDC: ['Ethereum', 'Polygon', 'Arbitrum', 'Optimism', 'Solana', 'Base'],
 };
 
+const CRYPTO_DEST_ASSETS: Array<{ code: string; name: string; symbol: string }> = [
+  { code: 'USDT', name: 'Tether USD', symbol: 'USDT' },
+  { code: 'USDC', name: 'USD Coin', symbol: 'USDC' },
+  { code: 'ETH', name: 'Ethereum', symbol: 'ETH' },
+  { code: 'BTC', name: 'Bitcoin', symbol: 'BTC' },
+];
+
+const CRYPTO_RECEIVE_METHOD = {
+  type: 'crypto',
+  label: 'Crypto',
+  icon: '₿',
+  providers: [] as string[],
+  operators: null as string[] | null,
+};
+
 function isCryptoDestCurrency(code: string): boolean {
   return code in CRYPTO_NETWORKS_BY_ASSET;
 }
@@ -114,7 +131,10 @@ function isCryptoDestCurrency(code: string): boolean {
 function networksForDestCurrency(destCurrency: string, all: string[]): string[] {
   const allowed = CRYPTO_NETWORKS_BY_ASSET[destCurrency];
   if (!allowed) return all;
-  return all.filter(n => allowed.includes(n));
+  // Liste canonique par actif — l'API peut être vide (fail-closed FX / coverage).
+  if (!all.length) return [...allowed];
+  const fromApi = allowed.filter(n => all.includes(n));
+  return fromApi.length > 0 ? fromApi : [...allowed];
 }
 
 // ─── Animations (framer-motion) ─────────────────────────────────────────────
@@ -225,13 +245,18 @@ function Corridor({
         </AnimatePresence>
       </div>
 
-      {/* Ligne animée */}
-      <div className="se-corridor-path">
-        <div className={`se-corridor-line ${active ? '' : 'se-corridor-line-idle'}`} />
-        {active && <>
-          {[0, 1, 2, 3, 4].map(i => <span key={i} className="se-particle" style={{ animationDelay: `${i * 0.5}s` }} />)}
-          <div className="se-corridor-pulse" />
-        </>}
+      {/* Ligne Knight Rider — balayage lumineux Origine → Destination */}
+      <div className={`se-corridor-path ${active ? 'is-active' : ''}`}>
+        <div className="se-kitt-track" aria-hidden="true" />
+        <div className="se-kitt-scanner" aria-hidden="true">
+          <span className="se-kitt-led" />
+          <span className="se-kitt-led" />
+          <span className="se-kitt-led" />
+          <span className="se-kitt-led" />
+          <span className="se-kitt-led" />
+          <span className="se-kitt-led" />
+          <span className="se-kitt-led" />
+        </div>
       </div>
 
       {/* Destination */}
@@ -513,14 +538,27 @@ export default function SendPage() {
     return walletCurs.length > 0 ? walletCurs : (coverage?.source_currencies ?? []);
   }, [wallets, coverage]);
   const selectedCountry = useMemo(() => coverage?.countries.find(c => c.code === destCountry) ?? null, [coverage, destCountry]);
-  const destCurrencies = useMemo(() => selectedCountry?.currencies ?? [], [selectedCountry]);
+  const destCurrencies = useMemo(() => {
+    // Sans pays choisi, aucune devise : sinon les actifs crypto ajoutés
+    // ci-dessous seraient seuls en liste et USDT deviendrait le défaut.
+    if (!selectedCountry) return [];
+    const base = selectedCountry.currencies ?? [];
+    const codes = new Set(base.map(c => c.code));
+    const cryptoMethod =
+      base.flatMap(c => c.methods).find(m => m.type === 'crypto') ?? CRYPTO_RECEIVE_METHOD;
+    const extras = CRYPTO_DEST_ASSETS
+      .filter(a => !codes.has(a.code))
+      .map(a => ({ ...a, methods: [cryptoMethod] }));
+    return extras.length > 0 ? [...base, ...extras] : base;
+  }, [selectedCountry]);
   const selectedDestCurrency = useMemo(() => destCurrencies.find(c => c.code === destCurrency) ?? null, [destCurrencies, destCurrency]);
   const availableMethods = useMemo(() => selectedDestCurrency?.methods ?? [], [selectedDestCurrency]);
   const isCryptoDest = isCryptoDestCurrency(destCurrency);
-  // Rails locaux seulement : le mode « crypto » (logo ₿) n'est plus proposé.
-  // USDT / USDC / ETH / BTC se choisissent comme devises, pas comme mode.
+  // Fiat → rails locaux (sans ₿). Crypto (USDT/USDC/ETH/BTC) → rail crypto uniquement.
   const railMethods = useMemo(
-    () => (isCryptoDest ? [] : availableMethods.filter(m => m.type !== 'crypto')),
+    () => (isCryptoDest
+      ? availableMethods.filter(m => m.type === 'crypto')
+      : availableMethods.filter(m => m.type !== 'crypto')),
     [availableMethods, isCryptoDest],
   );
   const selectedMethod = useMemo(() => availableMethods.find(m => m.type === receivingMethod) ?? null, [availableMethods, receivingMethod]);
@@ -582,6 +620,9 @@ export default function SendPage() {
       if (!destCountry) errors.destCountry = t('send.validation.destCountry');
       if (destCountry && !destCurrency) errors.destCurrency = t('send.validation.destCurrency');
       if (destCountry && destCurrency && !receivingMethod) errors.receivingMethod = t('send.validation.receivingMethod');
+      if (isCryptoDestCurrency(destCurrency) && !beneficiary.secondaryRef.trim()) {
+        errors.network = t('send.validation.fieldRequired', { field: t('send.beneficiary.network') });
+      }
       if (receivingMethod) {
         const fields = beneficiaryFieldsForMethod(receivingMethod, t);
         if (fields.nameLabel && !beneficiary.name.trim()) errors.beneficiaryName = t('send.validation.fieldRequired', { field: fields.nameLabel });
@@ -610,9 +651,28 @@ export default function SendPage() {
 
   // ─── Réinitialisations ──────────────────────────────────────────────
 
-  useEffect(() => { setReceivingMethod(''); setBeneficiary({ name: '', reference: '', secondaryRef: '', operator: '' }); }, [destCountry]);
-  useEffect(() => { setReceivingMethod(''); setBeneficiary({ name: '', reference: '', secondaryRef: '', operator: '' }); }, [destCurrency]);
-  useEffect(() => { setBeneficiary({ name: '', reference: '', secondaryRef: '', operator: '' }); }, [receivingMethod]);
+  useEffect(() => {
+    setReceivingMethod('');
+    setBeneficiary({ name: '', reference: '', secondaryRef: '', operator: '' });
+  }, [destCountry]);
+
+  useEffect(() => {
+    // Devise crypto → rail implicite + reset bénéficiaire (réseaux réaffichés juste après).
+    if (isCryptoDestCurrency(destCurrency)) {
+      setReceivingMethod('crypto');
+      setBeneficiary({ name: '', reference: '', secondaryRef: '', operator: '' });
+      return;
+    }
+    setReceivingMethod('');
+    setBeneficiary({ name: '', reference: '', secondaryRef: '', operator: '' });
+  }, [destCurrency]);
+
+  useEffect(() => {
+    if (!receivingMethod) return;
+    // Reset déjà fait au choix de la crypto dest — ne pas double-clear.
+    if (receivingMethod === 'crypto' && isCryptoDest) return;
+    setBeneficiary({ name: '', reference: '', secondaryRef: '', operator: '' });
+  }, [receivingMethod, isCryptoDest]);
 
   // Le sélecteur de devise source affiche un défaut sans jamais le
   // sélectionner : l'état resterait vide et la validation échouerait
@@ -624,22 +684,28 @@ export default function SendPage() {
     }
   }, [fundingType, sourceCurrency, sourceCurrencies]);
 
-  // Pays : devise locale en premier (défaut). Un changement de pays
-  // réinitialise vers cette devise ; un choix USDT/USDC/ETH est conservé
-  // tant que le pays (et donc le défaut) ne change pas.
-  const defaultDestCurrency = destCurrencies[0]?.code ?? '';
+  // Pays : devise légale locale par défaut. Un changement de pays réinitialise
+  // vers cette devise ; un choix USDT/USDC/ETH/BTC est conservé tant que le
+  // pays (et donc le défaut) ne change pas. Une crypto n'est JAMAIS le défaut :
+  // elle doit être cliquée, sinon la grille des réseaux s'ouvrirait d'office.
+  const defaultDestCurrency = destCurrencies.find(c => !isCryptoDestCurrency(c.code))?.code ?? '';
   useEffect(() => {
     setDestCurrency(defaultDestCurrency);
   }, [destCountry, defaultDestCurrency]);
 
-  // Crypto dest : le rail est implicite (wallet). Fiat : une seule méthode locale → auto.
+  // Fiat : une seule méthode locale → auto.
   useEffect(() => {
-    if (isCryptoDest) {
-      setReceivingMethod('crypto');
-      return;
-    }
+    if (isCryptoDest) return;
     if (railMethods.length === 1) setReceivingMethod(railMethods[0].type);
   }, [isCryptoDest, railMethods]);
+
+  // Un seul réseau possible (ex. BTC → Bitcoin) → préselection.
+  useEffect(() => {
+    if (!isCryptoDest) return;
+    if (cryptoNetworks.length === 1) {
+      setBeneficiary(b => (b.secondaryRef === cryptoNetworks[0] ? b : { ...b, secondaryRef: cryptoNetworks[0] }));
+    }
+  }, [isCryptoDest, cryptoNetworks]);
 
   // §4 — En mode wallet, l'origine des fonds est TOUJOURS dérivée des
   // sources de financement vérifiées (résidence KYC en tête dans la
@@ -978,7 +1044,6 @@ export default function SendPage() {
                       </motion.div>
                     )}
 
-                    {/* Mode de réception — rails locaux uniquement (pas le logo ₿). */}
                     {destCurrency && !isCryptoDest && railMethods.length > 0 && (
                       <motion.div {...stagger(4)}>
                         <div className="se-field-label">{t('send.method')}</div>
@@ -1033,13 +1098,36 @@ export default function SendPage() {
                             <input className="se-input" value={beneficiary.reference} onChange={e => setBeneficiary(b => ({ ...b, reference: e.target.value }))} placeholder={fields.refPlaceholder} style={{ fontFamily: 'var(--font-mono)' }} />
                             {errors.beneficiaryRef && <ErrorText>{errors.beneficiaryRef}</ErrorText>}
                           </div>
-                          {fields.secondaryLabel && receivingMethod === 'crypto' && (
+                          {/* Réseaux — sous l'adresse du wallet, l'adresse et sa
+                              chaîne se lisent ensemble. */}
+                          {isCryptoDest && cryptoNetworks.length > 0 && (
                             <div>
-                              <div className="se-field-label" style={{ marginBottom: 4 }}>{fields.secondaryLabel}</div>
-                              <select className="se-input" value={beneficiary.secondaryRef} onChange={e => setBeneficiary(b => ({ ...b, secondaryRef: e.target.value }))}>
-                                <option value="">— Réseau —</option>
-                                {cryptoNetworks.map(n => <option key={n} value={n}>{n}</option>)}
-                              </select>
+                              <div className="se-field-label" style={{ marginBottom: 4 }}>{t('send.beneficiary.network')}</div>
+                              <div className="se-ccy-grid" role="listbox" aria-label={t('send.beneficiary.network')}>
+                                {cryptoNetworks.map(n => {
+                                  const selected = beneficiary.secondaryRef === n;
+                                  return (
+                                    <motion.button
+                                      key={n}
+                                      type="button"
+                                      role="option"
+                                      aria-selected={selected}
+                                      title={n}
+                                      className={`se-ccy ${selected ? 'se-ccy-selected' : ''}`}
+                                      onClick={() => {
+                                        setBeneficiary(b => ({ ...b, secondaryRef: n }));
+                                        setErrors(e => ({ ...e, network: undefined }));
+                                      }}
+                                      whileHover={{ y: -2 }}
+                                      whileTap={{ scale: 0.96 }}
+                                    >
+                                      <span className="se-ccy-logo"><NetworkLogo name={n} size={32} /></span>
+                                      <span className="se-ccy-code">{networkShortLabel(n)}</span>
+                                    </motion.button>
+                                  );
+                                })}
+                              </div>
+                              {errors.network && <ErrorText>{errors.network}</ErrorText>}
                             </div>
                           )}
                           {fields.secondaryLabel && receivingMethod === 'cash_pickup' && (

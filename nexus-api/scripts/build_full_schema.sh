@@ -12,13 +12,18 @@ set -euo pipefail
 
 HOST="${1:-127.0.0.1}"
 USER="${2:-nexus}"
-PASS="${3:-nexus_dev_pw}"
+PASS="${3-nexus_dev_pw}"
 BUILD_DB="${BUILD_DB:-nexus_ref}"
 
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$DIR/database/full_schema.sql"
 
-MYSQL=(mysql -h"$HOST" -P3306 -u"$USER" -p"$PASS")
+MYSQL=(mysql -h"$HOST" -P3306 -u"$USER")
+MYSQLDUMP=(mysqldump -h"$HOST" -P3306 -u"$USER")
+if [[ -n "$PASS" ]]; then
+  MYSQL+=(-p"$PASS")
+  MYSQLDUMP+=(-p"$PASS")
+fi
 
 # Ordre canonique, identique à migrate.sh.
 # Liste des fichiers SQL : lue depuis database/migrations.manifest
@@ -86,7 +91,7 @@ SET FOREIGN_KEY_CHECKS = 0;
 
 HEADER
 
-  mysqldump -h"$HOST" -P3306 -u"$USER" -p"$PASS" \
+  "${MYSQLDUMP[@]}" \
     --no-data \
     --skip-comments \
     --skip-set-charset \
@@ -95,6 +100,7 @@ HEADER
     --routines=FALSE \
     --triggers=FALSE \
     "$BUILD_DB" \
+    | sed '/^\/\*M!999999\\- enable the sandbox mode \*\/[[:space:]]*$/d' \
     | sed 's/ AUTO_INCREMENT=[0-9]*//g' \
     | sed -E 's/`([a-z_]+)` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin (DEFAULT NULL|NOT NULL) CHECK \(json_valid\(`\1`\)\)/`\1` json \2/g'
 

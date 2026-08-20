@@ -296,9 +296,14 @@ final class LedgerService
      * responsable de la conversion.
      *
      * Important : pour un transfert, la SOMME des debits doit être égale à la
-     * SOMME des credits dans la même devise. Pour deux devises différentes,
-     * les écritures sont indépendantes (l'équilibre est porté par le taux FX
-     * stocké dans `wallet_operations.fx_rate` et `metadata`).
+     * SOMME des credits dans chaque devise. Une conversion utilise le compte
+     * de transit FX comme contrepartie et produit quatre legs :
+     *   DEBIT  USER_POSITION.{source}
+     *   CREDIT FX_TRANSIT.{source}{destination}
+     *   DEBIT  FX_TRANSIT.{source}{destination}
+     *   CREDIT USER_POSITION.{destination}
+     * Le taux, le spread et les frais éventuels restent des attributs métier
+     * de l'opération ; ils ne peuvent jamais servir à tolérer un déséquilibre.
      *
      * Ce service ne calcule JAMAIS de taux de change : `$fxRate` et
      * `$fxSource` sont uniquement PERSISTÉS dans `wallet_operations`.
@@ -423,39 +428,62 @@ final class LedgerService
                 $context
             );
 
-            // 2) ledger_entries : debit sur source (sequence 1)
-            self::insertLedgerEntry(
-                $pdo,
-                $operationId,
-                1,
-                'debit',
-                $sourceWalletId,
-                $sourceCurrency,
-                $srcAmountDec,
-                $newSourceBal,
-                $description,
-                $type,
-                $operationId,
-                $metadata,
-                $context?->environmentValue()
-            );
+            $env = $context?->environmentValue() ?? ProviderConfig::defaultEnvironment();
+            $baseMeta = $metadata ?? [];
 
-            // 3) ledger_entries : credit sur destination (sequence 2)
-            self::insertLedgerEntry(
-                $pdo,
-                $operationId,
-                2,
-                'credit',
-                $destWalletId,
-                $destCurrency,
-                $dstAmountDec,
-                $newDestBal,
-                $description,
-                $type,
-                $operationId,
-                $metadata,
-                $context?->environmentValue()
-            );
+            if (strtoupper($sourceCurrency) === strtoupper($destCurrency)) {
+                // Transfert mono-devise : deux positions utilisateur se
+                // compensent directement.
+                self::insertGlEntry(
+                    $pdo, $operationId, 1, 'debit',
+                    'USER_POSITION.' . strtoupper($sourceCurrency),
+                    $sourceWalletId, $sourceCurrency, $srcAmountDec, $newSourceBal,
+                    $description, $type, $operationId, $baseMeta, $env
+                );
+                self::insertGlEntry(
+                    $pdo, $operationId, 2, 'credit',
+                    'USER_POSITION.' . strtoupper($destCurrency),
+                    $destWalletId, $destCurrency, $dstAmountDec, $newDestBal,
+                    $description, $type, $operationId, $baseMeta, $env
+                );
+            } else {
+                // Conversion : équilibre strict PAR DEVISE via FX_TRANSIT.
+                // Le spread est déjà matérialisé par le montant destination
+                // verrouillé ; aucune valeur implicite n'est calculée ici.
+                $pair = strtoupper($sourceCurrency . $destCurrency);
+                if (!preg_match('/^[A-Z0-9]{6,10}$/', $pair)) {
+                    throw new RuntimeException('Paire FX invalide pour le compte de transit.');
+                }
+                $transitAccount = 'FX_TRANSIT.' . $pair;
+                $baseMeta['fx_pair'] = $pair;
+                $baseMeta['fx_rate'] = $fxRate;
+                $baseMeta['fx_source'] = $fxSource;
+
+                self::insertGlEntry(
+                    $pdo, $operationId, 1, 'debit',
+                    'USER_POSITION.' . strtoupper($sourceCurrency),
+                    $sourceWalletId, $sourceCurrency, $srcAmountDec, $newSourceBal,
+                    $description, $type, $operationId, $baseMeta, $env
+                );
+                self::insertGlEntry(
+                    $pdo, $operationId, 2, 'credit',
+                    $transitAccount,
+                    null, $sourceCurrency, $srcAmountDec, null,
+                    $description, 'fx_transit', $operationId, $baseMeta, $env
+                );
+                self::insertGlEntry(
+                    $pdo, $operationId, 3, 'debit',
+                    $transitAccount,
+                    null, $destCurrency, $dstAmountDec, null,
+                    $description, 'fx_transit', $operationId, $baseMeta, $env
+                );
+                self::insertGlEntry(
+                    $pdo, $operationId, 4, 'credit',
+                    'USER_POSITION.' . strtoupper($destCurrency),
+                    $destWalletId, $destCurrency, $dstAmountDec, $newDestBal,
+                    $description, $type, $operationId, $baseMeta, $env
+                );
+            }
 
             // 4) Projection wallets : source
             self::applyBalanceUpdate($pdo, $sourceWalletId, $source, $srcAmountDec, /* isDebit */ true);
@@ -489,9 +517,9 @@ final class LedgerService
      *     hold d'origine (sa transition pending → completed est gérée par
      *     `WalletService`).
      *
-     * Produit :
-     *   - 1 écriture `ledger_entries` (entry_type = 'debit') liée à
-     *     l'`operation_id` du hold.
+     * Produit une paire équilibrée liée à l'operation_id du hold :
+     *   - DEBIT USER_POSITION ;
+     *   - CREDIT OUTBOUND_TRANSIT.
      *   - Mise à jour de `wallets.balance` (available_balance inchangé).
      *
      * @param int                 $walletId    Wallet sur lequel le hold avait été créé.
@@ -556,12 +584,13 @@ final class LedgerService
 
             $newBalance = self::subDecimal($currentBal, $amountDec);
 
-            // Écriture ledger : débit lié à l'operation_id du hold d'origine.
-            self::insertLedgerEntry(
+            $env = $sourceEnv ?? ProviderConfig::defaultEnvironment();
+            self::insertGlEntry(
                 $pdo,
                 $operationId,
                 1,
                 'debit',
+                'USER_POSITION.' . strtoupper($currency),
                 $walletId,
                 $currency,
                 $amountDec,
@@ -570,7 +599,23 @@ final class LedgerService
                 'hold_capture',
                 $operationId,
                 $metadata,
-                $sourceEnv
+                $env
+            );
+            self::insertGlEntry(
+                $pdo,
+                $operationId,
+                2,
+                'credit',
+                'OUTBOUND_TRANSIT.' . strtoupper($currency),
+                null,
+                $currency,
+                $amountDec,
+                null,
+                $description,
+                'hold_capture',
+                $operationId,
+                $metadata,
+                $env
             );
 
             // Projection wallets : balance -= amount, available_balance inchangé
@@ -586,6 +631,328 @@ final class LedgerService
             }
             throw $e;
         }
+    }
+
+    /**
+     * Posting GL générique à N legs (tests + migration d'ouverture).
+     *
+     * N'altère PAS les projections wallet : uniquement des écritures
+     * `ledger_entries` équilibrées (Σ debit == Σ credit PAR DEVISE).
+     *
+     * @param list<array{account_code:string,entry_type:string,currency:string,amount:string,wallet_id?:int|null}> $legs
+     */
+    public static function post(
+        string $operationId,
+        string $environment,
+        array $legs,
+        ?string $description = null,
+        string $referenceType = 'gl',
+        ?string $referenceId = null
+    ): void {
+        if ($legs === []) {
+            throw new RuntimeException('Posting GL vide refusé.');
+        }
+
+        $byCurrency = [];
+        foreach ($legs as $i => $leg) {
+            $type = (string) ($leg['entry_type'] ?? '');
+            $cur  = strtoupper((string) ($leg['currency'] ?? ''));
+            $amt  = self::toDecimalString((string) ($leg['amount'] ?? '0'));
+            if (!in_array($type, ['debit', 'credit'], true)) {
+                throw new RuntimeException(sprintf('entry_type invalide sur le leg %d.', $i));
+            }
+            if ($cur === '' || bccomp($amt, '0', 8) <= 0) {
+                throw new RuntimeException(sprintf('Leg %d invalide (devise/montant).', $i));
+            }
+            if (!isset($byCurrency[$cur])) {
+                $byCurrency[$cur] = ['debit' => '0', 'credit' => '0'];
+            }
+            $byCurrency[$cur][$type] = self::addDecimal($byCurrency[$cur][$type], $amt);
+        }
+        foreach ($byCurrency as $cur => $sums) {
+            if (bccomp($sums['debit'], $sums['credit'], 8) !== 0) {
+                throw new RuntimeException(
+                    sprintf(
+                        'Posting déséquilibré pour %s : debit=%s credit=%s.',
+                        $cur,
+                        $sums['debit'],
+                        $sums['credit']
+                    )
+                );
+            }
+        }
+
+        $pdo = Database::getConnection();
+        $ownsTransaction = !$pdo->inTransaction();
+        if ($ownsTransaction) {
+            $pdo->beginTransaction();
+        }
+        try {
+            $seen = $pdo->prepare('SELECT 1 FROM ledger_entries WHERE operation_id = :id LIMIT 1');
+            $seen->execute(['id' => $operationId]);
+            if ($seen->fetchColumn() !== false) {
+                if ($ownsTransaction) {
+                    $pdo->commit();
+                }
+                return;
+            }
+            $seq = 1;
+            foreach ($legs as $leg) {
+                self::insertGlEntry(
+                    $pdo,
+                    $operationId,
+                    $seq++,
+                    (string) $leg['entry_type'],
+                    (string) $leg['account_code'],
+                    isset($leg['wallet_id']) ? (int) $leg['wallet_id'] : null,
+                    strtoupper((string) $leg['currency']),
+                    self::toDecimalString((string) $leg['amount']),
+                    null,
+                    $description,
+                    $referenceType,
+                    $referenceId,
+                    null,
+                    $environment
+                );
+            }
+            if ($ownsTransaction) {
+                $pdo->commit();
+            }
+        } catch (Throwable $e) {
+            if ($ownsTransaction && $pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+    }
+
+    /**
+     * Poste un dépôt provider (entrée de fonds, modèle GL cible).
+     *
+     *   DEBIT  PROVIDER_ASSET.{provider}.{CURRENCY}
+     *   CREDIT USER_POSITION.{CURRENCY}
+     *
+     * Projection wallet (même transaction) :
+     *   balance          += amount
+     *   pending_balance  += amount
+     *   available_balance inchangé (disponible après settleDeposit)
+     *
+     * @return string Nouveau balance du wallet (8 dp).
+     */
+    public static function postFundingCredit(
+        string $operationId,
+        int $walletId,
+        string $currency,
+        string $amount,
+        string $provider,
+        ?string $description = null,
+        string $referenceType = 'deposit',
+        ?string $referenceId = null,
+        ?array $metadata = null,
+        ?string $environment = null
+    ): string {
+        self::assertPositiveAmount($amount);
+        $amount = self::toDecimalString($amount);
+        $pdo = Database::getConnection();
+        $ownsTransaction = !$pdo->inTransaction();
+        if ($ownsTransaction) {
+            $pdo->beginTransaction();
+        }
+        try {
+            // Idempotence défensive : un replay ne doit jamais re-créditer.
+            $seen = $pdo->prepare('SELECT 1 FROM ledger_entries WHERE operation_id = :id LIMIT 1');
+            $seen->execute(['id' => $operationId]);
+            if ($seen->fetchColumn() !== false) {
+                $wallet = self::lockAndLoadWallet($pdo, $walletId);
+                if ($ownsTransaction) {
+                    $pdo->commit();
+                }
+                return self::toDecimalString((string) $wallet['balance']);
+            }
+
+            $wallet = self::lockAndLoadWallet($pdo, $walletId);
+            self::assertCurrencyMatches($wallet, $currency);
+            $newBalance = self::addDecimal((string) $wallet['balance'], $amount);
+            $newPending = self::addDecimal((string) $wallet['pending_balance'], $amount);
+            $env = $environment ?? ProviderConfig::defaultEnvironment();
+            $baseMeta = $metadata ?? [];
+            $baseMeta['provider'] = $provider;
+
+            self::insertGlEntry(
+                $pdo,
+                $operationId,
+                1,
+                'debit',
+                'PROVIDER_ASSET.' . $provider . '.' . strtoupper($currency),
+                null,
+                $currency,
+                $amount,
+                null,
+                $description,
+                $referenceType,
+                $referenceId,
+                $baseMeta,
+                $env
+            );
+            self::insertGlEntry(
+                $pdo,
+                $operationId,
+                2,
+                'credit',
+                'USER_POSITION.' . strtoupper($currency),
+                $walletId,
+                $currency,
+                $amount,
+                $newBalance,
+                $description,
+                $referenceType,
+                $referenceId,
+                $baseMeta,
+                $env
+            );
+
+            $pdo->prepare(
+                'UPDATE wallets SET balance = :balance, pending_balance = :pending WHERE id = :id'
+            )->execute([
+                'balance' => $newBalance,
+                'pending' => $newPending,
+                'id'      => $walletId,
+            ]);
+
+            if ($ownsTransaction) {
+                $pdo->commit();
+            }
+            return $newBalance;
+        } catch (Throwable $e) {
+            if ($ownsTransaction && $pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+    }
+
+    /**
+     * Règle un payout après confirmation provider.
+     *
+     * Le hold capturé a déjà débité la position utilisateur et crédité
+     * OUTBOUND_TRANSIT. Ce posting solde ce compte transitoire vers le
+     * settlement provider et les revenus de frais, sans redébiter le wallet.
+     */
+    public static function postOutboundDebit(
+        string $operationId,
+        int $walletId,
+        string $currency,
+        string $principal,
+        string $fee,
+        string $provider,
+        ?string $description = null,
+        string $referenceType = 'send',
+        ?string $referenceId = null,
+        ?array $metadata = null,
+        ?string $environment = null
+    ): void {
+        self::assertPositiveAmount($principal);
+        if (bccomp($fee, '0', 8) < 0) {
+            throw new RuntimeException('Les frais ne peuvent pas être négatifs.');
+        }
+        $principal = self::toDecimalString($principal);
+        $fee = self::toDecimalString($fee);
+        $total = self::addDecimal($principal, $fee);
+        $pdo = Database::getConnection();
+        $ownsTransaction = !$pdo->inTransaction();
+        if ($ownsTransaction) {
+            $pdo->beginTransaction();
+        }
+        try {
+            // Idempotence défensive : un replay ne doit jamais redébiter.
+            $seen = $pdo->prepare('SELECT 1 FROM ledger_entries WHERE operation_id = :id AND sequence = 3 LIMIT 1');
+            $seen->execute(['id' => $operationId]);
+            if ($seen->fetchColumn() !== false) {
+                if ($ownsTransaction) {
+                    $pdo->commit();
+                }
+                return;
+            }
+            $wallet = self::lockAndLoadWallet($pdo, $walletId);
+            self::assertCurrencyMatches($wallet, $currency);
+            $env = $environment ?? ProviderConfig::defaultEnvironment();
+            $baseMeta = $metadata ?? [];
+            $baseMeta['provider'] = $provider;
+            self::insertGlEntry($pdo, $operationId, 3, 'debit', 'OUTBOUND_TRANSIT.' . strtoupper($currency), null, $currency, $total, null, $description, $referenceType, $referenceId, $baseMeta, $env);
+            self::insertGlEntry($pdo, $operationId, 4, 'credit', 'PROVIDER_SETTLEMENT.' . $provider . '.' . strtoupper($currency), null, $currency, $principal, null, $description, $referenceType, $referenceId, $baseMeta, $env);
+            if (bccomp($fee, '0', 8) > 0) {
+                self::insertGlEntry($pdo, $operationId, 5, 'credit', 'NEXUS_REVENUE.fee', null, $currency, $fee, null, $description, $referenceType, $referenceId, $baseMeta, $env);
+            }
+            if ($ownsTransaction) {
+                $pdo->commit();
+            }
+        } catch (Throwable $e) {
+            if ($ownsTransaction && $pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+    }
+
+    /** Annule comptablement une capture après échec provider et recrédite le wallet. */
+    public static function postOutboundReturn(string $operationId, string $walletId, string $amount, string $currency): void
+    {
+        self::assertPositiveAmount($amount);
+        $pdo = Database::getConnection();
+        $ownsTransaction = !$pdo->inTransaction();
+        if ($ownsTransaction) {
+            $pdo->beginTransaction();
+        }
+        try {
+            $wallet = self::lockAndLoadWallet($pdo, (int) $walletId);
+            self::assertCurrencyMatches($wallet, $currency);
+            $amount = self::toDecimalString($amount);
+            $seen = $pdo->prepare('SELECT 1 FROM ledger_entries WHERE operation_id = :id AND sequence = 3 LIMIT 1');
+            $seen->execute(['id' => $operationId]);
+            if ($seen->fetchColumn() !== false) {
+                if ($ownsTransaction) {
+                    $pdo->commit();
+                }
+                return;
+            }
+            $newBalance = self::addDecimal((string) $wallet['balance'], $amount);
+            $newAvailable = self::addDecimal((string) $wallet['available_balance'], $amount);
+            $envStmt = $pdo->prepare('SELECT environment FROM wallet_operations WHERE id = :id LIMIT 1');
+            $envStmt->execute(['id' => $operationId]);
+            $env = (string) ($envStmt->fetchColumn() ?: ProviderConfig::defaultEnvironment());
+            self::insertGlEntry($pdo, $operationId, 3, 'debit', 'OUTBOUND_TRANSIT.' . strtoupper($currency), null, $currency, $amount, null, 'Retour après échec provider', 'send_return', $operationId, ['kind' => 'provider_failure'], $env);
+            self::insertGlEntry($pdo, $operationId, 4, 'credit', 'USER_POSITION.' . strtoupper($currency), (int) $walletId, $currency, $amount, $newBalance, 'Retour après échec provider', 'send_return', $operationId, ['kind' => 'provider_failure'], $env);
+            $pdo->prepare(
+                'UPDATE wallets SET balance = :balance, available_balance = :available WHERE id = :id'
+            )->execute([
+                'balance' => $newBalance,
+                'available' => $newAvailable,
+                'id' => (int) $walletId,
+            ]);
+            if ($ownsTransaction) {
+                $pdo->commit();
+            }
+        } catch (Throwable $e) {
+            if ($ownsTransaction && $pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+    }
+
+    private static function insertGlEntry(PDO $pdo, string $operationId, int $sequence, string $entryType, string $accountCode, ?int $walletId, string $currency, string $amount, ?string $balanceAfter, ?string $description, ?string $referenceType, ?string $referenceId, ?array $metadata, string $environment): void
+    {
+        $stmt = $pdo->prepare(
+            'INSERT INTO ledger_entries (operation_id, sequence, entry_type, account_code, wallet_id, wallet_currency, amount, balance_after, description, reference_type, reference_id, metadata, environment, is_legacy)
+             VALUES (:opid, :seq, :type, :account, :wallet, :currency, :amount, :balance, :description, :reference_type, :reference_id, :metadata, :environment, 0)'
+        );
+        $stmt->execute([
+            'opid' => $operationId, 'seq' => $sequence, 'type' => $entryType, 'account' => $accountCode,
+            'wallet' => $walletId, 'currency' => $currency, 'amount' => $amount, 'balance' => $balanceAfter,
+            'description' => $description, 'reference_type' => $referenceType, 'reference_id' => $referenceId,
+            'metadata' => $metadata === [] ? null : json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'environment' => $environment,
+        ]);
     }
 
     /**
@@ -669,7 +1036,8 @@ final class LedgerService
     private static function lockAndLoadWallet(PDO $pdo, int $walletId): array
     {
         $stmt = $pdo->prepare(
-            'SELECT id, user_id, currency, balance, available_balance, hold_balance
+            'SELECT id, user_id, currency, balance, available_balance, hold_balance,
+                    pending_balance, in_transit_balance, settlement_balance
              FROM wallets
              WHERE id = :id
              FOR UPDATE'

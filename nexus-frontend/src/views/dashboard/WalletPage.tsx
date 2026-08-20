@@ -16,7 +16,6 @@ import AnimatedCounter from '../../components/AnimatedCounter';
 import EmptyState from '../../components/EmptyState';
 import { useI18n } from '../../context/I18nContext';
 import { useDashT, localeFor } from '../../data/dashboard-i18n';
-import { CurrencyLogo } from '../../components/dashboard/CurrencyLogo';
 import AddFundsModal from '../../components/dashboard/AddFundsModal';
 
 /**

@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import {
   apiCreateQuote,
   apiExecuteTransfer,
+  apiTransferDetail,
   type QuoteRoute,
   type QuoteData,
   type TransferTx,
@@ -160,6 +161,8 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
   const [executing, setExecuting] = useState(false);
   const [executionError, setExecutionError] = useState<string | null>(null);
   const [executedTx, setExecutedTx] = useState<TransferTx | null>(null);
+  const executedTxId = executedTx?.id;
+  const executedTxStatus = executedTx?.status;
 
   // Pipeline animation
   const [pipeStep, setPipeStep] = useState(0);
@@ -248,6 +251,18 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
     }
   };
 
+  // Les providers asynchrones retournent processing/pending. On suit alors
+  // le statut serveur ; l'écran ne doit jamais présenter une réussite avant
+  // le statut terminal completed.
+  useEffect(() => {
+    if (executedTxId === undefined || !executedTxStatus || !['processing', 'pending'].includes(executedTxStatus)) return;
+    const timer = window.setInterval(async () => {
+      const res = await apiTransferDetail(executedTxId);
+      if (res.success && res.data) setExecutedTx(res.data);
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [executedTxId, executedTxStatus]);
+
   // ── Countdown color ────────────────────────────────────
   const countdownColor = remaining > 120 ? 'var(--green)' : remaining > 60 ? 'var(--gold)' : 'var(--red)';
 
@@ -332,13 +347,21 @@ export default function RouteSelectionStep({ intent, onBack }: RouteSelectionSte
 
   // ── Succès : transaction exécutée ─────────────────────────
   if (executedTx) {
+    const completed = executedTx.status === 'completed';
+    const failed = ['failed', 'cancelled'].includes(executedTx.status);
+    const stateColor = completed ? 'var(--green)' : failed ? 'var(--red)' : 'var(--gold)';
+    const stateIcon = completed ? '✅' : failed ? '❌' : '⏳';
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
-        <div className="card card-hi-gr" style={{ padding: 40, textAlign: 'center', maxWidth: 560 }}>
-          <div style={{ fontSize: 34, marginBottom: 12 }}>✅</div>
-          <h2 style={{ color: 'var(--green)', marginBottom: 10, fontSize: 20 }}>{t('send.routes.success.title')}</h2>
+        <div className={`card ${completed ? 'card-hi-gr' : failed ? 'card-hi-r' : 'card-hi-g'}`} style={{ padding: 40, textAlign: 'center', maxWidth: 560 }}>
+          <div style={{ fontSize: 34, marginBottom: 12 }}>{stateIcon}</div>
+          <h2 style={{ color: stateColor, marginBottom: 10, fontSize: 20 }}>
+            {completed ? t('send.routes.success.title') : t('status.' + executedTx.status)}
+          </h2>
           <p style={{ color: 'var(--text-mid)', marginBottom: 20, fontSize: 13, lineHeight: 1.6 }}>
-            {t('send.routes.success.text')}
+            {completed
+              ? t('send.routes.success.text')
+              : t('send.routes.success.status') + ' : ' + t('status.' + executedTx.status)}
           </p>
           <div className="card" style={{ padding: 16, textAlign: 'left', marginBottom: 20 }}>
             {([

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nexus\Services;
 
+use Nexus\Core\Correlation;
 use Nexus\Core\Database;
 use Nexus\Core\HttpException;
 use Nexus\Execution\EnvironmentGuard;
@@ -121,11 +122,10 @@ final class ExecutionSettlementService
             $hold = self::resolveHold($pdo, $row);
             $env = (string) ($row['environment'] ?? ProviderConfig::defaultEnvironment());
             if ($target === 'completed') {
-                // Débit de position + contreparties séparées :
-                //   DEBIT  USER_POSITION.{devise}            (principal + frais)
+                // Solde la contrepartie de capture, sans second débit wallet :
+                //   DEBIT  OUTBOUND_TRANSIT.{devise}          (principal + frais)
                 //   CREDIT PROVIDER_SETTLEMENT.{provider}.{d} (principal)
                 //   CREDIT NEXUS_REVENUE.fee                 (frais Nexus, isolés)
-                // + wallet : balance -= total, in_transit -= total.
                 $total  = (string) $hold['source_amount'];
                 $fee    = (string) ($hold['fee_amount'] ?? '0');
                 $fee    = bcadd($fee, '0', 8);
@@ -148,11 +148,10 @@ final class ExecutionSettlementService
                     $env
                 );
             } else {
-                // Échec provider : aucun débit n'avait été posté (le débit
-                // n'a lieu qu'au règlement) → AUCUN posting de compensation.
-                // Le montant retourne simplement du bucket in_transit vers
-                // available (idempotent par nature — garde des terminaux).
+                // Échec provider : annulation équilibrée de la capture et
+                // recrédit du wallet, sans faire confiance au payload.
                 LedgerService::postOutboundReturn(
+                    (string) $hold['id'],
                     (string) $hold['source_wallet_id'],
                     (string) $hold['source_amount'],
                     (string) $hold['source_currency']
@@ -171,7 +170,7 @@ final class ExecutionSettlementService
             ]);
 
             self::notify($pdo, $row, $target, $rawStatus);
-            self::audit($pdo, $row, $target, $rawStatus);
+            self::audit($pdo, $row, $target, $rawStatus, $details);
 
             $pdo->commit();
         } catch (Throwable $e) {
@@ -264,7 +263,8 @@ final class ExecutionSettlementService
         }
     }
 
-    private static function audit(PDO $pdo, array $tx, string $target, string $rawStatus): void
+    /** @param array<string,mixed> $details */
+    private static function audit(PDO $pdo, array $tx, string $target, string $rawStatus, array $details = []): void
     {
         try {
             $stmt = $pdo->prepare(
@@ -277,9 +277,13 @@ final class ExecutionSettlementService
                 'etype' => 'transactions',
                 'eid'   => (int) $tx['id'],
                 'meta'  => json_encode([
-                    'provider'          => (string) $tx['provider'],
-                    'provider_status'   => $rawStatus,
-                    'provider_operation_id' => (string) $tx['provider_operation_id'],
+                    'provider'                => (string) $tx['provider'],
+                    'provider_status'         => $rawStatus,
+                    'provider_operation_id'   => (string) $tx['provider_operation_id'],
+                    'transaction_id'          => (int) $tx['id'],
+                    'request_id'              => (string) ($details['request_id'] ?? Correlation::id()),
+                    'event_id'                => (string) ($details['event_id'] ?? ''),
+                    'provider_transaction_id' => $details['provider_transaction_id'] ?? null,
                 ], JSON_UNESCAPED_UNICODE),
                 'env'   => (string) ($tx['environment'] ?? 'sandbox'),
             ]);

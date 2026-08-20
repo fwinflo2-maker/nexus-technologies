@@ -6,6 +6,7 @@
   pointer-events: none;
   overflow: hidden;
   opacity: 0.5;
+  contain: strict;
   mask-image: linear-gradient(
     to bottom,
     transparent 0%,

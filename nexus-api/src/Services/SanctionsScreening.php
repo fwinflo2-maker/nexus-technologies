@@ -63,6 +63,42 @@ use Nexus\Execution\ExecutionEnvironment;
  * remplacer un screening nominatif OFAC/UE/ONU. Brancher un vrai provider
  * (Dow Jones, ComplyAdvantage…) consiste à remplacer `loadCountryList()` :
  * les trois états et le comportement fail-closed restent valides.
+ *
+ * MODÈLE DE SCREENING REQUIS POUR LA PRODUCTION (Cycle 5 — hors scope, défini)
+ * ────────────────────────────────────────────────────────────────────────────
+ * Le statut actuel est OUT OF SCOPE / FAIL-CLOSED : aucun vendor n'est choisi
+ * ni simulé. Avant toute production, le modèle suivant doit être configuré :
+ *
+ *   Sources        listes consolidées OFAC SDN, UE (CFSP), ONU (Security
+ *                  Council Consolidated List) — au minimum ; listes locales
+ *                  selon corridors (ex. sanctions nationales CEMAC).
+ *   Vendor         un fournisseur de screening nominatif (ComplyAdvantage,
+ *                  Dow Jones R&C, LexisNexis WorldCompliance…) OU ingestion
+ *                  directe des listes officielles avec fuzzy matching maîtrisé.
+ *                  Le choix est une décision BUSINESS/CONFORMITÉ, pas code.
+ *   Pays           screening du pays de destination ET d'origine (embargos
+ *                  globaux), conservé en plus du nominatif.
+ *   Identité       nom complet + date de naissance + pays du donneur d'ordre
+ *                  ET du bénéficiaire (données KYC + champs de la transaction),
+ *                  match phonétique/translittération, seuil de score documenté.
+ *   Fréquence      au moment de CHAQUE transaction (pré-hold) + re-screening
+ *                  périodique de la base clients à chaque mise à jour de liste
+ *                  (les listes officielles changent plusieurs fois par mois).
+ *   Cache          listes locales avec version/horodatage de publication ;
+ *                  expiration stricte (une liste périmée = UNAVAILABLE, pas
+ *                  CLEARED) ; provenance auditable par version de liste.
+ *   Audit          chaque screening journalisé : cible (référence, pas les
+ *                  données brutes), listes+versions consultées, score, verdict,
+ *                  request_id — sans secret ni payload complet.
+ *   Résultat       CLEARED / HIT / UNAVAILABLE (les trois états existants) ;
+ *                  HIT bloque et route vers revue ; UNAVAILABLE reste un refus
+ *                  en production, REVIEW_REQUIRED en sandbox.
+ *   Revue manuelle file de cas pour les HIT et les faux positifs présumés :
+ *                  décision humaine tracée (qui, quand, motif), jamais de
+ *                  déblocage automatique d'un HIT par le code.
+ *
+ * UNAVAILABLE n'est JAMAIS présenté comme CLEARED — dans aucun écran, aucun
+ * rapport, aucune réponse API.
  */
 final class SanctionsScreening
 {
@@ -150,6 +186,44 @@ final class SanctionsScreening
     public static function isConfigured(): bool
     {
         return self::loadCountryList() !== null;
+    }
+
+    /**
+     * État honnête de la source de sanctions.
+     *
+     * Le format « codes pays » n'est pas un screening nominatif OFAC/UE/ONU.
+     * Absent de toute source approuvée → OUT_OF_SCOPE, fail-closed en production.
+     *
+     * @return array{
+     *   configured: bool,
+     *   vendor: null,
+     *   source: string,
+     *   screening_type: string,
+     *   fail_closed_production: bool,
+     *   sandbox_when_unavailable: string,
+     *   ladder: string,
+     *   scope: string,
+     *   note: string
+     * }
+     */
+    public static function describe(): array
+    {
+        $list = self::loadCountryList();
+        $configured = $list !== null;
+
+        return [
+            'configured'                => $configured,
+            'vendor'                    => null,
+            'source'                    => $configured ? $list['source'] : 'none',
+            'screening_type'            => 'country_iso2_list',
+            'fail_closed_production'    => true,
+            'sandbox_when_unavailable'  => 'REVIEW_REQUIRED',
+            'ladder'                    => $configured ? 'CONFIGURATION_READY' : 'CODE_READY',
+            'scope'                     => 'OUT_OF_SCOPE',
+            'note'                      => 'Pas de provider nominatif OFAC/UE/ONU approuvé. '
+                . 'Liste pays optionnelle via NEXUS_SANCTIONS_COUNTRIES / NEXUS_SANCTIONS_LIST_FILE. '
+                . 'UNAVAILABLE n’est jamais traduit en CLEARED.',
+        ];
     }
 
     /**

@@ -186,6 +186,7 @@ final class ProviderCredentialService
                  status          = VALUES(status),
                  configured_by   = VALUES(configured_by),
                  last_error      = NULL,
+                 last_tested_at  = NULL,
                  updated_at      = NOW()'
         );
         $stmt->execute([
@@ -207,6 +208,173 @@ final class ProviderCredentialService
         $stmt->execute(['slug' => $slug, 'env' => $environment]);
 
         return $stmt->rowCount();
+    }
+
+    /**
+     * Met de nouvelles credentials de plateforme en attente de promotion.
+     * Elles ne sont jamais résolues par l'exécution avant activateRotation().
+     *
+     * @param array<string,string> $credentials
+     */
+    public static function stagePlatform(PDO $pdo, string $slug, string $environment, array $credentials, int $configuredBy): int
+    {
+        $env = self::normalizeEnvironment($environment);
+        if ($env === null || $credentials === []) {
+            throw new \RuntimeException('Rotation de credentials invalide.');
+        }
+        $payload = [
+            'credentials' => $credentials,
+            'updated_by' => $configuredBy,
+            'updated_at' => gmdate(DATE_ATOM),
+        ];
+        $stmt = $pdo->prepare(
+            "INSERT INTO credential_rotations
+                (provider_slug, environment, credentials_enc, status, configured_by)
+             VALUES (:slug, :env, :enc, 'staged', :by)"
+        );
+        $stmt->execute([
+            'slug' => $slug,
+            'env' => $env,
+            'enc' => Crypto::encrypt(json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)),
+            'by' => $configuredBy,
+        ]);
+        return (int) $pdo->lastInsertId();
+    }
+
+    /** @return array<string,string>|null */
+    public static function resolveStaged(PDO $pdo, string $slug, string $environment, int $rotationId): ?array
+    {
+        $stmt = $pdo->prepare(
+            "SELECT credentials_enc FROM credential_rotations
+             WHERE id = :id AND provider_slug = :slug AND environment = :env AND status = 'staged' LIMIT 1"
+        );
+        $stmt->execute(['id' => $rotationId, 'slug' => $slug, 'env' => $environment]);
+        $encrypted = $stmt->fetchColumn();
+        return is_string($encrypted) ? self::decryptCredentials($encrypted) : null;
+    }
+
+    /**
+     * Promeut une rotation testée. L'ancienne valeur est d'abord archivée,
+     * puis la nouvelle devient active dans la même transaction SQL.
+     */
+    public static function activateRotation(PDO $pdo, string $slug, string $environment, int $rotationId, int $configuredBy): void
+    {
+        $env = self::normalizeEnvironment($environment);
+        if ($env === null) {
+            throw new \RuntimeException('Environnement de rotation invalide.');
+        }
+        $pdo->beginTransaction();
+        try {
+            $staged = $pdo->prepare(
+                "SELECT credentials_enc FROM credential_rotations
+                 WHERE id = :id AND provider_slug = :slug AND environment = :env AND status = 'staged' FOR UPDATE"
+            );
+            $staged->execute(['id' => $rotationId, 'slug' => $slug, 'env' => $env]);
+            $newEncrypted = $staged->fetchColumn();
+            if (!is_string($newEncrypted) || self::decryptCredentials($newEncrypted) === null) {
+                throw new \RuntimeException('Rotation en attente introuvable ou illisible.');
+            }
+
+            $current = self::findPlatformRow($pdo, $slug, $env);
+            if ($current !== null && is_string($current['credentials_enc'] ?? null)) {
+                $archive = $pdo->prepare(
+                    "INSERT INTO credential_rotations
+                        (provider_slug, environment, credentials_enc, status, configured_by, revoked_at)
+                     VALUES (:slug, :env, :enc, 'revoked', :by, NOW())"
+                );
+                $archive->execute([
+                    'slug' => $slug,
+                    'env' => $env,
+                    'enc' => $current['credentials_enc'],
+                    'by' => $configuredBy,
+                ]);
+            }
+
+            self::upsertPlatform($pdo, $slug, $env, self::decryptCredentials($newEncrypted) ?? [], 'active', $configuredBy);
+            $pdo->prepare(
+                "UPDATE credential_rotations
+                 SET status = 'active', activated_at = NOW()
+                 WHERE id = :id AND status = 'staged'"
+            )->execute(['id' => $rotationId]);
+            $pdo->commit();
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+    }
+
+    /** Archive une credential active, puis la retire de la résolution. */
+    public static function revokePlatform(PDO $pdo, string $slug, string $environment, int $configuredBy): void
+    {
+        $env = self::normalizeEnvironment($environment);
+        if ($env === null) {
+            throw new \RuntimeException('Environnement de révocation invalide.');
+        }
+        $pdo->beginTransaction();
+        try {
+            $current = self::findPlatformRow($pdo, $slug, $env);
+            if ($current !== null && is_string($current['credentials_enc'] ?? null)) {
+                $pdo->prepare(
+                    "INSERT INTO credential_rotations
+                        (provider_slug, environment, credentials_enc, status, configured_by, revoked_at)
+                     VALUES (:slug, :env, :enc, 'revoked', :by, NOW())"
+                )->execute([
+                    'slug' => $slug,
+                    'env' => $env,
+                    'enc' => $current['credentials_enc'],
+                    'by' => $configuredBy,
+                ]);
+                self::deletePlatform($pdo, $slug, $env);
+            }
+            $pdo->commit();
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+    }
+
+    /** @return list<array<string,mixed>> Métadonnées seules : jamais de secret. */
+    public static function listRotations(PDO $pdo, ?string $slug = null, ?string $environment = null): array
+    {
+        $where = [];
+        $params = [];
+        if ($slug !== null) {
+            $where[] = 'provider_slug = :slug';
+            $params['slug'] = $slug;
+        }
+        if ($environment !== null) {
+            $where[] = 'environment = :env';
+            $params['env'] = $environment;
+        }
+        $sql = 'SELECT id, provider_slug, environment, status, configured_by, last_tested_at, created_at, activated_at, revoked_at FROM credential_rotations';
+        if ($where !== []) {
+            $sql .= ' WHERE ' . implode(' AND ', $where);
+        }
+        $sql .= ' ORDER BY id DESC';
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll();
+    }
+
+    /** @return array<string,string>|null */
+    private static function decryptCredentials(string $encrypted): ?array
+    {
+        $plain = Crypto::decrypt($encrypted);
+        $payload = is_string($plain) ? json_decode($plain, true) : null;
+        if (!is_array($payload) || !is_array($payload['credentials'] ?? null)) {
+            return null;
+        }
+        $credentials = [];
+        foreach ($payload['credentials'] as $key => $value) {
+            if (is_string($key) && is_string($value) && $value !== '') {
+                $credentials[$key] = $value;
+            }
+        }
+        return $credentials === [] ? null : $credentials;
     }
 
     /**
@@ -288,6 +456,7 @@ final class ProviderCredentialService
                  credentials_enc = VALUES(credentials_enc),
                  status          = VALUES(status),
                  last_error      = NULL,
+                 last_tested_at  = NULL,
                  updated_at      = NOW()'
         );
         $stmt->execute([

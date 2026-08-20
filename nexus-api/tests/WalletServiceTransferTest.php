@@ -329,10 +329,10 @@ final class WalletServiceTransferTest extends TestCase
         $this->assertSame('XAF', $op['dest_currency']);
         $this->assertSame($expectedDest, (string) $op['dest_amount']);
 
-        // Exactement DEUX ledger_entries liées au même operation_id.
-        $this->assertSame(2, $this->countLedgerEntries($result->getOperationId()));
+        // Exactement QUATRE legs liés au même operation_id, équilibrés par devise.
+        $this->assertSame(4, $this->countLedgerEntries($result->getOperationId()));
         $entries = $this->getEntries($result->getOperationId());
-        $this->assertCount(2, $entries);
+        $this->assertCount(4, $entries);
         $this->assertSame(1, (int) $entries[0]['sequence']);
         $this->assertSame('debit', $entries[0]['entry_type']);
         $this->assertSame($sourceWallet, (int) $entries[0]['wallet_id']);
@@ -340,9 +340,19 @@ final class WalletServiceTransferTest extends TestCase
         $this->assertSame('100.00000000', (string) $entries[0]['amount']);
         $this->assertSame(2, (int) $entries[1]['sequence']);
         $this->assertSame('credit', $entries[1]['entry_type']);
-        $this->assertSame($destWallet, (int) $entries[1]['wallet_id']);
-        $this->assertSame('XAF', $entries[1]['wallet_currency']);
-        $this->assertSame($expectedDest, (string) $entries[1]['amount']);
+        $this->assertNull($entries[1]['wallet_id']);
+        $this->assertSame('EUR', $entries[1]['wallet_currency']);
+        $this->assertSame('100.00000000', (string) $entries[1]['amount']);
+        $this->assertSame(3, (int) $entries[2]['sequence']);
+        $this->assertSame('debit', $entries[2]['entry_type']);
+        $this->assertNull($entries[2]['wallet_id']);
+        $this->assertSame('XAF', $entries[2]['wallet_currency']);
+        $this->assertSame($expectedDest, (string) $entries[2]['amount']);
+        $this->assertSame(4, (int) $entries[3]['sequence']);
+        $this->assertSame('credit', $entries[3]['entry_type']);
+        $this->assertSame($destWallet, (int) $entries[3]['wallet_id']);
+        $this->assertSame('XAF', $entries[3]['wallet_currency']);
+        $this->assertSame($expectedDest, (string) $entries[3]['amount']);
 
         // Les DEUX wallets sont mis à jour.
         $this->assertSame('900.00', $this->getBalance($sourceWallet));
@@ -395,9 +405,9 @@ final class WalletServiceTransferTest extends TestCase
         $this->assertSame($first->getFxSource(), $second->getFxSource());
         $this->assertSame($first->getStatus(), $second->getStatus());
 
-        // Toujours UNE seule wallet_operations et DEUX ledger_entries.
+        // Toujours UNE seule wallet_operations et QUATRE legs FX.
         $this->assertSame(1, $this->countWalletOperations($userId));
-        $this->assertSame(2, $this->countLedgerEntries($first->getOperationId()));
+        $this->assertSame(4, $this->countLedgerEntries($first->getOperationId()));
 
         // Soldes débités UNE seule fois (50 EUR → 54.35 USD @ 1.087).
         $this->assertSame('450.00', $this->getBalance($sourceWallet));
@@ -608,7 +618,7 @@ final class WalletServiceTransferTest extends TestCase
         $this->assertSame('error', $stmt->fetchColumn());
 
         // L'opération de A reste intacte.
-        $this->assertSame(2, $this->countLedgerEntries($okA->getOperationId()));
+        $this->assertSame(4, $this->countLedgerEntries($okA->getOperationId()));
         $this->assertSame('450.00', $this->getBalance($srcA));
     }
 
@@ -637,7 +647,8 @@ final class WalletServiceTransferTest extends TestCase
 
         // La valeur persistée en ledger (DECIMAL(20,8)) est identique.
         $entries = $this->getEntries($result->getOperationId());
-        $this->assertSame('0.00000006', (string) $entries[1]['amount']);
+        $this->assertCount(4, $entries);
+        $this->assertSame('0.00000006', (string) $entries[3]['amount']);
     }
 
     // ──────────────────────────────────────────────────────────────────────

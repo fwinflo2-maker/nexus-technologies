@@ -136,6 +136,14 @@ export interface DashboardBanner {
   title: string;
   message: string;
   action: string | null;
+  reason?: string | null;
+  href?: string | null;
+}
+
+export interface DashboardLimits {
+  monthly_limit_eur: number;
+  monthly_used_eur: number;
+  monthly_remaining_eur: number;
 }
 
 export interface DashboardSummaryData {
@@ -152,6 +160,7 @@ export interface DashboardSummaryData {
   kpis: DashboardKpis;
   recent: DashboardRecentTx[];
   banner: DashboardBanner;
+  limits?: DashboardLimits;
 }
 
 export interface ActivitySeriesPoint {
@@ -418,6 +427,16 @@ export interface AuthorizedOriginsData {
   total: number;
   country_of_residence: string | null;
   kyc_level: string;
+  limits?: AccountLimits;
+}
+
+export interface AccountLimits {
+  kyc_level: string;
+  monthly_limit_eur: number;
+  monthly_used_eur: number;
+  monthly_remaining_eur: number;
+  kyc_required_threshold_eur: number;
+  verified: boolean;
 }
 
 // --- Intent Engine (couverture pays / modes / taux) -------------------------
@@ -1187,21 +1206,17 @@ export async function apiProviderCredentialsDelete(slug: string): Promise<ApiRes
   return request<{ provider_slug: string; deleted: boolean }>('DELETE', `/providers/${slug}/credentials`);
 }
 
-/** Test de connectivité TCP simple vers la base URL. */
-export async function apiProviderTest(slug: string): Promise<ApiResponse<{
+/** Test de connexion réel (POST /providers/{slug}/test) — environment requis. */
+export async function apiProviderTest(
+  slug: string,
+  environment: 'sandbox' | 'production' = 'sandbox',
+): Promise<ApiResponse<{
   provider_slug: string;
-  reachable: boolean;
-  latency_ms: number;
-  error: string | null;
   environment: string;
+  result: { status: string; message?: string; tested_at?: string };
+  latency_ms?: number;
 }>> {
-  return request<{
-    provider_slug: string;
-    reachable: boolean;
-    latency_ms: number;
-    error: string | null;
-    environment: string;
-  }>('POST', `/providers/${slug}/test`);
+  return request('POST', `/providers/${slug}/test`, { environment });
 }
 
 // --- Intent Engine ------------------------------------------------------------
@@ -1317,6 +1332,8 @@ export interface UserProfile {
   email: string;
   phone: string | null;
   account_type: 'personal' | 'business';
+  platform_role?: string;
+  country_of_residence?: string | null;
   auth_provider: 'local';
   status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'CLOSED';
   kyc_level: 'none' | 'basic' | 'standard' | 'advanced';
@@ -1374,6 +1391,46 @@ export async function apiUpdatePassword(
   payload: UpdatePasswordPayload,
 ): Promise<ApiResponse<{ updated: boolean }>> {
   return request<{ updated: boolean }>('PUT', '/users/me/password', payload as unknown as Record<string, unknown>);
+}
+
+/** Carte virtuelle (demande / statut — pas de secrets PAN/CVV). */
+export interface VirtualCard {
+  id: string;
+  label: string;
+  currency: string;
+  spend_limit: number | null;
+  status: string;
+  last4: string | null;
+  brand: string | null;
+  issuer_provider: string | null;
+  environment: string;
+  created_at: string;
+  updated_at: string;
+  pan_masked: string;
+  cvv_available: boolean;
+}
+
+export interface CardIssuanceStatus {
+  ready: boolean;
+  providers: string[];
+  status: string;
+  issuer?: string | null;
+}
+
+export async function apiCardsList(): Promise<ApiResponse<{ cards: VirtualCard[]; issuance: CardIssuanceStatus }>> {
+  return request<{ cards: VirtualCard[]; issuance: CardIssuanceStatus }>('GET', '/cards');
+}
+
+export async function apiCreateVirtualCard(payload: {
+  label?: string;
+  currency: string;
+  spend_limit?: number;
+}): Promise<ApiResponse<{ card: VirtualCard; issuance: CardIssuanceStatus; message: string }>> {
+  return request<{ card: VirtualCard; issuance: CardIssuanceStatus; message: string }>(
+    'POST',
+    '/cards',
+    payload as unknown as Record<string, unknown>,
+  );
 }
 
 /** Liste les sessions actives (GET /api/users/me/sessions). */
@@ -1439,6 +1496,9 @@ export interface ProviderCard {
   /** Opérations réellement implémentées, détectées dans le code. */
   operations: Record<string, boolean>;
   operations_enabled: boolean;
+  /** Matrice d'intégration (IMPLEMENTED / NOT_IMPLEMENTED). */
+  integration?: string;
+  capabilities?: Record<string, string>;
   credential_schema: { verified: boolean; source: string; credentials: CredentialFieldSchema[] } | null;
   documentation: Record<string, string>;
   health?: {
@@ -1698,6 +1758,7 @@ export interface SupportConversation {
   status: string;
   priority: string;
   assigned_to: number | null;
+  assigned_name?: string | null;
   created_at: string;
   updated_at: string;
   // côté agent
@@ -1734,7 +1795,10 @@ export async function apiSupportCreateConversation(subject: string, category: st
   });
 }
 
-export async function apiSupportMessages(id: number, afterId?: number): Promise<ApiResponse<{ items: SupportMessage[] }>> {
+export async function apiSupportMessages(
+  id: number,
+  afterId?: number,
+): Promise<ApiResponse<{ items: SupportMessage[]; conversation?: SupportConversation }>> {
   const q = afterId ? `?after_id=${afterId}` : '';
   return request('GET', `/support/conversations/${id}/messages${q}`);
 }
@@ -1763,8 +1827,12 @@ export interface SupportBotResult {
   quick_replies?: string[];
 }
 
-export async function apiSupportBot(message: string): Promise<ApiResponse<SupportBotResult>> {
-  return request('POST', '/support/bot', { message });
+export async function apiSupportBot(
+  message: string,
+  history: Array<{ sender: string; body: string }> = [],
+  lang = 'fr',
+): Promise<ApiResponse<SupportBotResult>> {
+  return request('POST', '/support/bot', { message, history, lang });
 }
 
 export async function apiSupportUnread(): Promise<ApiResponse<{ total: number; conversations: Array<{ id: number; unread: number }> }>> {
@@ -1786,4 +1854,152 @@ export async function apiSupportUpload(file: File): Promise<ApiResponse<{ url: s
   } catch {
     return { success: false, error: 'Service temporairement indisponible.' };
   }
+}
+
+// --- Personnel Nexus : RBAC, employés et messagerie interne ----------------
+
+export interface EmployeeRow {
+  id: number;
+  user_id: number;
+  full_name: string;
+  email: string;
+  user_status: string;
+  department: string | null;
+  role: string;
+  authorization_model: 'platform_role';
+  status: 'active' | 'invited' | 'disabled';
+  last_login_at: string | null;
+  created_at: string;
+}
+
+export interface EmployeeInvite {
+  reset_url?: string | null;
+  reset_token?: string | null;
+  expires_at?: string;
+}
+
+export function apiControlEmployees(): Promise<ApiResponse<{ items: EmployeeRow[]; total: number }>> {
+  return request('GET', '/control/employees');
+}
+
+export function apiControlCreateEmployee(payload: {
+  full_name: string;
+  email: string;
+  role: string;
+  department?: string;
+}): Promise<ApiResponse<{ id: number; user_id: number }>> {
+  return request('POST', '/control/employees', payload);
+}
+
+export function apiControlUpdateEmployee(
+  id: number,
+  payload: { role?: string; department?: string },
+): Promise<ApiResponse<{ id: number; updated: boolean }>> {
+  return request('PUT', `/control/employees/${id}`, payload);
+}
+
+export function apiControlSetEmployeeStatus(
+  id: number,
+  status: 'active' | 'disabled',
+): Promise<ApiResponse<{ id: number; status: string }>> {
+  return request('PATCH', `/control/employees/${id}/status`, { status });
+}
+
+export function apiControlInviteEmployee(id: number): Promise<ApiResponse<EmployeeInvite>> {
+  return request('POST', `/control/employees/${id}/invite`);
+}
+
+export interface StaffDashboardData {
+  role: string;
+  generated_at: string;
+  sections: {
+    operations?: { queue: any[]; counters: any; avg_execution_seconds: number };
+    finance?: { assets: any; transactions: any; status_breakdown: any[] };
+    compliance?: {
+      pending: any[];
+      counters: {
+        total?: number;
+        individual?: Record<string, number>;
+        company?: Record<string, number>;
+      };
+    };
+    risk?: { risk: any; flagged: any[]; recent_failed: any[]; by_provider: any[] };
+    providers?: { providers: any; credentials: any[] };
+    support?: { counters: any; recent: any[]; specialists: any[] };
+    technical?: { services: any[]; webhooks: any; credentials: any[]; db_ok: boolean };
+    business?: { accounts: any; volume_xaf: number; top: any[] };
+    executive?: { note?: string };
+  };
+}
+
+export interface StaffActionResult {
+  message?: string;
+  [key: string]: unknown;
+}
+
+export function apiStaffDashboard(): Promise<ApiResponse<StaffDashboardData>> {
+  return request('GET', '/control/staff/dashboard');
+}
+
+export function apiStaffAction(payload: Record<string, unknown>): Promise<ApiResponse<StaffActionResult>> {
+  return request('POST', '/control/staff/action', payload);
+}
+
+export interface StaffDirectoryEntry {
+  id: number;
+  full_name: string;
+  platform_role: string;
+  department: string | null;
+}
+
+export interface InternalChatMember extends StaffDirectoryEntry {}
+
+export interface InternalChat {
+  id: number;
+  title: string;
+  related_conversation_id: number | null;
+  ticket_subject?: string | null;
+  unread: number;
+  last_body: string | null;
+  last_sender: string | null;
+  updated_at: string;
+  members: InternalChatMember[];
+}
+
+export interface InternalChatMessage {
+  id: number;
+  sender_id: number;
+  sender_name: string;
+  platform_role: string;
+  body: string;
+  is_system: boolean | number;
+  created_at: string;
+}
+
+export function apiStaffDirectory(): Promise<ApiResponse<{ items: StaffDirectoryEntry[] }>> {
+  return request('GET', '/control/staff/directory');
+}
+
+export function apiStaffChats(): Promise<ApiResponse<{ items: InternalChat[] }>> {
+  return request('GET', '/control/staff/chats');
+}
+
+export function apiStaffCreateChat(payload: {
+  title: string;
+  member_ids: number[];
+  related_conversation_id?: number;
+}): Promise<ApiResponse<{ id: number }>> {
+  return request('POST', '/control/staff/chats', payload);
+}
+
+export function apiStaffChatMessages(
+  id: number,
+  afterId = 0,
+): Promise<ApiResponse<{ items: InternalChatMessage[] }>> {
+  const query = afterId > 0 ? `?after_id=${afterId}` : '';
+  return request('GET', `/control/staff/chats/${id}/messages${query}`);
+}
+
+export function apiStaffChatSend(id: number, body: string): Promise<ApiResponse<{ id: number }>> {
+  return request('POST', `/control/staff/chats/${id}/messages`, { body });
 }

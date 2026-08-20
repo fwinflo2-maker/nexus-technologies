@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { apiControlAccess, apiStaffChats, type InternalAccess } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { ROLE_CATALOG } from '../admin/AdminEmployees';
@@ -35,7 +35,6 @@ type StaffView = 'console' | 'chat' | 'access';
 
 export default function StaffHome() {
   const { user, logout } = useAuth();
-  const navigate = useNavigate();
   const [access, setAccess] = useState<InternalAccess | null>(null);
   const [failed, setFailed] = useState(false);
   const [view, setView] = useState<StaffView>('console');
@@ -147,8 +146,13 @@ export default function StaffHome() {
           <button
             type="button"
             className="staff-side-link staff-logout"
-            onClick={() => { void logout(); navigate('/staff-login', { replace: true }); }}
+            onClick={() => { void logout('/staff-login'); }}
           >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
             Déconnexion
           </button>
         </div>

@@ -26,10 +26,12 @@ use Nexus\Controllers\ProviderCredentialController;
 use Nexus\Controllers\ProviderWebhookController;
 use Nexus\Controllers\QuoteController;
 use Nexus\Controllers\ReconciliationController;
+use Nexus\Controllers\StaffChatController;
 use Nexus\Controllers\SupportController;
 use Nexus\Controllers\TeamController;
 use Nexus\Controllers\TransferController;
 use Nexus\Controllers\UserController;
+use Nexus\Controllers\VirtualCardController;
 use Nexus\Controllers\WalletController;
 use Nexus\Core\Database;
 use Nexus\Core\HttpException;
@@ -134,6 +136,7 @@ $router->post('/wallets/topup', [WalletController::class, 'topUp']);
 
 // funding : webhook public HMAC + routes authentifiées (proposals / collect).
 $router->post('/funding/deposit', [FundingController::class, 'deposit']);
+$router->post('/funding/intents', [FundingController::class, 'createIntent']);
 $router->get('/funding/proposals', [FundingController::class, 'proposals']);
 $router->get('/funding/payment-methods', [FundingController::class, 'paymentMethods']);
 $router->post('/funding/collect', [FundingController::class, 'collect']);
@@ -171,6 +174,14 @@ $router->post('/providers/webhook/{slug}', [ProviderWebhookController::class, 'h
 // --- NEXUS CONTROL CENTER : plan de contrôle de l'infrastructure -----------
 // Accès restreint côté SERVEUR (l'UI n'est jamais une couche de sécurité).
 $router->get('/control/access', [ControlCenterController::class, 'access']);
+$router->get('/control/staff/dashboard', [ControlCenterController::class, 'staffDashboard']);
+$router->post('/control/staff/action', [ControlCenterController::class, 'staffAction']);
+$router->get('/control/staff/directory', [StaffChatController::class, 'directory']);
+$router->get('/control/staff/chats', [StaffChatController::class, 'chats']);
+$router->post('/control/staff/chats', [StaffChatController::class, 'createChat']);
+$router->get('/control/staff/chats/{id}/messages', [StaffChatController::class, 'messages']);
+$router->post('/control/staff/chats/{id}/messages', [StaffChatController::class, 'sendMessage']);
+$router->post('/control/staff/chats/{id}/read', [StaffChatController::class, 'markRead']);
 $router->get('/control/overview', [ControlCenterController::class, 'overview']);
 $router->get('/control/providers', [ControlCenterController::class, 'providers']);
 $router->get('/control/providers/{slug}', [ControlCenterController::class, 'providerDetail']);
@@ -180,11 +191,14 @@ $router->get('/control/kyc', [ControlCenterController::class, 'kyc']);
 $router->get('/control/webhooks', [ControlCenterController::class, 'webhooks']);
 $router->get('/control/audit', [ControlCenterController::class, 'audit']);
 $router->get('/control/clients', [ControlCenterController::class, 'clients']);
+$router->get('/control/clients/linked', [ControlCenterController::class, 'linkedClients']);
 $router->get('/control/clients/{id}', [ControlCenterController::class, 'clientDetail']);
+$router->post('/control/clients/{id}/status', [ControlCenterController::class, 'clientStatus']);
 
 // --- Super Admin : employés internes + comptes Nexus Connect ---
 $router->get('/control/employees', [AdminController::class, 'employees']);
 $router->post('/control/employees', [AdminController::class, 'createEmployee']);
+$router->post('/control/employees/{id}/invite', [AdminController::class, 'inviteEmployee']);
 $router->put('/control/employees/{id}', [AdminController::class, 'updateEmployee']);
 $router->patch('/control/employees/{id}/status', [AdminController::class, 'setEmployeeStatus']);
 $router->get('/control/connect/accounts', [AdminController::class, 'connectAccounts']);
@@ -273,6 +287,10 @@ $router->put('/users/me', [UserController::class, 'updateProfile']);
 $router->put('/users/me/password', [UserController::class, 'updatePassword']);
 $router->get('/users/me/sessions', [UserController::class, 'sessions']);
 $router->delete('/users/me/sessions/{id}', [UserController::class, 'revokeSession']);
+
+// Cartes virtuelles — demandes (émission réelle via card_issuing ultérieure)
+$router->get('/cards', [VirtualCardController::class, 'index']);
+$router->post('/cards', [VirtualCardController::class, 'create']);
 
 // --- Exécution ------------------------------------------------------------------
 try {

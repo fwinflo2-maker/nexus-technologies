@@ -6,6 +6,7 @@ namespace Nexus\Services;
 
 use Nexus\Core\HttpException;
 use Nexus\Execution\ExecutionEnvironment;
+use Nexus\Providers\ProviderCapabilityMatrix;
 use Nexus\Providers\ProviderConfig;
 use Nexus\Providers\ProviderRegistry;
 
@@ -104,7 +105,12 @@ final class CapabilityEngine
             // On étend « EU » vers les pays individuels. Le Super Admin
             // ($allRoutes) accède à TOUTES les routes, y compris hors des
             // pays couverts par le provider.
-            if (!$allRoutes) {
+            // Un actif crypto de réception est un rail global : Bridge ou un
+            // on-ramp ne « couvre » pas un pays au sens d'un payout fiat.
+            // Les devises fiat restent, elles, strictement filtrées par pays.
+            $isGlobalCryptoDestination = $methodType === 'crypto'
+                && IntentEngine::isCryptoDestination((string) $destCurrency);
+            if (!$allRoutes && !$isGlobalCryptoDestination) {
                 $providerCountries = self::expandCountries($provider['countries']);
                 if (!in_array($countryCode, $providerCountries, true)) {
                     continue;
@@ -125,6 +131,14 @@ final class CapabilityEngine
             // désactivé ou sans credentials est ignoré, et ne casse jamais le
             // Core.
             if (!ProviderRegistry::isAvailableForRouting($slug)) {
+                continue;
+            }
+
+            // ── Filtre 4 : capacité payout RÉELLEMENT implémentée (§21) ──
+            // Configuré ≠ exécutable. Un shell (pawaPay) ou un ConfigDriven
+            // ne doit jamais apparaître dans le routing tant que la matrice
+            // ne déclare pas payout=IMPLEMENTED.
+            if (ProviderCapabilityMatrix::for($slug)['payout'] !== ProviderCapabilityMatrix::IMPLEMENTED) {
                 continue;
             }
 

@@ -1,13 +1,119 @@
 <!doctype html>
-<html lang="en">
+<html lang="fr">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Primary SEO (French default — app i18n starts in fr; runtime updates title/description) -->
+    <title>Nexus — Transferts multi-devises sans mauvaise surprise</title>
+    <meta
+      name="description"
+      content="Nexus orchestre vos transferts d'argent : compare les routes, affiche frais, taux et délai avant confirmation, puis exécute banque ou Mobile Money. Personal et Business."
+    />
+    <meta name="application-name" content="Nexus Technologies" />
+    <meta name="theme-color" content="#0A0E17" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="robots" content="index, follow" />
+    <meta name="author" content="NEXUS Corp Technologies" />
+    <!-- Keywords kept sparse — modern SEO weights them lightly; useful for niche remittance intent -->
+    <meta name="keywords" content="transferts d'argent, remittance, multi-devises, Mobile Money, EUR XAF, orchestration financière, fintech" />
+
+    <!--
+      TODO(SEO): REPLACE_WITH_PRODUCTION_ORIGIN — same token as public/sitemap.xml.
+      Relative canonical/og:url/og:image are intentional until the public domain is known;
+      SeoMeta absolutizes them at runtime for clients that execute JS.
+    -->
+    <link rel="canonical" href="/" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Nexus Technologies" />
+    <meta property="og:locale" content="fr_FR" />
+    <meta property="og:locale:alternate" content="en_US" />
+    <meta property="og:title" content="Nexus — Transferts multi-devises sans mauvaise surprise" />
+    <meta
+      property="og:description"
+      content="Comparez les routes, voyez le vrai coût et le vrai délai, puis exécutez. Orchestration financière Personal & Business."
+    />
+    <meta property="og:url" content="/" />
+    <meta property="og:image" content="/og-image.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Nexus — Financial orchestration" />
+
+    <!-- Twitter / X -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Nexus — Transferts multi-devises sans mauvaise surprise" />
+    <meta
+      name="twitter:description"
+      content="Comparez les routes, voyez le vrai coût et le vrai délai, puis exécutez. Orchestration financière Personal & Business."
+    />
+    <meta name="twitter:image" content="/og-image.png" />
+    <meta name="twitter:image:alt" content="Nexus — Financial orchestration" />
+
+    <!-- Icons -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    <!-- Structured data: Organization + WebSite + FinancialService (truthful, no fake rates/fees) -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "#organization",
+            "name": "NEXUS Corp Technologies",
+            "alternateName": "Nexus",
+            "url": "/",
+            "logo": "/favicon.svg",
+            "description": "Plateforme d'orchestration financière multi-providers pour transferts, conversions et paiements cross-border."
+          },
+          {
+            "@type": "WebSite",
+            "@id": "#website",
+            "name": "Nexus Technologies",
+            "url": "/",
+            "inLanguage": ["fr", "en", "es", "pt", "de", "ar", "zh"],
+            "publisher": { "@id": "#organization" }
+          },
+          {
+            "@type": "FinancialService",
+            "@id": "#service",
+            "name": "Nexus",
+            "url": "/",
+            "image": "/og-image.png",
+            "description": "Orchestration de transferts multi-devises : comparaison de routes, affichage des coûts et délais avant confirmation, exécution et suivi jusqu'au règlement.",
+            "provider": { "@id": "#organization" },
+            "serviceType": [
+              "Money transfer",
+              "Multi-currency wallet",
+              "Cross-border payments",
+              "Financial orchestration"
+            ],
+            "areaServed": "Worldwide",
+            "audience": {
+              "@type": "Audience",
+              "audienceType": "Individuals and businesses"
+            }
+          },
+          {
+            "@type": "WebApplication",
+            "name": "Nexus",
+            "applicationCategory": "FinanceApplication",
+            "operatingSystem": "Web",
+            "description": "Application web d'orchestration financière : envoi, réception, conversion et paiements cross-border.",
+            "provider": { "@id": "#organization" }
+          }
+        ]
+      }
+    </script>
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
-    <title>Nexus Technologies</title>
   </head>
   <body>
     <div id="root"></div>

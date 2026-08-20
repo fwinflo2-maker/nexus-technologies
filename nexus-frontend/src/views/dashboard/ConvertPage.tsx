@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, type CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import {
@@ -24,6 +25,123 @@ const CURRENCY_META: Record<string, { flag: string; symbol: string; label: strin
   USDT: { flag: '🔵', symbol: 'USDT', label: 'Tether USD' },
   USDC: { flag: '🔵', symbol: 'USDC', label: 'USD Coin' },
 };
+
+const ALL_CURRENCIES = Object.keys(CURRENCY_META);
+
+function CurrencySelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: string[];
+  onChange: (code: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [panelStyle, setPanelStyle] = useState<CSSProperties>({});
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const meta = CURRENCY_META[value] ?? { flag: '🌐', symbol: value, label: value };
+
+  useEffect(() => {
+    if (!open || !triggerRef.current) return;
+
+    const place = () => {
+      const r = triggerRef.current!.getBoundingClientRect();
+      const maxH = Math.min(240, window.innerHeight - r.bottom - 12);
+      const openUp = maxH < 120 && r.top > 160;
+      setPanelStyle({
+        position: 'fixed',
+        left: r.left,
+        width: Math.max(r.width, 180),
+        top: openUp ? undefined : r.bottom + 6,
+        bottom: openUp ? window.innerHeight - r.top + 6 : undefined,
+        maxHeight: openUp ? Math.min(240, r.top - 12) : maxH,
+        zIndex: 1200,
+      });
+    };
+
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (rootRef.current?.contains(t) || panelRef.current?.contains(t)) return;
+      setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="cvt-field" ref={rootRef}>
+      <label className="cvt-field-label">{label}</label>
+      <button
+        ref={triggerRef}
+        type="button"
+        className="cvt-select-trigger"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="cvt-select-flag" aria-hidden="true">{meta.flag}</span>
+        <span className="cvt-select-code">{value}</span>
+        <span className="cvt-select-name">{meta.label}</span>
+        <span className="cvt-select-chevron" aria-hidden="true">▾</span>
+      </button>
+      {open && createPortal(
+        <div
+          ref={panelRef}
+          className="cvt-ccy-panel"
+          role="listbox"
+          aria-label={label}
+          style={panelStyle}
+        >
+          {options.map((code) => {
+            const opt = CURRENCY_META[code] ?? { flag: '🌐', symbol: code, label: code };
+            const selected = code === value;
+            return (
+              <button
+                key={code}
+                type="button"
+                role="option"
+                aria-selected={selected}
+                className="cvt-ccy-option"
+                onClick={() => {
+                  onChange(code);
+                  setOpen(false);
+                }}
+              >
+                <span className="cvt-select-flag" aria-hidden="true">{opt.flag}</span>
+                <span className="cvt-select-code">{code}</span>
+                <span className="cvt-select-name">{opt.label}</span>
+              </button>
+            );
+          })}
+        </div>,
+        document.querySelector('.nexus-dash') ?? document.body,
+      )}
+    </div>
+  );
+}
 
 export default function ConvertPage() {
   const t = useDashT();
@@ -169,36 +287,40 @@ export default function ConvertPage() {
         {/* ── Colonne gauche : formulaire de conversion ── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
         {/* Devises */}
-        <motion.div className="card" style={{ padding: 20 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+        <motion.div className="card card-overflow-visible" style={{ padding: 20 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
           <div className="page-label" style={{ marginBottom: 12 }}>{t('form.currency')}</div>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            <div style={{ flex: 1 }}>
-              <label style={{ fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase' }}>{t('convert.give')}</label>
-              <select
-                value={fromCurrency}
-                onChange={(e) => setFromCurrency(e.target.value)}
-                className="btn btn-outline"
-                style={{ width: '100%', marginTop: 4 }}
-              >
-                {Object.keys(CURRENCY_META).map(code => (
-                  <option key={code} value={code}>{CURRENCY_META[code].flag} {code}</option>
-                ))}
-              </select>
-            </div>
-            <div style={{ fontSize: 24, color: 'var(--cyan)' }}>⇄</div>
-            <div style={{ flex: 1 }}>
-              <label style={{ fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase' }}>{t('convert.receive')}</label>
-              <select
-                value={toCurrency}
-                onChange={(e) => setToCurrency(e.target.value)}
-                className="btn btn-outline"
-                style={{ width: '100%', marginTop: 4 }}
-              >
-                {Object.keys(CURRENCY_META).filter(c => c !== fromCurrency).map(code => (
-                  <option key={code} value={code}>{CURRENCY_META[code].flag} {code}</option>
-                ))}
-              </select>
-            </div>
+          <div className="cvt-pair">
+            <CurrencySelect
+              label={t('convert.give')}
+              value={fromCurrency}
+              options={ALL_CURRENCIES}
+              onChange={(code) => {
+                setFromCurrency(code);
+                if (code === toCurrency) {
+                  const fallback = ALL_CURRENCIES.find((c) => c !== code);
+                  if (fallback) setToCurrency(fallback);
+                }
+              }}
+            />
+            <button
+              type="button"
+              className="cvt-swap"
+              aria-label="⇄"
+              onClick={() => {
+                setFromCurrency(toCurrency);
+                setToCurrency(fromCurrency);
+                setQuote(null);
+                setQuoteError(null);
+              }}
+            >
+              ⇄
+            </button>
+            <CurrencySelect
+              label={t('convert.receive')}
+              value={toCurrency}
+              options={ALL_CURRENCIES.filter((c) => c !== fromCurrency)}
+              onChange={setToCurrency}
+            />
           </div>
         </motion.div>
 
@@ -210,8 +332,7 @@ export default function ConvertPage() {
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             placeholder="0.00"
-            className="btn btn-outline"
-            style={{ width: '100%', fontSize: 24, fontWeight: 600 }}
+            className="cvt-amount"
           />
           {wallets.find(w => w.currency === fromCurrency) && (
             <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-mid)' }}>

@@ -207,31 +207,29 @@ final class ProviderAccountingModelTest extends TestCase
         $this->trackKey($capKey);
         WalletService::captureHold($hold['operation_id'], $u, $capKey, $ctx);
 
-        // Modèle cible : à la capture, la position ne bouge PAS — le montant
-        // passe en transit (hold → in_transit). Aucun posting.
+        // La capture débite définitivement la position et crédite le transit GL.
         $bal = $this->walletBalance($wid);
-        $this->assertSame('100.00', $bal['balance'], 'balance inchangé à la capture.');
+        $this->assertSame('0.00', $bal['balance']);
         $this->assertSame('0.00', $bal['available_balance']);
-        $this->assertSame('100.00', $bal['in_transit_balance']);
-        $this->assertSame(0, count($this->ledgerEntries($hold['operation_id'])), 'Aucun posting à la capture.');
+        $this->assertSame('0.00', $bal['in_transit_balance']);
+        $this->assertSame(2, count($this->ledgerEntries($hold['operation_id'])));
 
-        // Le débit de position a lieu au RÈGLEMENT provider (posting équilibré).
+        // Le règlement solde OUTBOUND_TRANSIT, sans second débit wallet.
         LedgerService::postOutboundDebit(
             $hold['operation_id'], $wid, 'EUR', '100.00000000', '0.00000000', 'pawapay',
             'Envoi réglé', 'send', $hold['operation_id'], null, 'sandbox'
         );
 
         $bal = $this->walletBalance($wid);
-        $this->assertSame('0.00', $bal['balance'], 'Position débitée de 100 au règlement.');
+        $this->assertSame('0.00', $bal['balance']);
         $this->assertSame('0.00', $bal['in_transit_balance']);
 
         $entries = $this->ledgerEntries($hold['operation_id']);
-        $this->assertSame('debit', $entries[0]['entry_type']);
+        $this->assertCount(4, $entries);
         $this->assertSame('USER_POSITION.EUR', (string) $entries[0]['account_code']);
-        $this->assertSame('PROVIDER_SETTLEMENT.pawapay.EUR', (string) $entries[1]['account_code']);
-        // Équilibre : Σ debit == Σ credit (par devise).
-        $this->assertSame('100.00000000', (string) $entries[0]['amount']);
-        $this->assertSame('100.00000000', (string) $entries[1]['amount']);
+        $this->assertSame('OUTBOUND_TRANSIT.EUR', (string) $entries[1]['account_code']);
+        $this->assertSame('OUTBOUND_TRANSIT.EUR', (string) $entries[2]['account_code']);
+        $this->assertSame('PROVIDER_SETTLEMENT.pawapay.EUR', (string) $entries[3]['account_code']);
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -255,7 +253,8 @@ final class ProviderAccountingModelTest extends TestCase
         $this->trackKey($capKey);
         WalletService::captureHold($hold['operation_id'], $u, $capKey, $ctx);
 
-        // Règlement : DEBIT USER_POSITION 102 / CREDIT PROVIDER_SETTLEMENT 100
+        // Capture : USER_POSITION / OUTBOUND_TRANSIT, puis règlement :
+        // DEBIT OUTBOUND_TRANSIT 102 / CREDIT PROVIDER_SETTLEMENT 100
         // + CREDIT NEXUS_REVENUE.fee 2 — les frais ont leur PROPRE leg.
         LedgerService::postOutboundDebit(
             $hold['operation_id'], $wid, 'EUR', '100.00000000', '2.00000000', 'pawapay',
@@ -266,15 +265,17 @@ final class ProviderAccountingModelTest extends TestCase
         $this->assertSame('98.00', $bal['balance'], 'Position débitée de 102 au règlement.');
 
         $entries = $this->ledgerEntries($hold['operation_id']);
-        $this->assertCount(3, $entries, 'Trois legs : position, settlement, revenue.');
+        $this->assertCount(5, $entries);
         $this->assertSame('debit', $entries[0]['entry_type']);
         $this->assertSame('102.00000000', $entries[0]['amount']);
-        $this->assertSame('credit', $entries[1]['entry_type']);
-        $this->assertSame('PROVIDER_SETTLEMENT.pawapay.EUR', (string) $entries[1]['account_code']);
-        $this->assertSame('100.00000000', $entries[1]['amount']);
-        $this->assertSame('credit', $entries[2]['entry_type']);
-        $this->assertSame('NEXUS_REVENUE.fee', (string) $entries[2]['account_code']);
-        $this->assertSame('2.00000000', $entries[2]['amount']);
+        $this->assertSame('debit', $entries[2]['entry_type']);
+        $this->assertSame('OUTBOUND_TRANSIT.EUR', (string) $entries[2]['account_code']);
+        $this->assertSame('credit', $entries[3]['entry_type']);
+        $this->assertSame('PROVIDER_SETTLEMENT.pawapay.EUR', (string) $entries[3]['account_code']);
+        $this->assertSame('100.00000000', $entries[3]['amount']);
+        $this->assertSame('credit', $entries[4]['entry_type']);
+        $this->assertSame('NEXUS_REVENUE.fee', (string) $entries[4]['account_code']);
+        $this->assertSame('2.00000000', $entries[4]['amount']);
         // Équilibre par devise : 102 debit = 100 + 2 credit.
     }
 

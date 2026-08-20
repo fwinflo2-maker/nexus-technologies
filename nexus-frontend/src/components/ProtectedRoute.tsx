@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import { Navigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { Navigate, useLocation } from 'react-router-dom';
+import { useAuth, loginPathForLocation } from '../context/AuthContext';
 
 /**
  * Garde de route — bloque l'accès aux pages privées tant que la session
@@ -9,6 +9,7 @@ import { useAuth } from '../context/AuthContext';
  */
 export function ProtectedRoute({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoaded } = useAuth();
+  const { pathname } = useLocation();
 
   // Pendant la restauration de session : on attend avant de décider
   if (!isLoaded) {
@@ -26,9 +27,9 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
     );
   }
 
-  // Session non valide → redirection vers /login
+  // Session non valide → login de l'espace (client / admin / staff)
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to={loginPathForLocation(pathname)} replace />;
   }
 
   return <>{children}</>;

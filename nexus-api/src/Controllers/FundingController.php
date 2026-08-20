@@ -12,9 +12,10 @@ use Nexus\Core\Response;
 use Nexus\Execution\ExecutionContext;
 use Nexus\Execution\ExecutionEnvironment;
 use Nexus\Providers\ProviderConfig;
-use Nexus\Providers\ProviderCredentialService;
+use Nexus\Services\ProviderCredentialService;
 use Nexus\Providers\WebhookVerifier;
 use Nexus\Services\FundingProposalService;
+use Nexus\Services\FundingIntentService;
 use Nexus\Services\FundingService;
 use Nexus\Services\WalletService;
 use Throwable;
@@ -25,36 +26,47 @@ use Throwable;
  *   POST /api/funding/deposit
  *
  * Route PUBLIQUE (le provider n'a pas de session utilisateur) : authentifiée
- * par SIGNATURE HMAC (`X-Nexus-Signature`, secret de webhook du provider),
- * vérifiée AVANT toute interprétation du contenu.
+ * par SIGNATURE HMAC HORODATÉE (`X-Nexus-Signature: t=<unix>,v1=<hex>`,
+ * secret de webhook du provider), vérifiée AVANT toute interprétation du
+ * contenu. Ce flux est un contrat entrant DÉFINI PAR NEXUS (générique,
+ * provider-agnostique) : aucun mécanisme natif provider n'existe pour lui,
+ * d'où le schéma horodaté propre (Cycle 5, P1 anti-rejeu).
  *
  * Contrat du payload :
  *   {
- *     "user_id": 42,                // utilisateur Nexus à créditer
  *     "currency": "EUR",
  *     "amount": "100.00",
  *     "provider": "pawapay",        // slug
  *     "provider_reference": "dep_…",// référence unique du dépôt chez le provider
- *     "environment": "sandbox"      // optionnel — mismatch = refus
+ *     "environment": "sandbox",     // optionnel — mismatch = refus
+ *     "event_id": "evt_…"           // optionnel — sinon dérivé (référence:statut)
  *   }
  *
  * Garanties :
+ *   - signature `v1 = HMAC-SHA256(t . "." . corps_brut)` : le timestamp est
+ *     signé ; fenêtre de validité ±300 s ; une signature capturée puis
+ *     rejouée plus tard est refusée (`WEBHOOK_SIGNATURE_STALE`) ;
+ *   - rejeu détecté par event_id (`provider_webhook_events`, UNIQUE
+ *     provider+environment+event_id, namespace `funding:`) — un duplicata est
+ *     acquitté sans retraitement destructif ;
  *   - JAMAIS `UPDATE wallets SET balance = balance + X` sans posting ledger :
  *     le crédit passe par LedgerService::postFundingCredit (PROVIDER_ASSET /
  *     USER_POSITION) dans la même transaction ;
- *   - idempotence par (provider, provider_reference) — un rejeu est acquitté
- *     sans double crédit ;
+ *   - idempotence métier par (provider, provider_reference) — un rejeu est
+ *     acquitté sans double crédit même si l'event_id diffère ;
  *   - l'utilisateur est crédité UNIQUEMENT si un wallet existant correspond ;
  *   - le montant entre dans le bucket `pending` (disponible après
  *     settlement — politique conservatrice).
  *
- * NOTE production : le rattachement utilisateur passera par un dépôt INTENT
- * pré-créé (référence liée au compte à créditer) pour qu'un webhook forgé ne
- * puisse pas désigner n'importe quel user_id. Documenté, pas implémenté ici.
+ * Le propriétaire vient exclusivement d'un funding_intent pré-créé. Tout
+ * user_id dans le payload est ignoré.
  */
 final class FundingController
 {
     private const SIGNATURE_HEADER = 'X-Nexus-Signature';
+
+    /** Fenêtre de validité du timestamp signé (secondes). */
+    public const SIGNATURE_TOLERANCE_SECONDS = 300;
 
     public static function deposit(Request $request): void
     {
@@ -78,7 +90,21 @@ final class FundingController
             );
         }
         $signature = (string) ($request->header(self::SIGNATURE_HEADER) ?? '');
-        if (!WebhookVerifier::verify($raw, $signature, $secret)) {
+        $verdict = WebhookVerifier::verifyTimestamped(
+            $raw,
+            $signature,
+            $secret,
+            self::SIGNATURE_TOLERANCE_SECONDS
+        );
+        if (!$verdict['valid']) {
+            self::auditWebhook($request, $provider, $env, null, 'rejected', (string) $verdict['reason']);
+            if ($verdict['reason'] === 'stale_timestamp') {
+                Response::error(
+                    'Timestamp de webhook hors fenêtre de validité.',
+                    401,
+                    'WEBHOOK_SIGNATURE_STALE'
+                );
+            }
             Response::error('Signature de webhook invalide.', 401, 'INVALID_WEBHOOK_SIGNATURE');
         }
 
@@ -88,50 +114,50 @@ final class FundingController
             Response::error('Environnement de webhook incohérent.', 409, 'WEBHOOK_ENVIRONMENT_MISMATCH');
         }
 
-        // 3) Contenu : utilisateur, devise, montant, référence provider.
-        $userId   = (int) ($payload['user_id'] ?? 0);
+        // 3) Contenu financier + référence provider. L'identité utilisateur
+        //    n'est jamais lue depuis le webhook.
         $currency = strtoupper(substr((string) ($payload['currency'] ?? ''), 0, 5));
         $amount   = (string) ($payload['amount'] ?? '');
         $ref      = substr((string) ($payload['provider_reference'] ?? ''), 0, 190);
-        if ($userId <= 0 || $currency === '' || $ref === '') {
-            Response::error('Champs manquants (user_id, currency, provider_reference).', 400, 'INVALID_DEPOSIT_PAYLOAD');
+        $providerStatus = strtoupper((string) ($payload['status'] ?? 'COMPLETED'));
+        if ($currency === '' || $ref === '') {
+            Response::error('Champs manquants (currency, provider_reference).', 400, 'INVALID_DEPOSIT_PAYLOAD');
         }
         if ($amount === '' || bccomp($amount, '0', 8) <= 0) {
             Response::error('Montant de dépôt invalide.', 422, 'INVALID_DEPOSIT_AMOUNT');
         }
 
-        // 4) Le wallet doit EXISTER (pas de création silencieuse de compte).
-        $wallet = WalletService::getWallet($userId, $currency);
-        if ($wallet === null) {
-            Response::error(
-                sprintf('Aucun wallet %s pour cet utilisateur : dépôt refusé.', $currency),
-                422,
-                'WALLET_NOT_FOUND'
-            );
-        }
+        // 4) Rejeu par event_id — namespace `funding:` pour ne jamais entrer
+        //    en collision avec les événements payout du même provider. Le
+        //    duplicata est journalisé puis acquitté via le chemin idempotent :
+        //    on NE saute PAS confirm() (une première livraison échouée en
+        //    interne doit rester rejouable), l'idempotence métier garantit
+        //    l'absence de double crédit.
+        $suppliedEventId = substr(trim((string) ($payload['event_id'] ?? '')), 0, 150);
+        $eventId = 'funding:' . ($suppliedEventId !== '' ? $suppliedEventId : $ref . ':' . $providerStatus);
+        $duplicateEvent = self::persistEvent($provider, $env, $eventId);
 
-        // 5) Idempotence par (provider, référence) + posting double entrée.
-        $idemKey = 'deposit:' . $provider . ':' . $ref;
-        $context = ExecutionContext::explicit($userId, ExecutionEnvironment::fromString($env));
-
+        // 5) Attribution sûre + idempotence + posting double entrée.
         try {
-            $result = FundingService::recordDeposit(
-                $userId,
-                (int) $wallet['id'],
+            $result = FundingIntentService::confirm(
+                $provider,
+                $ref,
                 $currency,
                 $amount,
-                $provider,
-                $idemKey,
-                $ref,
-                ['source' => 'provider_webhook'],
-                $context
+                $env,
+                $providerStatus
             );
         } catch (HttpException $e) {
+            self::markEvent($provider, $env, $eventId, 'rejected');
+            self::auditWebhook($request, $provider, $env, $eventId, 'rejected', $e->errorCode());
             Response::error($e->getMessage(), $e->statusCode(), $e->errorCode());
         } catch (Throwable $e) {
             error_log('[NEXUS funding] ' . $e->getMessage());
             Response::error('Erreur interne lors de l\'enregistrement du dépôt.', 500, 'DEPOSIT_INTERNAL_ERROR');
         }
+
+        self::markEvent($provider, $env, $eventId, $result['status'] === 'completed' ? 'settled' : 'processing');
+        self::auditWebhook($request, $provider, $env, $eventId, $duplicateEvent ? 'duplicate' : 'received', null);
 
         Response::success([
             'deposit' => [
@@ -139,8 +165,118 @@ final class FundingController
                 'status'       => $result['status'],
                 'balance'      => $result['balance'],
             ],
-            'message' => 'Dépôt enregistré — disponible après settlement.',
+            'duplicate' => $duplicateEvent,
+            'message'   => 'Dépôt enregistré — disponible après settlement.',
         ]);
+    }
+
+    /**
+     * Insère l'événement webhook (UNIQUE provider+environment+event_id).
+     *
+     * @return bool true si l'event_id a déjà été vu (rejeu détecté).
+     */
+    private static function persistEvent(string $provider, string $env, string $eventId): bool
+    {
+        $stmt = Database::getConnection()->prepare(
+            'INSERT INTO provider_webhook_events (provider, environment, event_id, event_type, status)
+             VALUES (:p, :e, :i, :t, :s)'
+        );
+        try {
+            $stmt->execute([
+                'p' => $provider,
+                'e' => $env,
+                'i' => $eventId,
+                't' => 'funding.deposit',
+                's' => 'received',
+            ]);
+            return false;
+        } catch (\PDOException $e) {
+            if (($e->errorInfo[1] ?? 0) === 1062) {
+                return true;
+            }
+            throw $e;
+        }
+    }
+
+    private static function markEvent(string $provider, string $env, string $eventId, string $status): void
+    {
+        try {
+            Database::getConnection()->prepare(
+                'UPDATE provider_webhook_events SET status = :status
+                 WHERE provider = :provider AND environment = :environment AND event_id = :event'
+            )->execute([
+                'status' => $status,
+                'provider' => $provider,
+                'environment' => $env,
+                'event' => $eventId,
+            ]);
+        } catch (Throwable $e) {
+            error_log('[NEXUS funding] markEvent: ' . $e->getMessage());
+        }
+    }
+
+    /** Audit sans payload ni secret : provider, event_id, décision, raison. */
+    private static function auditWebhook(
+        Request $request,
+        string $provider,
+        string $env,
+        ?string $eventId,
+        string $decision,
+        ?string $reason
+    ): void {
+        try {
+            $meta = [
+                'provider'   => $provider,
+                'event_id'   => $eventId,
+                'request_id' => \Nexus\Core\Correlation::id(),
+            ];
+            if ($reason !== null) {
+                $meta['reason'] = $reason;
+            }
+            Database::getConnection()->prepare(
+                'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, metadata, ip_address, environment, created_at)
+                 VALUES (NULL, :act, :etype, NULL, :meta, :ip, :env, NOW())'
+            )->execute([
+                'act'   => 'funding.webhook.' . $decision,
+                'etype' => 'provider_webhook_events',
+                'meta'  => json_encode($meta, JSON_UNESCAPED_UNICODE),
+                'ip'    => $request->ipAddress(),
+                'env'   => $env,
+            ]);
+        } catch (Throwable $e) {
+            error_log('[NEXUS audit] ' . $e->getMessage());
+        }
+    }
+
+    /** POST /api/funding/intents — lie une référence provider à l'utilisateur authentifié. */
+    public static function createIntent(Request $request): void
+    {
+        $request = AuthMiddleware::handle($request);
+        $user = $request->attribute('user');
+        $userId = (int) $user['id'];
+        $provider = strtolower(trim((string) $request->input('provider', '')));
+        $reference = trim((string) $request->input('provider_reference', ''));
+        $currency = strtoupper(trim((string) $request->input('currency', '')));
+        $amount = trim((string) $request->input('amount', ''));
+        $wallet = WalletService::getWallet($userId, $currency);
+        if ($wallet === null) {
+            Response::error('Wallet de dépôt introuvable.', 404, 'WALLET_NOT_FOUND');
+        }
+        $context = ExecutionContext::fromRequest($request, is_array($user) ? $user : []);
+        try {
+            $intent = FundingIntentService::create(
+                $userId,
+                (int) $wallet['id'],
+                $provider,
+                $reference,
+                $currency,
+                $amount,
+                $context
+            );
+        } catch (HttpException $e) {
+            Response::error($e->getMessage(), $e->statusCode(), $e->errorCode());
+        }
+        Response::success(['intent' => $intent], 201);
     }
 
     /**

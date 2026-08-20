@@ -19,6 +19,8 @@ use Throwable;
  */
 final class StripeAdapter extends AbstractProviderAdapter
 {
+    private const WEBHOOK_TOLERANCE_SECONDS = 300;
+
     public function __construct()
     {
         parent::__construct('stripe');
@@ -85,5 +87,58 @@ final class StripeAdapter extends AbstractProviderAdapter
             $code === 429   => ['status' => 'CONFIGURATION_ERROR', 'message' => 'Limite de débit Stripe atteinte (429).', 'tested_at' => gmdate(DATE_ATOM)],
             default         => ['status' => 'CONFIGURATION_ERROR', 'message' => 'Réponse inattendue de Stripe (HTTP ' . $code . ').', 'tested_at' => gmdate(DATE_ATOM)],
         };
+    }
+
+    /**
+     * Vérification native Stripe-Signature :
+     *   signed_payload = "{timestamp}.{raw_body}"
+     *   signature      = HMAC-SHA256(webhook signing secret)
+     *
+     * Plusieurs signatures v1 sont acceptées pour permettre la rotation
+     * Stripe. Chaque comparaison utilise hash_equals.
+     */
+    public function verifyWebhook(string $payload, string $signature): bool
+    {
+        $environment = ProviderConfig::activeEnvironment($this->slug);
+        $secret = ProviderConfig::credential($this->slug, 'WEBHOOK_SECRET', $environment);
+        return is_string($secret) && $secret !== ''
+            && self::verifyStripeSignature($payload, $signature, $secret);
+    }
+
+    public static function verifyStripeSignature(
+        string $payload,
+        string $signatureHeader,
+        string $secret,
+        ?int $now = null,
+        int $tolerance = self::WEBHOOK_TOLERANCE_SECONDS
+    ): bool {
+        if ($signatureHeader === '' || $secret === '' || $tolerance < 0) {
+            return false;
+        }
+        $timestamp = null;
+        $v1 = [];
+        foreach (explode(',', $signatureHeader) as $part) {
+            [$key, $value] = array_pad(explode('=', trim($part), 2), 2, '');
+            if ($key === 't' && ctype_digit($value)) {
+                $timestamp = (int) $value;
+            } elseif ($key === 'v1' && preg_match('/^[a-f0-9]{64}$/i', $value)) {
+                $v1[] = strtolower($value);
+            }
+        }
+        if ($timestamp === null || $v1 === []) {
+            return false;
+        }
+        $now ??= time();
+        if (abs($now - $timestamp) > $tolerance) {
+            return false;
+        }
+
+        $expected = hash_hmac('sha256', $timestamp . '.' . $payload, $secret);
+        foreach ($v1 as $candidate) {
+            if (hash_equals($expected, $candidate)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

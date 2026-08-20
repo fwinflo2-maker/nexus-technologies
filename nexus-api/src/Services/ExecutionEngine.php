@@ -91,8 +91,14 @@ final class ExecutionEngine
 
             // ── 2. Re-validation de l'origine (défense en profondeur) ─────
             if (!empty($quote['origin_country'])) {
-                $user        = self::loadUser($pdo, $userId);
-                $originCheck = FundingSourceEngine::validateOrigin($userId, $user, (string) $quote['origin_country']);
+                $user         = self::loadUser($pdo, $userId);
+                $isSuperAdmin = ((string) ($user['platform_role'] ?? '') === 'superadmin');
+                $originCheck  = FundingSourceEngine::validateOrigin(
+                    $userId,
+                    $user,
+                    (string) $quote['origin_country'],
+                    $isSuperAdmin
+                );
                 if (!$originCheck['authorized']) {
                     throw new HttpException(403, $originCheck['reason'] ?? 'Cette origine n\'est plus disponible pour votre compte.', 'ORIGIN_FORBIDDEN');
                 }
@@ -229,6 +235,7 @@ final class ExecutionEngine
         $provider       = (string) ($spec['provider'] ?? '');
         $routeId        = (string) ($spec['route_id'] ?? '');
         $destination    = (string) ($spec['destination'] ?? '');
+        $operator       = (string) ($spec['operator'] ?? '');
         $label          = (string) ($spec['label'] ?? '');
         $type           = (string) ($spec['type'] ?? 'send');
         $quoteId        = (string) ($spec['quote_id'] ?? '');
@@ -276,11 +283,23 @@ final class ExecutionEngine
         // n'est créée. Avec un provider configuré, la capture ne s'exécute
         // que sur une réponse réelle du provider ; toute intégration non
         // implémentée ou en échec fait échouer l'opération (PROVIDER_ERROR).
-        self::callProvider($provider, $sourceCurrency, $destCurrency, $amountSent, $destination, $operationId, $context);
+        $providerResult = self::callProvider(
+            $provider,
+            $sourceCurrency,
+            $destCurrency,
+            $amountSent,
+            (string) ($spec['dest_amount'] ?? ''),
+            $destination,
+            $operator,
+            $operationId,
+            $context
+        );
 
         WalletService::captureHold((string) $hold['operation_id'], $userId, $captureIdemKey, $context);
 
-        // ── 3. Écriture comptable dashboard (table transactions) ─────
+        // ── 3. Transaction `processing` + lien opération (règlement GL) ─
+        // Statut terminal `completed` UNIQUEMENT après postOutboundDebit
+        // (sync immédiat si le provider confirme, sinon webhook/polling).
         $txId = self::insertTransaction(
             $pdo,
             $userId,
@@ -298,13 +317,64 @@ final class ExecutionEngine
             $type,
             $operationId,
             $startedAt,
-            $context
+            $context,
+            (string) ($providerResult['provider_status'] ?? 'ACCEPTED')
         );
+
+        if (self::isSyncProviderSuccess($providerResult)) {
+            // Règlement synchrone DANS la transaction ouverte (pas
+            // ExecutionSettlementService::settle, qui ouvrirait une 2ᵉ TX).
+            $holdOpId = (string) $hold['operation_id'];
+            $holdRow = $pdo->prepare('SELECT * FROM wallet_operations WHERE id = :id LIMIT 1');
+            $holdRow->execute(['id' => $holdOpId]);
+            $holdOp = $holdRow->fetch();
+            if ($holdOp === false) {
+                throw new RuntimeException('Hold introuvable après capture pour le règlement synchrone.');
+            }
+            $total = (string) $holdOp['source_amount'];
+            $fee = bcadd((string) ($holdOp['fee_amount'] ?? '0'), '0', 8);
+            $principal = bccomp($total, $fee, 8) >= 0 ? bcsub($total, $fee, 8) : $total;
+            $env = $context?->environmentValue() ?? ProviderConfig::defaultEnvironment();
+            LedgerService::postOutboundDebit(
+                $holdOpId,
+                (int) $holdOp['source_wallet_id'],
+                (string) $holdOp['source_currency'],
+                $principal,
+                $fee,
+                $provider,
+                'Envoi réglé chez le provider (sync)',
+                'send',
+                $operationId,
+                [
+                    'kind'           => 'provider_settlement_sync',
+                    'transaction_id' => $txId,
+                    'provider_status'=> (string) ($providerResult['provider_status'] ?? 'COMPLETED'),
+                ],
+                $env
+            );
+            $pdo->prepare(
+                "UPDATE transactions
+                 SET status = 'completed', provider_status = :ps, updated_at = NOW()
+                 WHERE id = :id"
+            )->execute([
+                'ps' => substr((string) ($providerResult['provider_status'] ?? 'COMPLETED'), 0, 30),
+                'id' => $txId,
+            ]);
+        }
 
         // ── 4. Notification ───────────────────────────────────────────
         self::notify($pdo, $userId, $sourceCurrency, $destCurrency, $destAmount, $provider !== '' ? $provider : null);
 
         return $txId;
+    }
+
+    /**
+     * @param array<string,mixed> $providerResult
+     */
+    private static function isSyncProviderSuccess(array $providerResult): bool
+    {
+        $status = strtolower((string) ($providerResult['status'] ?? ''));
+        return in_array($status, ['succeeded', 'success', 'completed', 'complete'], true);
     }
 
     /**
@@ -317,15 +387,20 @@ final class ExecutionEngine
      *
      * @throws HttpException NO_AVAILABLE_PROVIDER / PROVIDER_ERROR
      */
+    /**
+     * @return array<string,mixed> Réponse provider normalisée (status, ids).
+     */
     private static function callProvider(
         string $provider,
         string $sourceCurrency,
         string $destCurrency,
         string $amountSent,
+        string $destAmount,
         string $destination,
+        string $operator,
         string $operationId,
         ?ExecutionContext $context
-    ): void {
+    ): array {
         if ($provider === '') {
             throw new HttpException(
                 409,
@@ -350,13 +425,25 @@ final class ExecutionEngine
             'operation_id' => $operationId,
             'amount'       => $amountSent,
             'currency'     => $sourceCurrency,
+            'dest_amount'   => $destAmount,
             'dest_currency'=> $destCurrency,
             'destination'  => $destination,
+            'operator'     => $operator,
             'environment'  => $context?->environmentValue() ?? ProviderConfig::defaultEnvironment(),
         ];
 
         try {
-            ProviderRegistry::adapter($provider)->createPayment($params);
+            $raw = ProviderRegistry::adapter($provider)->createPayment($params);
+            if (!is_array($raw)) {
+                $raw = [];
+            }
+            $status = strtolower((string) ($raw['status'] ?? 'accepted'));
+            return [
+                'status'          => $status,
+                'provider_status' => strtoupper((string) ($raw['status'] ?? 'ACCEPTED')),
+                'provider_ref'    => (string) ($raw['id'] ?? $operationId),
+                'raw'             => $raw,
+            ];
         } catch (ProviderOperationNotImplemented $e) {
             // Intégration pas encore câblée : refus explicite, jamais de
             // succès simulé.
@@ -477,7 +564,10 @@ final class ExecutionEngine
             'fx_rate'         => (float) ($route['rate'] ?? 0),
             'provider'        => (string) ($route['provider'] ?? ''),
             'route_id'        => $routeId,
-            'destination'     => self::destinationLabel($quote),
+            // Le destinataire est lié à la quote ; ne jamais remplacer son
+            // MSISDN par un libellé de présentation avant l'appel provider.
+            'destination'     => (string) ($quote['destination'] ?? ''),
+            'operator'        => (string) ($quote['operator'] ?? ''),
             'label'           => sprintf('Envoi %s → %s', $sourceCurrency, $destCurrency),
             'type'            => 'send',
             'quote_id'        => (string) $quote['id'],
@@ -517,7 +607,8 @@ final class ExecutionEngine
         string $type,
         string $operationId,
         float $startedAt,
-        ?ExecutionContext $context = null
+        ?ExecutionContext $context = null,
+        string $providerStatus = 'ACCEPTED'
     ): int {
         // Projections de référence (§7, §9) : calculées avec les taux RÉELS
         // de l'environnement. Quand aucune conversion n'est disponible, les
@@ -539,12 +630,14 @@ final class ExecutionEngine
                 (quote_id, route_id, user_id, type, direction, label, description,
                  amount, currency, amount_ref, ref_currency, amount_xaf,
                  dest_amount, dest_currency, fx_rate, fee, fee_currency,
-                 status, provider, destination, execution_time_seconds, environment)
+                 status, provider, provider_operation_id, provider_status,
+                 destination, execution_time_seconds, environment)
              VALUES
                 (:qid, :rid, :uid, :type, :dir, :label, :desc,
                  :amount, :cur, :aref, :refcur, :axaf,
                  :damount, :dcur, :fxr, :fee, :feecur,
-                 :status, :prov, :dest, :execsec, :env)'
+                 :status, :prov, :popid, :pstatus,
+                 :dest, :execsec, :env)'
         );
 
         $stmt->execute([
@@ -565,8 +658,12 @@ final class ExecutionEngine
             'fxr'     => $fxRate > 0 ? number_format($fxRate, 8, '.', '') : null,
             'fee'     => $fee2,
             'feecur'  => $sourceCurrency,
-            'status'  => 'completed',
+            // Toujours `processing` à l'insert : le débit GL + statut terminal
+            // passent par ExecutionSettlementService (sync ou async).
+            'status'  => 'processing',
             'prov'    => $provider !== '' ? substr($provider, 0, 50) : null,
+            'popid'   => substr($operationId, 0, 64),
+            'pstatus' => substr($providerStatus, 0, 30),
             'dest'    => $destination !== '' ? substr($destination, 0, 190) : null,
             'execsec' => $execSec,
             // L'environnement vient du contexte d'exécution, jamais du DEFAULT

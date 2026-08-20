@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { apiMe, apiLogout, type ApiUser } from '../api/client';
 
 // ─── Types ───────────────────────────────────────────────────────────────
@@ -15,7 +16,12 @@ interface AuthContextType {
   isAuthenticated: boolean;
   /** Appelé après un login/register réussi — revalide la session via /api/me */
   refreshSession: () => Promise<void>;
-  logout: () => Promise<void>;
+  /**
+   * Déconnexion. Redirige vers le login de l'espace courant
+   * (client → /login, superadmin → /admin-login, staff → /staff-login),
+   * ou vers `redirectTo` si fourni.
+   */
+  logout: (redirectTo?: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -29,9 +35,21 @@ function toUser(apiUser: ApiUser): User {
   };
 }
 
+/** Login cible selon l'URL où la déconnexion a lieu. */
+export function loginPathForLocation(pathname: string): string {
+  if (pathname.startsWith('/admin') || pathname.startsWith('/admin-login')) {
+    return '/admin-login';
+  }
+  if (pathname.startsWith('/staff') || pathname.startsWith('/staff-login')) {
+    return '/staff-login';
+  }
+  return '/login';
+}
+
 // ─── Provider ────────────────────────────────────────────────────────────
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
@@ -56,26 +74,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refreshSession]);
 
   /**
-   * Déconnexion — révoque le token côté serveur, nettoie l'état local et
-   * redirige TOUJOURS vers la page de connexion.
-   *
-   * On navigue vers /login AVANT de vider `user` : sinon, au passage de
-   * `user` à null, AppRoutes rend PublicRouter dont le fallback
-   * `<Navigate to="/">` ramène sur la landing. Naviguer en premier garantit
-   * qu'à la mise à jour de l'état l'URL est déjà /login (page de connexion).
+   * Déconnexion — révoque le token, navigue vers le bon login, puis vide l'état.
+   * Naviguer AVANT setUser(null) évite que PublicRouter tombe sur le catch-all
+   * `/login` alors qu'on était sur /admin ou /staff.
    */
-  const logout = useCallback(async () => {
+  const logout = useCallback(async (redirectTo?: string) => {
     try {
       await apiLogout();
     } catch {
       // Même si la révocation serveur échoue (réseau), on déconnecte localement.
     }
-    // En vidant `user`, AppRoutes repasse sur PublicRouter. Comme on se
-    // trouve alors sur une route protégée (/dashboard, /admin, …), le
-    // fallback de PublicRouter redirige vers /login (page de connexion),
-    // jamais vers la landing.
+    const target = redirectTo ?? loginPathForLocation(window.location.pathname);
+    // Vider la session d'abord : PublicRouter + PublicAuthFallback couvrent déjà
+    // le bon login. navigate() verrouille l'URL même si le catch-all lag.
     setUser(null);
-  }, []);
+    navigate(target, { replace: true });
+  }, [navigate]);
 
   return (
     <AuthContext.Provider

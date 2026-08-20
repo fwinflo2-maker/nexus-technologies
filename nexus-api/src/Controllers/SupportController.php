@@ -8,6 +8,7 @@ use Nexus\Auth\AuthMiddleware;
 use Nexus\Core\Database;
 use Nexus\Core\Request;
 use Nexus\Core\Response;
+use Nexus\Services\SupportBot;
 
 /**
  * Support chat — tickets & conversations (client ↔ agent / bot).
@@ -71,19 +72,41 @@ final class SupportController
 
     /**
      * POST /api/support/bot — le bot répond SANS créer de ticket.
-     * Body : { message }
-     * → { reply, escalate, category, subject }
-     *   * escalate = true  → le bot ne sait pas répondre ou l'utilisateur veut un humain
-     *   * escalate = false → réponse du bot (aucun ticket créé)
+     * Body : { message, history?: [{sender, body}], lang? }
+     * → { reply, escalate, category, subject, intent, quick_replies }
      */
     public static function bot(Request $request): void
     {
-        self::currentUser($request); // authentification requise
+        $user = self::currentUser($request);
         $message = trim((string) $request->input('message', ''));
         if ($message === '') {
             Response::badRequest('Le message est requis.');
         }
-        Response::success(self::analyzeBot($message));
+
+        $rawHistory = $request->input('history');
+        $history = [];
+        if (is_array($rawHistory)) {
+            foreach ($rawHistory as $h) {
+                if (!is_array($h)) {
+                    continue;
+                }
+                $history[] = [
+                    'sender' => (string) ($h['sender'] ?? 'customer'),
+                    'body'   => (string) ($h['body'] ?? ''),
+                ];
+            }
+            // Limite anti-payload : 40 derniers tours.
+            if (count($history) > 40) {
+                $history = array_slice($history, -40);
+            }
+        }
+
+        $lang = strtolower(trim((string) $request->input('lang', 'fr')));
+        if ($lang === '') {
+            $lang = 'fr';
+        }
+
+        Response::success(self::analyzeBot($message, $history, is_array($user) ? $user : [], $lang));
     }
 
     /**
@@ -124,10 +147,12 @@ final class SupportController
         if (self::isAgent($user)) {
             $stmt = $pdo->query(
                 'SELECT c.id, c.subject, c.category, c.status, c.priority, c.created_at, c.updated_at,
-                        c.assigned_to, u.full_name AS client_name, u.email AS client_email
+                        c.assigned_to, a.full_name AS assigned_name,
+                        u.full_name AS client_name, u.email AS client_email
                  FROM support_conversations c
                  JOIN users u ON u.id = c.user_id
-                 ORDER BY (c.status = \'open\') DESC, c.updated_at DESC'
+                 LEFT JOIN users a ON a.id = c.assigned_to
+                 ORDER BY FIELD(c.status, \'waiting\', \'open\', \'resolved\', \'closed\'), c.updated_at DESC'
             );
             $rows = $stmt->fetchAll();
             foreach ($rows as &$r) {
@@ -135,10 +160,13 @@ final class SupportController
                 $q->execute([$r['id']]);
                 $r['unread'] = (int) $q->fetchColumn();
             }
+            unset($r);
         } else {
             $stmt = $pdo->prepare(
-                'SELECT c.id, c.subject, c.category, c.status, c.priority, c.created_at, c.updated_at, c.assigned_to
+                'SELECT c.id, c.subject, c.category, c.status, c.priority, c.created_at, c.updated_at,
+                        c.assigned_to, a.full_name AS assigned_name
                  FROM support_conversations c
+                 LEFT JOIN users a ON a.id = c.assigned_to
                  WHERE c.user_id = :uid
                  ORDER BY c.updated_at DESC'
             );
@@ -179,7 +207,7 @@ final class SupportController
         try {
             $ins = $pdo->prepare(
                 'INSERT INTO support_conversations (user_id, subject, category, status, priority)
-                 VALUES (:uid, :subject, :category, \'open\', :priority)'
+                 VALUES (:uid, :subject, :category, \'waiting\', :priority)'
             );
             $ins->execute(['uid' => (int) $user['id'], 'subject' => $subject, 'category' => $category, 'priority' => $priority]);
             $convId = (int) $pdo->lastInsertId();
@@ -209,12 +237,15 @@ final class SupportController
                 }
             }
 
-            // Message de prise en charge par un agent (escalade).
+            // Mise en relation professionnelle (en attente d'un conseiller).
             $esc = $pdo->prepare(
                 'INSERT INTO support_messages (conversation_id, customer_id, agent_id, is_bot, body, created_at)
-                 VALUES (?, NULL, NULL, 0, ?, NOW())'
+                 VALUES (?, NULL, NULL, 1, ?, NOW())'
             );
-            $esc->execute([$convId, '📨 Ticket transmis à un agent humain. Nous traitons votre demande et vous répondons ici.']);
+            $esc->execute([
+                $convId,
+                'Je vous mets en relation avec un conseiller Nexus. Un membre de l’équipe support prendra en charge votre demande sous peu. Merci de patienter.',
+            ]);
 
             $pdo->commit();
         } catch (\PDOException $e) {
@@ -225,13 +256,22 @@ final class SupportController
         self::audit($pdo, (int) $user['id'], 'support.conversation_open', 'support_conversation', $convId, ['category' => $category, 'priority' => $priority]);
 
         Response::success([
-            'conversation' => ['id' => $convId, 'subject' => $subject, 'category' => $category, 'status' => 'open', 'priority' => $priority],
+            'conversation' => [
+                'id' => $convId,
+                'subject' => $subject,
+                'category' => $category,
+                'status' => 'waiting',
+                'priority' => $priority,
+                'assigned_to' => null,
+                'assigned_name' => null,
+            ],
         ], 201);
     }
 
     /**
      * GET /api/support/conversations/{id}/messages — long-polling.
      * Un client ne reçoit JAMAIS les notes internes (is_internal = 1).
+     * Quand un agent ouvre/lit le fil, il est assigné et le client est notifié.
      */
     public static function messages(Request $request): void
     {
@@ -244,6 +284,10 @@ final class SupportController
         }
 
         $isAgent = self::isAgent($user);
+        if ($isAgent) {
+            self::claimConversation($pdo, $user, $convId);
+        }
+
         $after = (int) ($request->query('after_id') ?? 0);
         $internalFilter = $isAgent ? '' : 'AND is_internal = 0';
 
@@ -262,11 +306,14 @@ final class SupportController
         if ($isAgent) {
             $upd = $pdo->prepare('UPDATE support_messages SET read_at = NOW() WHERE conversation_id = ? AND customer_id IS NOT NULL AND read_at IS NULL');
         } else {
-            $upd = $pdo->prepare('UPDATE support_messages SET read_at = NOW() WHERE conversation_id = ? AND agent_id IS NOT NULL AND is_internal = 0 AND read_at IS NULL');
+            $upd = $pdo->prepare('UPDATE support_messages SET read_at = NOW() WHERE conversation_id = ? AND (agent_id IS NOT NULL OR is_bot = 1) AND is_internal = 0 AND read_at IS NULL');
         }
         $upd->execute([$convId]);
 
-        Response::success(['items' => $messages]);
+        Response::success([
+            'items' => $messages,
+            'conversation' => self::conversationMeta($pdo, $convId),
+        ]);
     }
 
     /**
@@ -298,6 +345,10 @@ final class SupportController
         $agentId = $isAgent ? (int) $user['id'] : null;
         $customerId = $isAgent ? null : (int) $user['id'];
 
+        if ($isAgent) {
+            self::claimConversation($pdo, $user, $convId);
+        }
+
         if (!$isAgent) {
             $pdo->prepare("UPDATE support_conversations SET status = 'open' WHERE id = ? AND status IN ('resolved','closed')")
                 ->execute([$convId]);
@@ -320,13 +371,30 @@ final class SupportController
                 $statusRow->execute([$convId]);
                 $status = $statusRow->fetchColumn();
                 if ($status === 'open') {
-                    $analysis = self::analyzeBot($body);
+                    $histStmt = $pdo->prepare(
+                        'SELECT is_bot, agent_id, body FROM support_messages
+                         WHERE conversation_id = ? AND is_internal = 0
+                         ORDER BY id DESC LIMIT 40'
+                    );
+                    $histStmt->execute([$convId]);
+                    $histRows = array_reverse($histStmt->fetchAll(\PDO::FETCH_ASSOC) ?: []);
+                    $history = [];
+                    foreach ($histRows as $hr) {
+                        // Exclure le message qu'on vient d'insérer (dernier customer).
+                        $sender = !empty($hr['is_bot']) || !empty($hr['agent_id']) ? 'bot' : 'customer';
+                        $history[] = ['sender' => $sender, 'body' => (string) ($hr['body'] ?? '')];
+                    }
+                    // Retirer le dernier message customer (= $body) pour que reply() le reçoive à part.
+                    if ($history !== [] && ($history[count($history) - 1]['sender'] ?? '') === 'customer') {
+                        array_pop($history);
+                    }
+                    $analysis = self::analyzeBot($body, $history, $user, 'fr');
                     if ($analysis['escalate']) {
                         // L'utilisateur demande un humain ou le bot ne sait pas :
-                        // on re-route vers un agent, sans réponse bot.
-                        $pdo->prepare("UPDATE support_conversations SET status = 'waiting' WHERE id = ?")
+                        // on re-route vers un agent, sans réponse bot automatique métier.
+                        $pdo->prepare("UPDATE support_conversations SET status = 'waiting', assigned_to = NULL WHERE id = ?")
                             ->execute([$convId]);
-                        $botReply = "Un agent humain va prendre en charge votre demande. Merci de patienter quelques instants.";
+                        $botReply = 'Je vous mets en relation avec un conseiller Nexus. Un membre de l’équipe support prendra en charge votre demande sous peu. Merci de patienter.';
                         $bot = $pdo->prepare(
                             'INSERT INTO support_messages (conversation_id, customer_id, agent_id, is_bot, body, created_at)
                              VALUES (?, NULL, NULL, 1, ?, NOW())'
@@ -419,167 +487,20 @@ final class SupportController
         ], 201);
     }
 
-    // ─── Analyse du bot (système « Fin ») ─────────────────────────────────
+    // ─── Analyse du bot (SupportBot scoré + contexte compte) ──────────────
 
     /**
-     * Analyse un message et décide : réponse directe OU escalade.
-     * Retourne { reply, escalate, category, subject, quick_replies, intent }.
-     *
-     * Le bot façon « Fin » : détecte l'intention, répond, et propose des
-     * suggestions de réponses rapides (quick replies) pour guider l'utilisateur
-     * comme un assistant IA moderne (Intercom Fin / Revolut / Wise).
+     * Délègue à SupportBot : intents scorés, follow-ups, wallets/KYC/tx.
+     * @param list<array{sender?:string,body?:string}> $history
+     * @return array{reply:?string,escalate:bool,category:string,subject:string,intent:string,quick_replies:list<string>}
      */
-    private static function analyzeBot(string $body): array
+    private static function analyzeBot(string $body, array $history = [], array $user = [], string $lang = 'fr'): array
     {
-        $text = mb_strtolower($body);
+        $pdo = Database::getConnection();
+        $ctx = $user !== [] ? SupportBot::loadContext($pdo, $user) : [];
+        $ctx['lang'] = $lang !== '' ? $lang : 'fr';
 
-        // 1. Demande explicite d'un humain → escalade immédiate.
-        $humanIntent = [
-            'agent', 'humain', 'conseiller', 'operateur', 'parler à quelqu', 'parler a quelqu',
-            'vraie personne', 'assistance humaine', 'un être humain', 'advisor', 'real agent',
-            'votre supérieur', 'manager', 'appeler', 'tel', 'réclamation', 'plainte',
-        ];
-        foreach ($humanIntent as $kw) {
-            if (mb_strpos($text, $kw) !== false) {
-                return [
-                    'reply'    => null,
-                    'escalate' => true,
-                    'category' => 'other',
-                    'subject'  => mb_substr($body, 0, 120),
-                    'intent'   => 'human',
-                    'quick_replies' => [],
-                ];
-            }
-        }
-
-        $rules = [
-            'transfert|transfer|virement|envoi|envois|envoyer|argent|payer' => [
-                'reply' => "💸 **Transfert** : allez dans « Envoyer », choisissez la devise et le destinataire. "
-                    . "Les fonds partent généralement sous quelques minutes.\n\nSouhaitez-vous en savoir plus ?",
-                'category' => 'transfer',
-                'subject' => 'Question sur un transfert',
-                'intent' => 'transfer',
-                'quick_replies' => [
-                    'Mon transfert est bloqué',
-                    'Quels sont les délais ?',
-                    'Quelles devises sont supportées ?',
-                    'Parler à un agent',
-                ],
-            ],
-            'solde|sold|balance|salaire|portefeuille|compte' => [
-                'reply' => "💰 **Votre solde** est visible dans « Portefeuille », avec la répartition disponible / en attente / en transit. "
-                    . "Vérifiez aussi vos notifications pour les opérations récentes.\n\nPuis-je vous aider autrement ?",
-                'category' => 'account',
-                'subject' => 'Question sur le solde / compte',
-                'intent' => 'account',
-                'quick_replies' => [
-                    'Je vois un écart sur mon solde',
-                    'Mon compte est bloqué',
-                    'Comment fonctionnent les wallets ?',
-                    'Parler à un agent',
-                ],
-            ],
-            'kyc|vérif|verif|identité|document|pièce' => [
-                'reply' => "🪪 **Vérification KYC** : rendez-vous dans « KYC » avec une pièce d'identité + un selfie. "
-                    . "Les dossiers sont traités sous 24-48h.\n\nBesoin d'aide sur votre dossier ?",
-                'category' => 'kyc',
-                'subject' => 'Vérification KYC',
-                'intent' => 'kyc',
-                'quick_replies' => [
-                    'Ma vérification est en attente',
-                    'Quels documents sont acceptés ?',
-                    'Mon dossier a été refusé',
-                    'Parler à un agent',
-                ],
-            ],
-            'factur|frais|commission|tarif|coût|coute' => [
-                'reply' => "🧾 **Frais & commissions** : les frais sont calculés au moment de l'envoi selon le provider, "
-                    . "et vous voyez le total avant de confirmer.\n\nSouhaitez-vous le détail ?",
-                'category' => 'billing',
-                'subject' => 'Question sur les frais',
-                'intent' => 'fees',
-                'quick_replies' => [
-                    'Détail des frais sur une opération',
-                    'Pourquoi des frais sont-ils prélevés ?',
-                    'Frais pour l’international',
-                    'Parler à un agent',
-                ],
-            ],
-            'carte|card|plafond|limite|gel|bloqué|suspendu|refus' => [
-                'reply' => "🔒 **Geler une carte ou un compte** est une opération sensible. "
-                    . "Je transmets immédiatement votre demande à un agent humain qui vérifiera votre situation.",
-                'category' => 'account',
-                'subject' => mb_substr($body, 0, 120),
-                'intent' => 'security',
-                'escalate' => true,
-                'quick_replies' => [],
-            ],
-            'merci|ok|super|parfait|compris|d accord|ok merci|merci beaucoup' => [
-                'reply' => "😊 Avec plaisir ! N'hésitez pas si vous avez d'autres questions. "
-                    . "Je suis là 24/7, et un agent peut aussi prendre le relais si besoin.",
-                'category' => 'other',
-                'subject' => 'Remerciement',
-                'intent' => 'thanks',
-                'quick_replies' => [
-                    'J’ai une autre question',
-                    'Comment voir mes transactions ?',
-                    'Comment changer mon mot de passe ?',
-                    'Parler à un agent',
-                ],
-            ],
-        ];
-
-        foreach ($rules as $keys => $def) {
-            foreach (explode('|', $keys) as $kw) {
-                if (mb_strpos($text, $kw) !== false) {
-                    return [
-                        'reply'    => $def['reply'],
-                        'escalate' => $def['escalate'] ?? false,
-                        'category' => $def['category'],
-                        'subject'  => $def['subject'],
-                        'intent'   => $def['intent'],
-                        'quick_replies' => $def['quick_replies'],
-                    ];
-                }
-            }
-        }
-
-        // 2. Salutation / menu d'aide.
-        if (preg_match('/\b(bonjour|bonsoir|salut|hello|hey|coucou|aide|help|menu)\b/', $text)) {
-            return [
-                'reply' => "👋 Bonjour ! Je suis l'assistant Nexus. Voici ce que je peux vous aider :\n"
-                    . "• 💸 Transferts & envois\n"
-                    . "• 💰 Solde & comptes\n"
-                    . "• 🪪 Vérification KYC\n"
-                    . "• 🧾 Frais & facturation\n"
-                    . "• 🔒 Carte, plafonds & sécurité\n\nChoisissez un sujet, ou écrivez « agent » pour parler à un conseiller.",
-                'escalate' => false,
-                'category' => 'other',
-                'subject' => 'Menu d\'aide',
-                'intent' => 'menu',
-                'quick_replies' => [
-                    'Je veux envoyer de l\'argent',
-                    'Question sur mon solde',
-                    'Vérification KYC',
-                    'Mes frais',
-                    'Geler ma carte',
-                    'Parler à un agent',
-                ],
-            ];
-        }
-
-        // 3. Aucun mot-clé → le bot ne sait pas répondre → escalade.
-        return [
-            'reply'    => null,
-            'escalate' => true,
-            'category' => 'other',
-            'subject'  => mb_substr($body, 0, 120),
-            'intent'   => 'unknown',
-            'quick_replies' => [
-                'Réessayer ma question',
-                'Parler à un agent',
-            ],
-        ];
+        return SupportBot::reply($body, $history, $ctx);
     }
 
     private static function categoryLabel(string $category): string
@@ -591,6 +512,80 @@ final class SupportController
             'billing' => 'Facturation',
             'other' => 'Autre',
         ][$category] ?? 'Autre';
+    }
+
+    /**
+     * Première lecture / réponse agent → assignation + message système côté client.
+     */
+    private static function claimConversation(\PDO $pdo, array $agent, int $convId): void
+    {
+        $agentId = (int) ($agent['id'] ?? 0);
+        if ($agentId <= 0 || $convId <= 0) {
+            return;
+        }
+
+        $check = $pdo->prepare('SELECT assigned_to, status FROM support_conversations WHERE id = ? LIMIT 1');
+        $check->execute([$convId]);
+        $row = $check->fetch(\PDO::FETCH_ASSOC);
+        if (!$row) {
+            return;
+        }
+        if (!empty($row['assigned_to'])) {
+            // Déjà pris en charge : s'assurer que le statut n'est plus "waiting".
+            if (($row['status'] ?? '') === 'waiting') {
+                $pdo->prepare("UPDATE support_conversations SET status = 'open' WHERE id = ? AND status = 'waiting'")
+                    ->execute([$convId]);
+            }
+            return;
+        }
+
+        $upd = $pdo->prepare(
+            "UPDATE support_conversations
+             SET assigned_to = ?, status = 'open', updated_at = NOW()
+             WHERE id = ? AND assigned_to IS NULL"
+        );
+        $upd->execute([$agentId, $convId]);
+        if ($upd->rowCount() === 0) {
+            return;
+        }
+
+        $name = trim((string) ($agent['full_name'] ?? ''));
+        if ($name === '') {
+            $name = 'un conseiller';
+        }
+        $body = '**' . $name . '** du support client est maintenant connecté(e). Vous pouvez poursuivre la conversation.';
+
+        $ins = $pdo->prepare(
+            'INSERT INTO support_messages (conversation_id, customer_id, agent_id, is_bot, body, created_at)
+             VALUES (?, NULL, ?, 1, ?, NOW())'
+        );
+        $ins->execute([$convId, $agentId, $body]);
+    }
+
+    /** @return array{id:int,subject:?string,category:?string,status:string,priority:string,assigned_to:?int,assigned_name:?string} */
+    private static function conversationMeta(\PDO $pdo, int $convId): array
+    {
+        $stmt = $pdo->prepare(
+            'SELECT c.id, c.subject, c.category, c.status, c.priority, c.assigned_to,
+                    a.full_name AS assigned_name
+             FROM support_conversations c
+             LEFT JOIN users a ON a.id = c.assigned_to
+             WHERE c.id = ? LIMIT 1'
+        );
+        $stmt->execute([$convId]);
+        $row = $stmt->fetch(\PDO::FETCH_ASSOC) ?: [];
+
+        return [
+            'id' => (int) ($row['id'] ?? $convId),
+            'subject' => $row['subject'] ?? null,
+            'category' => $row['category'] ?? null,
+            'status' => (string) ($row['status'] ?? 'open'),
+            'priority' => (string) ($row['priority'] ?? 'normal'),
+            'assigned_to' => isset($row['assigned_to']) && $row['assigned_to'] !== null ? (int) $row['assigned_to'] : null,
+            'assigned_name' => isset($row['assigned_name']) && $row['assigned_name'] !== null && $row['assigned_name'] !== ''
+                ? (string) $row['assigned_name']
+                : null,
+        ];
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────────

@@ -326,14 +326,19 @@ final class EnvironmentPropagationTest extends TestCase
 
         WalletService::captureHold((string) $hold['operation_id'], $userId, 'cap-' . bin2hex(random_bytes(4)));
 
-        $stmt = $this->pdo->prepare('SELECT environment FROM ledger_entries WHERE operation_id = :id');
+        // La capture poste le débit définitif dans l'environnement du hold,
+        // qui doit rester sandbox malgré
+        // PROVIDERS_ENV=production.
+        $stmt = $this->pdo->prepare('SELECT environment, status FROM wallet_operations WHERE id = :id');
         $stmt->execute(['id' => (string) $hold['operation_id']]);
-        $envs = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        $op = $stmt->fetch();
+        $this->assertNotFalse($op);
+        $this->assertSame('sandbox', $op['environment'], 'La capture hérite de l\'environnement du hold.');
+        $this->assertSame('completed', $op['status']);
 
-        $this->assertNotEmpty($envs, 'La capture doit produire une écriture ledger.');
-        foreach ($envs as $env) {
-            $this->assertSame('sandbox', $env, 'La capture hérite de l\'environnement du hold.');
-        }
+        $led = $this->pdo->prepare('SELECT COUNT(*) FROM ledger_entries WHERE operation_id = :id');
+        $led->execute(['id' => (string) $hold['operation_id']]);
+        $this->assertSame(2, (int) $led->fetchColumn(), 'Capture équilibrée dans le ledger.');
     }
 
     // ══ §22 — la clé d'idempotence ne franchit pas la frontière ════════════

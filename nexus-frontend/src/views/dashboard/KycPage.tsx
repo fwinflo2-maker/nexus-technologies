@@ -8,6 +8,16 @@ import type { KycStatusData } from '../../api/client';
 
 const KYC_LEVELS = ['none', 'basic', 'standard', 'advanced'];
 
+const LIVE_KYC: Record<string, { label: string; tone: 'pending' | 'active' | 'p' }> = {
+  not_started: { label: 'Non démarrée', tone: 'pending' },
+  in_progress: { label: 'En cours', tone: 'pending' },
+  pending: { label: 'En examen', tone: 'pending' },
+  verified: { label: 'Approuvée', tone: 'active' },
+  resubmission_requested: { label: 'Documents à resoumettre', tone: 'p' },
+  rejected: { label: 'Refusée', tone: 'p' },
+  on_hold: { label: 'En revue', tone: 'pending' },
+};
+
 const KYB_STATES: Record<string, { label: string; tone: 'pending' | 'active' | 'p' }> = {
   none: { label: 'Non démarrée', tone: 'pending' },
   in_progress: { label: 'En cours', tone: 'pending' },
@@ -107,6 +117,8 @@ export default function KycPage() {
   };
 
   const kybState = KYB_STATES[kyb ?? 'none'] ?? KYB_STATES.none;
+  const liveStatus = live?.status ?? 'not_started';
+  const liveUi = LIVE_KYC[liveStatus] ?? LIVE_KYC.not_started;
 
   return (
     <div className="page">
@@ -137,6 +149,21 @@ export default function KycPage() {
               ? 'Compte actif — les paiements restent soumis à la vérification ' + (isBusiness ? 'd’entreprise' : 'd’identité') + '.'
               : 'Compte en attente de vérification — les transferts sont bloqués.'}
           </p>
+        </div>
+
+        <div className="card" style={{ padding: 20 }}>
+          <div className="page-label">Statut provider (serveur)</div>
+          <div style={{ marginTop: 12 }}>
+            <span className={`pill ${liveUi.tone}`}>{liveUi.label}</span>
+          </div>
+          <p style={{ marginTop: 10, fontSize: 12, color: 'var(--text-mid)', lineHeight: 1.6 }}>
+            {loading
+              ? 'Chargement du statut serveur…'
+              : `Source : GET /api/kyc/status · ${liveStatus}${live?.required_action ? ` · action ${live.required_action}` : ''}. Le frontend n’affiche jamais « terminé » avant cet état.`}
+          </p>
+          {live?.reason && (
+            <p style={{ marginTop: 8, fontSize: 12, color: 'var(--text-mid)' }}>{live.reason}</p>
+          )}
         </div>
 
         {isBusiness ? (

@@ -14,6 +14,7 @@ interface SidebarProps {
 const navPersonal = [
   { to: '/dashboard', icon: '◈', label: 'nav.dashboard' },
   { to: '/wallet', icon: '◉', label: 'nav.wallet' },
+  { to: '/cards', icon: '💳', label: 'nav.cards' },
   { to: '/send', icon: '↗', label: 'nav.send' },
   { to: '/receive', icon: '↙', label: 'nav.receive' },
   { to: '/convert', icon: '⇄', label: 'nav.convert' },
@@ -23,6 +24,7 @@ const navPersonal = [
 const navBusiness = [
   { to: '/dashboard', icon: '◈', label: 'nav.dashboard' },
   { to: '/wallet', icon: '◉', label: 'nav.wallet' },
+  { to: '/cards', icon: '💳', label: 'nav.cards' },
   { to: '/treasury', icon: '▣', label: 'nav.treasury' },
   { to: '/send', icon: '↗', label: 'nav.send' },
   { to: '/receive', icon: '↙', label: 'nav.receive' },
@@ -98,8 +100,7 @@ export default function Sidebar({ mode }: SidebarProps) {
   }, [menuOpen]);
 
   const handleLogout = async () => {
-    // logout() (AuthContext) révogue la session et redirige vers /login.
-    await logout();
+    await logout('/login');
   };
 
 

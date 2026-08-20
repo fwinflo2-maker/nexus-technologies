@@ -270,33 +270,18 @@ final class ProviderCredentialController
 
         $pdo = Database::getConnection();
 
-        // Credentials absentes (ni base, ni environnement) : aucun appel ne
-        // doit être envoyé — réponse explicite PROVIDER_NOT_CONFIGURED (§5).
-        if (!\Nexus\Providers\ProviderRegistry::isConfigured($slug)) {
-            $result = [
-                'status'    => 'PROVIDER_NOT_CONFIGURED',
-                'message'   => 'Aucune credential configurée pour ce provider : aucun appel envoyé.',
-                'tested_at' => gmdate(DATE_ATOM),
-            ];
-            ProviderCredentialService::markPlatformTested($pdo, $slug, $env, 'not_configured', $result['message']);
-            self::audit($pdo, $userId, 'provider.credentials.test', $slug, [
-                'status'      => $result['status'],
-                'environment' => $env,
-            ], $request);
-            Response::success([
-                'provider_slug' => $slug,
-                'environment'   => $env,
-                'result'        => $result,
-            ]);
-        }
-
-        // Credentials déchiffrées du dashboard (la source de vérité du
-        // SuperAdmin) ; l'adaptateur retombe sur l'environnement à défaut.
+        // Credentials déchiffrées du dashboard (source de vérité SuperAdmin).
+        // L'adaptateur peut aussi retomber sur un repli documenté (ex. stripe_issuing → stripe).
+        // On n'interrompt PAS avant l'appel : testConnection() reste la source honnête
+        // (PROVIDER_NOT_CONFIGURED si aucune clé exploitable).
         $credentials = ProviderCredentialService::resolvePlatform($pdo, $slug, $env) ?? [];
 
         $start = microtime(true);
         try {
-            $result = \Nexus\Providers\ProviderRegistry::adapter($slug)->testConnection($env, $credentials);
+            $result = \Nexus\Providers\ProviderRegistry::adapter($slug)->testConnection(
+                $env,
+                $credentials !== [] ? $credentials : null
+            );
         } catch (\Throwable $e) {
             $result = [
                 'status'    => 'CONFIGURATION_ERROR',
@@ -310,6 +295,7 @@ final class ProviderCredentialController
         // « error » rend le provider non routable via ProviderRegistry).
         $dbStatus = match ($result['status'] ?? '') {
             'CONNECTION_SUCCESS' => $env === 'production' ? 'active' : 'sandbox_only',
+            'PROVIDER_NOT_CONFIGURED' => 'not_configured',
             default              => 'error',
         };
         $error = ($result['status'] ?? '') === 'CONNECTION_SUCCESS'

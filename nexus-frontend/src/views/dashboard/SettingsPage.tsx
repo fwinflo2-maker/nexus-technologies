@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { apiGetUserProfile, apiUpdateProfile, apiUpdatePassword, apiGetSessions, apiRevokeSession, type UserProfile, type UserSession } from '../../api/client';
 import { useDashT, localeFor } from '../../data/dashboard-i18n';
 import { useI18n } from '../../context/I18nContext';
 import { countries } from '../../data/countries';
 import { useAuth } from '../../context/AuthContext';
+import Avatar from '../../components/Avatar';
 
 /** Libellé lisible d'un rôle plateforme interne (uniquement affiché pour les
  *  rôles non-client ; un compte client standard voit toujours `user`). */
@@ -109,17 +111,18 @@ export default function SettingsPage({ hideHeader = false }: { hideHeader?: bool
     reader.readAsDataURL(file);
   }
 
-  /** Enregistre l'avatar via l'API réelle (PUT /api/users/me). */
-  async function saveAvatar() {
-    if (avatarToSave === null) return;
+  /** Enregistre l'avatar via l'API réelle (PUT /api/users/me) + sync AuthContext. */
+  async function saveAvatar(dataUri: string | null = avatarToSave) {
+    if (dataUri === null) return;
     setAvatarSaving(true);
     setError(null);
     try {
-      const resp = await apiUpdateProfile({ avatar: avatarToSave });
+      const resp = await apiUpdateProfile({ avatar: dataUri });
       if (resp.success) {
         setSuccess(t('settings.success.avatar'));
         setAvatarPreview(null);
         setAvatarToSave(null);
+        await refreshSession();
         await loadProfile();
       } else {
         setError(resp.error || t('settings.error.avatar'));
@@ -129,6 +132,12 @@ export default function SettingsPage({ hideHeader = false }: { hideHeader?: bool
     } finally {
       setAvatarSaving(false);
     }
+  }
+
+  async function removeAvatar() {
+    setAvatarPreview(null);
+    setAvatarToSave(null);
+    await saveAvatar('');
   }
 
   async function loadSessions() {
@@ -161,7 +170,12 @@ export default function SettingsPage({ hideHeader = false }: { hideHeader?: bool
 
       const response = await apiUpdateProfile(payload);
       if (response.success) {
-        setSuccess(t('settings.success.profile'));
+        const sumsub = (response.data as { sumsub?: { reverification_required?: boolean } } | undefined)?.sumsub;
+        setSuccess(
+          sumsub?.reverification_required
+            ? t('settings.success.countrySumsub')
+            : t('settings.success.profile')
+        );
         setEditMode(false);
         await refreshSession();
         loadProfile();
@@ -235,25 +249,15 @@ export default function SettingsPage({ hideHeader = false }: { hideHeader?: bool
       <div className="settings-section animate-up">
         <h3 className="section-title">{t('settings.profile.title')}</h3>
 
-        {/* Photo de profil */}
+        {/* Photo de profil — synchronisée avec sidebar / topbar / dashboard */}
         <div className="form-group" style={{ marginBottom: 8 }}>
           <label className="form-label">{t('settings.profile.avatar')}</label>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-            <div
-              style={{
-                width: 72, height: 72, borderRadius: '50%', flexShrink: 0, overflow: 'hidden',
-                background: 'rgba(0,200,255,0.1)', border: '1px solid rgba(0,200,255,0.3)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32,
-              }}
-            >
-              {avatarPreview ? (
-                <img src={avatarPreview} alt={t('settings.profile.avatar')} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              ) : profile.avatar ? (
-                <img src={profile.avatar} alt={t('settings.profile.avatar')} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              ) : (
-                <span>{profile.account_type === 'business' ? '🏢' : '👤'}</span>
-              )}
-            </div>
+            <Avatar
+              avatar={avatarPreview ?? profile.avatar}
+              accountType={profile.account_type}
+              size={72}
+            />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <label className="btn btn-ghost" style={{ fontSize: 11, cursor: 'pointer', display: 'inline-flex', width: 'fit-content' }}>
                 {t('settings.profile.choose')}
@@ -266,12 +270,12 @@ export default function SettingsPage({ hideHeader = false }: { hideHeader?: bool
               </label>
               <div style={{ display: 'flex', gap: 8 }}>
                 {(avatarPreview || profile.avatar) && (
-                  <button className="btn btn-ghost" style={{ fontSize: 11 }} onClick={() => { setAvatarPreview(null); setAvatarToSave(''); }}>
+                  <button className="btn btn-ghost" style={{ fontSize: 11 }} onClick={() => void removeAvatar()} disabled={avatarSaving}>
                     {t('settings.profile.delete')}
                   </button>
                 )}
                 {avatarPreview && (
-                  <button className="btn btn-cyan" style={{ fontSize: 11 }} onClick={saveAvatar} disabled={avatarSaving}>
+                  <button className="btn btn-cyan" style={{ fontSize: 11 }} onClick={() => void saveAvatar()} disabled={avatarSaving}>
                     {avatarSaving ? t('settings.profile.saving') : t('settings.profile.save')}
                   </button>
                 )}
@@ -327,23 +331,35 @@ export default function SettingsPage({ hideHeader = false }: { hideHeader?: bool
         <div className="form-group">
           <label className="form-label">{t('settings.profile.country')}</label>
           {editMode ? (
-            <select
-              value={formData.country_of_residence}
-              onChange={(e) => setFormData({ ...formData, country_of_residence: e.target.value })}
-              className="input-field"
-            >
-              <option value="">{t('settings.profile.selectCountry')}</option>
-              {countries.map((c) => (
-                <option key={c.code} value={c.code}>{c.name} ({c.code})</option>
-              ))}
-            </select>
+            <>
+              <select
+                value={formData.country_of_residence}
+                onChange={(e) => setFormData({ ...formData, country_of_residence: e.target.value })}
+                className="input-field"
+              >
+                <option value="">{t('settings.profile.selectCountry')}</option>
+                {countries.map((c) => (
+                  <option key={c.code} value={c.code}>{c.name} ({c.code})</option>
+                ))}
+              </select>
+              <small className="form-hint">{t('settings.profile.countrySumsubHint')}</small>
+              <Link to="/kyc" className="btn btn-ghost" style={{ fontSize: 11, marginTop: 8, width: 'fit-content', textDecoration: 'none' }}>
+                {t('settings.profile.openSumsub')} →
+              </Link>
+            </>
           ) : (
-            <div className="static-value">
-              {profile.country_of_residence
-                ? (countries.find((c) => c.code === profile.country_of_residence)?.name
-                  ?? profile.country_of_residence)
-                : t('settings.profile.notSet')}
-            </div>
+            <>
+              <div className="static-value">
+                {profile.country_of_residence
+                  ? (countries.find((c) => c.code === profile.country_of_residence)?.name
+                    ?? profile.country_of_residence)
+                  : t('settings.profile.notSet')}
+              </div>
+              <small className="form-hint">{t('settings.profile.countrySumsubHint')}</small>
+              <Link to="/kyc" className="btn btn-ghost" style={{ fontSize: 11, marginTop: 8, width: 'fit-content', textDecoration: 'none' }}>
+                {t('settings.profile.changeCountryViaSumsub')} →
+              </Link>
+            </>
           )}
         </div>
 

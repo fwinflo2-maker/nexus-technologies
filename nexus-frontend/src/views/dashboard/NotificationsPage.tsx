@@ -8,12 +8,13 @@ import { useNotifications } from '../../context/NotificationsContext';
 import { NOTIFICATION_TYPES, notificationMeta } from '../../data/notifications';
 import { useDashT, localeFor } from '../../data/dashboard-i18n';
 import { useI18n } from '../../context/I18nContext';
+import { useAuth } from '../../context/AuthContext';
 
 /**
  * Centre de notifications (/notifications).
  *
  * - Liste groupée par date (Aujourd'hui / Hier / date complète).
- * - Filtre par type : transfert, quote, kyc, securite, business, systeme.
+ * - Filtre par type : transfert, quote, kyc, securite, business (compte pro), systeme.
  * - Actions : « Marquer comme lue » (par notification) et
  *   « Tout marquer comme lu ».
  * - Le compteur de la cloche se met à jour instantanément via
@@ -27,9 +28,17 @@ const PAGE_SIZE = 15;
 
 export default function NotificationsPage() {
   const { unreadCount, markRead, markAllRead } = useNotifications();
+  const { user } = useAuth();
   const t = useDashT();
   const { lang } = useI18n();
   const locale = localeFor(lang);
+  const isBusiness = user?.account_type === 'business';
+
+  /** Compte personnel : pas de filtre « Business » (approbations / équipe, etc.). */
+  const filterTypes = useMemo(
+    () => (isBusiness ? NOTIFICATION_TYPES : NOTIFICATION_TYPES.filter((type) => type !== 'business')),
+    [isBusiness],
+  );
 
   const [filter, setFilter] = useState<Filter>('all');
   const [items, setItems] = useState<ApiNotification[]>([]);
@@ -40,6 +49,10 @@ export default function NotificationsPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [markingAll, setMarkingAll] = useState(false);
+
+  useEffect(() => {
+    if (filter === 'business' && !isBusiness) setFilter('all');
+  }, [filter, isBusiness]);
 
   /** Libellé de groupe de date, localisé. */
   const groupLabel = useCallback(
@@ -207,7 +220,7 @@ export default function NotificationsPage() {
           >
             {t('notifications.all')}
           </button>
-          {NOTIFICATION_TYPES.map((type) => {
+          {filterTypes.map((type) => {
             const meta = notificationMeta(type);
             return (
               <button

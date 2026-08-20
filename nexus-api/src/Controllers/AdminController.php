@@ -20,6 +20,7 @@ use Nexus\Execution\PlatformRole;
  */
 final class AdminController
 {
+    private const EMPLOYEE_INVITE_TTL = 1800;
     /** Rôles internes autorisés à être attribués à un employé. */
     private const ALLOWED_EMPLOYEE_ROLES = [
         'operations_manager',
@@ -65,14 +66,13 @@ final class AdminController
 
         $stmt = $pdo->query(
             'SELECT e.id, e.user_id, u.full_name, u.email, u.status AS user_status,
-                    e.department, e.role, e.permissions, e.status, e.last_login_at, e.created_at
+                    e.department, u.platform_role AS role, e.status, e.last_login_at, e.created_at
              FROM employees e
              JOIN users u ON u.id = e.user_id
              ORDER BY e.created_at DESC'
         );
         $rows = array_map(static function (array $r): array {
-            $perms = $r['permissions'] !== null ? json_decode((string) $r['permissions'], true) : null;
-            $r['permissions'] = is_array($perms) ? $perms : null;
+            $r['authorization_model'] = 'platform_role';
             return $r;
         }, $stmt->fetchAll());
 
@@ -83,7 +83,9 @@ final class AdminController
      * POST /api/control/employees — crée un employé interne.
      *
      * Workflow : Super Admin → créé l'employé (lien vers un compte users) →
-     * attribue role/department/permissions. Le mot de passe n'est jamais
+     * attribue role/department. L'autorisation est exclusivement dérivée de
+     * users.platform_role ; employees.permissions est un champ historique
+     * non lu et non écrit. Le mot de passe n'est jamais
      * transmis ici : l'utilisateur est créé via le flux standard d'activation.
      */
     public static function createEmployee(Request $request): void
@@ -95,7 +97,6 @@ final class AdminController
         $email = strtolower(trim((string) $request->input('email', '')));
         $role = (string) $request->input('role', 'operations_manager');
         $department = trim((string) $request->input('department', ''));
-        $permissions = $request->input('permissions');
 
         if ($fullName === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             Response::badRequest('Nom et email valide requis.');
@@ -129,19 +130,36 @@ final class AdminController
                 $uid = (int) $pdo->lastInsertId();
             } else {
                 $uid = (int) $uid;
+                $existing = $pdo->prepare(
+                    'SELECT platform_role FROM users WHERE id = :id LIMIT 1'
+                );
+                $existing->execute(['id' => $uid]);
+                $currentRole = (string) ($existing->fetchColumn() ?: 'user');
+                // Refus : promouvoir silencieusement un client (ou changer un
+                // employé existant) via createEmployee. Création = nouvel
+                // utilisateur uniquement ; promotion = flux dédié.
+                if ($currentRole === 'user' || $currentRole === '') {
+                    throw new \RuntimeException(
+                        'EMPLOYEE_PROMOTE_FORBIDDEN: un compte client existant ne peut pas être promu via createEmployee.'
+                    );
+                }
+                if ($role === 'superadmin' && $currentRole !== 'superadmin') {
+                    throw new \RuntimeException(
+                        'EMPLOYEE_SUPERADMIN_FORBIDDEN: l\'attribution de superadmin exige un flux dédié.'
+                    );
+                }
                 $pdo->prepare('UPDATE users SET platform_role = :role WHERE id = :id')
                     ->execute(['role' => $role, 'id' => $uid]);
             }
 
             $stmt = $pdo->prepare(
                 'INSERT INTO employees (user_id, department, role, permissions, status)
-                 VALUES (:user_id, :department, :role, :permissions, :status)'
+                 VALUES (:user_id, :department, :role, NULL, :status)'
             );
             $stmt->execute([
                 'user_id'     => $uid,
                 'department'  => $department !== '' ? $department : null,
                 'role'        => $role,
-                'permissions' => is_array($permissions) ? json_encode($permissions) : null,
                 'status'      => 'invited',
             ]);
             $employeeId = (int) $pdo->lastInsertId();
@@ -152,6 +170,17 @@ final class AdminController
 
             $pdo->commit();
             Response::success(['id' => $employeeId, 'user_id' => $uid, 'status' => 'invited'], 201);
+        } catch (\RuntimeException $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            if (str_starts_with($e->getMessage(), 'EMPLOYEE_PROMOTE_FORBIDDEN')) {
+                Response::conflict('Impossible de promouvoir un compte client existant via createEmployee. Créez un nouvel email employé.');
+            }
+            if (str_starts_with($e->getMessage(), 'EMPLOYEE_SUPERADMIN_FORBIDDEN')) {
+                Response::forbidden('Attribution de superadmin refusée via createEmployee.');
+            }
+            throw $e;
         } catch (\PDOException $e) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
@@ -161,6 +190,74 @@ final class AdminController
             }
             throw $e;
         }
+    }
+
+    /**
+     * POST /api/control/employees/{id}/invite — génère un lien d'activation.
+     *
+     * Le secret brut n'est jamais persisté. Il est retourné uniquement en
+     * développement afin de permettre le parcours sans service de messagerie;
+     * en production il doit être remis par le canal d'invitation configuré.
+     */
+    public static function inviteEmployee(Request $request): void
+    {
+        $actor = self::authorize($request);
+        $pdo = Database::getConnection();
+        $id = (int) $request->param('id', '0');
+        if ($id <= 0) {
+            Response::badRequest('Identifiant employé invalide.');
+        }
+
+        $employee = $pdo->prepare(
+            'SELECT e.user_id, e.status, u.email FROM employees e JOIN users u ON u.id = e.user_id WHERE e.id = :id LIMIT 1'
+        );
+        $employee->execute(['id' => $id]);
+        $row = $employee->fetch();
+        if ($row === false) {
+            Response::notFound('Employé introuvable.');
+        }
+        if ((string) $row['status'] === 'disabled') {
+            Response::conflict('Un employé désactivé ne peut pas être invité.');
+        }
+
+        $token = bin2hex(random_bytes(32));
+        $expires = gmdate('Y-m-d H:i:s', time() + self::EMPLOYEE_INVITE_TTL);
+        $pdo->beginTransaction();
+        try {
+            // Une seule invitation active par utilisateur : une réémission
+            // invalide de manière atomique le lien précédent.
+            $pdo->prepare('DELETE FROM password_reset_tokens WHERE user_id = :user_id')
+                ->execute(['user_id' => (int) $row['user_id']]);
+            $pdo->prepare(
+                'INSERT INTO password_reset_tokens (user_id, token_hash, expires_at, created_at)
+                 VALUES (:user_id, :token_hash, :expires_at, :created_at)'
+            )->execute([
+                'user_id' => (int) $row['user_id'],
+                'token_hash' => hash('sha256', $token),
+                'expires_at' => $expires,
+                'created_at' => gmdate('Y-m-d H:i:s'),
+            ]);
+            self::audit($pdo, (int) $actor['id'], 'EMPLOYEE_INVITED', 'employees', $id, [
+                'user_id' => (int) $row['user_id'],
+                'email' => (string) $row['email'],
+                'expires_at' => $expires,
+            ]);
+            $pdo->commit();
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+
+        $isDevelopment = defined('APP_ENV') && APP_ENV === 'development';
+        Response::success([
+            'employee_id' => $id,
+            'expires_in' => self::EMPLOYEE_INVITE_TTL,
+            'reset_token' => $isDevelopment ? $token : null,
+            'reset_url' => $isDevelopment ? '/forgot-password?token=' . $token : null,
+            'delivery' => $isDevelopment ? 'DEVELOPMENT_MANUAL_DELIVERY' : 'PENDING_EMAIL_DELIVERY',
+        ]);
     }
 
     /** PATCH /api/control/employees/{id}/status — active/désactive un employé. */
@@ -192,7 +289,7 @@ final class AdminController
         Response::success(['id' => $id, 'status' => $status]);
     }
 
-    /** PUT /api/control/employees/{id} — met à jour rôle/département/permissions. */
+    /** PUT /api/control/employees/{id} — met à jour rôle/département. */
     public static function updateEmployee(Request $request): void
     {
         $user = self::authorize($request);
@@ -201,7 +298,6 @@ final class AdminController
 
         $role = (string) $request->input('role', '');
         $department = $request->input('department');
-        $permissions = $request->input('permissions');
 
         $updates = [];
         $params = [':id' => $id];
@@ -217,11 +313,6 @@ final class AdminController
             $updates[] = 'department = :department';
             $params[':department'] = $department !== '' ? $department : null;
         }
-        if ($permissions !== null) {
-            $updates[] = 'permissions = :permissions';
-            $params[':permissions'] = is_array($permissions) ? json_encode($permissions) : null;
-        }
-
         if (empty($updates)) {
             Response::badRequest('Aucune modification.');
         }
@@ -601,7 +692,8 @@ final class AdminController
             ['name' => 'API REST', 'status' => 'operational', 'latency_ms' => 0],
             ['name' => 'Base de données', 'status' => $dbOk ? 'operational' : 'down', 'latency_ms' => 0],
             ['name' => 'File de transactions', 'status' => 'operational', 'latency_ms' => 0],
-            ['name' => 'KYC (SumSub)', 'status' => 'operational', 'latency_ms' => 0],
+            // Jamais « operational » sans credentials Sumsub vérifiées.
+            ['name' => 'KYC (SumSub)', 'status' => 'NOT_VERIFIED', 'latency_ms' => 0],
         ];
 
         Response::success(['services' => $services, 'db_ok' => $dbOk, 'providers' => $providers]);

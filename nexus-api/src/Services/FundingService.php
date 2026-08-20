@@ -143,7 +143,10 @@ final class FundingService
     public static function settleDeposit(string $operationId, int $userId, ?ExecutionContext $context = null): void
     {
         $pdo = Database::getConnection();
-        $pdo->beginTransaction();
+        $ownsTransaction = !$pdo->inTransaction();
+        if ($ownsTransaction) {
+            $pdo->beginTransaction();
+        }
         try {
             $stmt = $pdo->prepare('SELECT * FROM wallet_operations WHERE id = :id FOR UPDATE');
             $stmt->execute(['id' => $operationId]);
@@ -155,7 +158,9 @@ final class FundingService
                 throw new HttpException(422, "L'opération n'est pas un dépôt.", 'NOT_A_DEPOSIT');
             }
             if ($op['status'] !== 'processing') {
-                $pdo->commit(); // déjà réglé — ne jamais laisser la transaction ouverte
+                if ($ownsTransaction) {
+                    $pdo->commit();
+                }
                 return;
             }
 
@@ -186,9 +191,11 @@ final class FundingService
             );
             $updOp->execute(['id' => $operationId]);
 
-            $pdo->commit();
+            if ($ownsTransaction) {
+                $pdo->commit();
+            }
         } catch (Throwable $e) {
-            if ($pdo->inTransaction()) {
+            if ($ownsTransaction && $pdo->inTransaction()) {
                 $pdo->rollBack();
             }
             throw $e;
