@@ -19,110 +19,13 @@ if ! command -v composer >/dev/null 2>&1; then
   rm -f /tmp/composer-setup.php
 fi
 
-echo "==> Configure MySQL for container/FUSE filesystems"
-# Cloud Agent VMs back /var/lib/mysql with a container/FUSE filesystem that does
-# not support Linux native AIO or O_DIRECT. Without this, InnoDB aborts startup
-# with "Operating system error number 22 ... Invalid argument". Simulated AIO +
-# buffered fsync writes are compatible everywhere (and fine for a dev DB).
-sudo tee /etc/mysql/mysql.conf.d/zz-cloud-agent.cnf >/dev/null <<'CNF'
-[mysqld]
-innodb_use_native_aio = 0
-innodb_flush_method = fsync
-CNF
-
-echo "==> Start MySQL and wait for readiness"
-# The SysV init script only pings for ~30s and can time out on cold snapshot
-# disk I/O, so poll for readiness ourselves and re-issue start across attempts.
-sudo mkdir -p /var/run/mysqld
-sudo chown mysql:mysql /var/run/mysqld 2>/dev/null || true
-
-try_start_mysql() {
-  local attempts="${1:-4}"
-  for attempt in $(seq 1 "$attempts"); do
-    sudo service mysql start >/dev/null 2>&1 || true
-    for _ in $(seq 1 30); do
-      if sudo mysqladmin ping --silent 2>/dev/null; then
-        return 0
-      fi
-      sleep 1
-    done
-    echo "    MySQL not ready after attempt ${attempt}; retrying..."
-  done
-  return 1
-}
-
-if ! try_start_mysql 2; then
-  # A data directory carried over in a snapshot is created on a raw disk and can
-  # be unreadable on the Cloud Agent build pod's container/FUSE filesystem
-  # (InnoDB aborts with "Operating system error number 22 ... Invalid argument").
-  # Reinitialise a fresh data directory in place — this is a dev database with no
-  # durable data, and the schema is rebuilt below.
-  echo "==> MySQL would not start from the existing data dir; reinitialising fresh"
-  sudo service mysql stop >/dev/null 2>&1 || true
-  sudo pkill -9 -x mysqld 2>/dev/null || true
-  sleep 2
-  sudo rm -rf /var/lib/mysql
-  sudo mkdir -p /var/lib/mysql /var/run/mysqld
-  sudo chown -R mysql:mysql /var/lib/mysql /var/run/mysqld
-  sudo mysqld --initialize-insecure --user=mysql --datadir=/var/lib/mysql
-  if ! try_start_mysql 4; then
-    echo "MySQL did not become ready even after reinitialising." >&2
-    sudo tail -n 40 /var/log/mysql/error.log 2>/dev/null || true
-    exit 1
-  fi
-fi
-
-echo "==> Restore Debian maintenance account (needed after a fresh initialise)"
-# The SysV init script stops/pings MySQL as debian-sys-maint using the password
-# in /etc/mysql/debian.cnf. A fresh --initialize does not create that account,
-# so recreate it to match, keeping service stop/start and logrotate working.
-DEBIAN_PW=$(sudo awk -F' *= *' '/^password/{print $2; exit}' /etc/mysql/debian.cnf 2>/dev/null || true)
-if [ -n "${DEBIAN_PW:-}" ]; then
-  sudo mysql <<SQL || true
-CREATE USER IF NOT EXISTS 'debian-sys-maint'@'localhost' IDENTIFIED WITH mysql_native_password BY '${DEBIAN_PW}';
-ALTER USER 'debian-sys-maint'@'localhost' IDENTIFIED WITH mysql_native_password BY '${DEBIAN_PW}';
-GRANT ALL PRIVILEGES ON *.* TO 'debian-sys-maint'@'localhost' WITH GRANT OPTION;
-FLUSH PRIVILEGES;
-SQL
-fi
-
-echo "==> Configure MySQL users (dev defaults: root/empty + nexus/nexus_dev_pw)"
-# root over TCP resolves to root@localhost via reverse DNS; give both an empty
-# native password so the dev-default (XAMPP-style) config connects, and add the
-# documented application user for the canonical migrate.sh path.
-sudo mysql <<'SQL'
-ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '';
-CREATE USER IF NOT EXISTS 'root'@'127.0.0.1' IDENTIFIED WITH mysql_native_password BY '';
-GRANT ALL PRIVILEGES ON *.* TO 'root'@'127.0.0.1' WITH GRANT OPTION;
-CREATE USER IF NOT EXISTS 'nexus'@'127.0.0.1' IDENTIFIED WITH mysql_native_password BY 'nexus_dev_pw';
-GRANT ALL PRIVILEGES ON *.* TO 'nexus'@'127.0.0.1' WITH GRANT OPTION;
-CREATE USER IF NOT EXISTS 'nexus'@'localhost' IDENTIFIED WITH mysql_native_password BY 'nexus_dev_pw';
-GRANT ALL PRIVILEGES ON *.* TO 'nexus'@'localhost' WITH GRANT OPTION;
-CREATE DATABASE IF NOT EXISTS nexus CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-FLUSH PRIVILEGES;
-SQL
-
 echo "==> Composer dependencies (nexus-api)"
 ( cd "$ROOT/nexus-api" && composer install --no-interaction --no-progress )
 
-echo "==> Database schema (dev 'nexus' + 'nexus_test')"
-# setup_test_db.php applies schema.sql + every migration in the manifest through
-# PDO, neutralising CREATE DATABASE/USE. It is the reliable, engine-agnostic
-# installer (migrate.sh skips migrations that omit `USE nexus;`). The dev DB is
-# only (re)built when its schema is incomplete, so existing dev data survives
-# re-runs; the throwaway test DB is always rebuilt.
-cd "$ROOT/nexus-api"
-DEV_TABLES=$(mysql -h127.0.0.1 -uroot -sN \
-  -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='nexus'" 2>/dev/null || echo 0)
-if [ "${DEV_TABLES:-0}" -lt 27 ]; then
-  DB_HOST=127.0.0.1 DB_PORT=3306 DB_USER=root DB_PASS='' \
-    DB_TEST_NAME=nexus DB_NAME=nexus php scripts/setup_test_db.php
-else
-  echo "    dev 'nexus' already has ${DEV_TABLES} tables — skipping rebuild."
-fi
-DB_HOST=127.0.0.1 DB_PORT=3306 DB_USER=root DB_PASS='' \
-  DB_TEST_NAME=nexus_test php scripts/setup_test_db.php
-cd "$ROOT"
+echo "==> MySQL + database schema"
+# Shared with .cursor/start.sh: starts MySQL (reinitialising the data dir if a
+# snapshot-restored one is unusable on this filesystem) and builds the schema.
+bash "$ROOT/.cursor/setup-db.sh"
 
 echo "==> Node dependencies (nexus-frontend, agents)"
 ( cd "$ROOT/nexus-frontend" && npm ci )
