@@ -1,0 +1,24 @@
+{
+  "name": "Nexus Technologies",
+  "install": "bash .cursor/install.sh",
+  "start": "bash .cursor/start.sh",
+  "terminals": [
+    {
+      "name": "api",
+      "command": "cd nexus-api && php -S 0.0.0.0:8080 -t public public/router.php"
+    },
+    {
+      "name": "frontend",
+      "command": "cd nexus-frontend && npm run dev"
+    },
+    {
+      "name": "agents",
+      "command": "cd agents && export NEXUS_AGENTS_TOKEN=\"${NEXUS_AGENTS_TOKEN:-$(openssl rand -hex 32)}\" && npm run dev"
+    }
+  ],
+  "ports": [
+    { "name": "API PHP", "port": 8080 },
+    { "name": "Frontend Vite", "port": 5173 },
+    { "name": "Agents", "port": 3001 }
+  ]
+}
