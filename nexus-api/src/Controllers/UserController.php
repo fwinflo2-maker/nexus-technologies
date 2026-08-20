@@ -79,8 +79,12 @@ final class UserController
             }
 
             if ($countryOfResidence !== '') {
+                $cc = strtoupper(trim($countryOfResidence));
+                if (strlen($cc) !== 2 || !preg_match('/^[A-Z]{2}$/', $cc)) {
+                    Response::badRequest('Le pays de résidence doit être un code ISO-2 (ex. FR, CG).');
+                }
                 $updates[] = 'country_of_residence = :country_of_residence';
-                $params[':country_of_residence'] = $countryOfResidence;
+                $params[':country_of_residence'] = $cc;
                 $changedFields[] = 'country_of_residence';
             }
 

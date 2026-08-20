@@ -2,13 +2,18 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   apiFundingProposals,
   apiFundingCollect,
+  apiGetUserProfile,
   type FundingProposal,
 } from '../../api/client';
 import { CurrencyLogo } from './CurrencyLogo';
 import { useDashT } from '../../data/dashboard-i18n';
 import TechLoader from '../anim/TechLoader';
 import { useAuth } from '../../context/AuthContext';
-import { depositCurrenciesForCountry, paymentModesForCountry } from '../../data/payment-modes';
+import {
+  depositCurrenciesForCountry,
+  paymentModesForCountry,
+  splitDepositCurrencies,
+} from '../../data/payment-modes';
 
 type Step = 'amount' | 'providers' | 'confirm';
 
@@ -16,10 +21,8 @@ export interface AddFundsModalProps {
   open: boolean;
   onClose: () => void;
   onSuccess?: (currency: string) => void;
-  /** Préremplissage (ex. depuis Envoyer). */
   initialCurrency?: string;
   initialAmount?: string;
-  /** Ouvre directement sur la liste providers. */
   startAtProviders?: boolean;
 }
 
@@ -42,11 +45,7 @@ function pickAllowedCurrency(preferred: string | undefined, allowed: string[], f
   return allowed[0] ?? 'EUR';
 }
 
-/**
- * Modal Ajouter des fonds — 3 étapes :
- * montant/devise → propositions providers (pays compte) → confirmation.
- * Les devises affichées dépendent du pays d’enregistrement (ex. FR → pas de XAF/XOF).
- */
+/** Modal Ajouter des fonds — devise bornée au pays d’enregistrement. */
 export default function AddFundsModal({
   open,
   onClose,
@@ -56,19 +55,21 @@ export default function AddFundsModal({
   startAtProviders = false,
 }: AddFundsModalProps) {
   const t = useDashT();
-  const { user } = useAuth();
-  const regCountry = (user?.country_of_residence ?? '').toUpperCase();
-  const allowedCurrencies = useMemo(
-    () => depositCurrenciesForCountry(regCountry),
-    [regCountry],
-  );
-  const countryDefaultCur = paymentModesForCountry(regCountry)?.default_currency
-    ?? allowedCurrencies[0]
+  const { user, refreshSession } = useAuth();
+  const sessionCountry = (user?.country_of_residence ?? '').toUpperCase();
+
+  const [regCountry, setRegCountry] = useState(sessionCountry);
+  const [resolvingCountry, setResolvingCountry] = useState(false);
+
+  const localAllowed = useMemo(() => depositCurrenciesForCountry(regCountry), [regCountry]);
+  const localDefault = paymentModesForCountry(regCountry)?.default_currency
+    ?? localAllowed[0]
     ?? 'EUR';
 
-  const [step, setStep] = useState<Step>(startAtProviders ? 'providers' : 'amount');
+  const [allowedCurrencies, setAllowedCurrencies] = useState<string[]>(localAllowed);
+  const [step, setStep] = useState<Step>('amount');
   const [currency, setCurrency] = useState(() =>
-    pickAllowedCurrency(initialCurrency, allowedCurrencies, countryDefaultCur)
+    pickAllowedCurrency(initialCurrency, localAllowed, localDefault)
   );
   const [amount, setAmount] = useState(initialAmount);
   const [proposals, setProposals] = useState<FundingProposal[]>([]);
@@ -81,25 +82,74 @@ export default function AddFundsModal({
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    const allowed = depositCurrenciesForCountry(regCountry);
-    const fallback = paymentModesForCountry(regCountry)?.default_currency ?? allowed[0] ?? 'EUR';
-    setCurrency(pickAllowedCurrency(initialCurrency, allowed, fallback));
-    setAmount(initialAmount);
-    setStep(startAtProviders ? 'providers' : 'amount');
-    setSelected(null);
-    setReference('');
-    setError(null);
-    setOk(null);
-    setCountry(regCountry || null);
-  }, [open, initialCurrency, initialAmount, startAtProviders, regCountry]);
+  const { fiat, crypto } = useMemo(
+    () => splitDepositCurrencies(allowedCurrencies),
+    [allowedCurrencies],
+  );
 
   useEffect(() => {
-    if (!allowedCurrencies.includes(currency)) {
-      setCurrency(countryDefaultCur);
+    if (!open) return;
+    let cancelled = false;
+
+    const applyCountry = (cc: string) => {
+      const code = cc.trim().toUpperCase();
+      if (code.length !== 2) return;
+      setRegCountry(code);
+      const allowed = depositCurrenciesForCountry(code);
+      const fallback = paymentModesForCountry(code)?.default_currency ?? allowed[0] ?? 'EUR';
+      setAllowedCurrencies(allowed);
+      setCurrency(pickAllowedCurrency(initialCurrency, allowed, fallback));
+      setCountry(code);
+    };
+
+    const boot = async () => {
+      setResolvingCountry(true);
+      setAmount(initialAmount);
+      setSelected(null);
+      setReference('');
+      setError(null);
+      setOk(null);
+      setStep(
+        startAtProviders && initialCurrency && depositCurrenciesForCountry(sessionCountry).includes(initialCurrency)
+          ? 'providers'
+          : 'amount',
+      );
+
+      if (sessionCountry.length === 2) {
+        applyCountry(sessionCountry);
+        setResolvingCountry(false);
+        return;
+      }
+
+      try {
+        await refreshSession();
+      } catch {
+        /* fallback profil */
+      }
+      if (cancelled) return;
+
+      const profile = await apiGetUserProfile();
+      if (cancelled) return;
+      const fromProfile = (profile.data?.user?.country_of_residence ?? '').toUpperCase();
+      if (fromProfile.length === 2) {
+        applyCountry(fromProfile);
+      } else {
+        setRegCountry('');
+        setCountry(null);
+        setAllowedCurrencies([]);
+      }
+      setResolvingCountry(false);
+    };
+
+    void boot();
+    return () => { cancelled = true; };
+  }, [open, initialCurrency, initialAmount, startAtProviders, sessionCountry, refreshSession]);
+
+  useEffect(() => {
+    if (allowedCurrencies.length > 0 && !allowedCurrencies.includes(currency)) {
+      setCurrency(localDefault);
     }
-  }, [allowedCurrencies, currency, countryDefaultCur]);
+  }, [allowedCurrencies, currency, localDefault]);
 
   const loadProposals = useCallback(async (cur: string) => {
     setLoadingList(true);
@@ -111,26 +161,36 @@ export default function AddFundsModal({
       setProposals([]);
       return;
     }
-    setCountry(res.data.country);
+    if (res.data.country) {
+      setCountry(res.data.country);
+      setRegCountry(res.data.country);
+    }
     setListMessage(res.data.message);
     setProposals(res.data.proposals);
+    if (res.data.deposit_currencies?.length) {
+      setAllowedCurrencies(res.data.deposit_currencies);
+    }
   }, [t]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || resolvingCountry) return;
     if (step === 'providers' || step === 'confirm') {
       loadProposals(currency);
     }
-  }, [open, step, currency, loadProposals]);
+  }, [open, step, currency, loadProposals, resolvingCountry]);
 
   if (!open) return null;
 
   const goProviders = () => {
-    if (!amount || Number(amount) <= 0) {
-      setError(t('wallet.fund.invalidAmount'));
+    if (!regCountry || regCountry.length !== 2) {
+      setError(t('wallet.fund.noCountry'));
       return;
     }
-    if (!allowedCurrencies.includes(currency)) {
+    if (!currency || !allowedCurrencies.includes(currency)) {
+      setError(t('wallet.fund.pickCurrency'));
+      return;
+    }
+    if (!amount || Number(amount) <= 0) {
       setError(t('wallet.fund.invalidAmount'));
       return;
     }
@@ -171,6 +231,34 @@ export default function AddFundsModal({
     setTimeout(() => onClose(), 1200);
   };
 
+  const renderCurrencyGroup = (label: string, codes: string[]) => {
+    if (codes.length === 0) return null;
+    return (
+      <div style={{ marginBottom: 12 }}>
+        <div style={{
+          fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.08em',
+          textTransform: 'uppercase', marginBottom: 6, fontFamily: 'var(--font-mono)',
+        }}>
+          {label}
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {codes.map((code) => (
+            <button
+              key={code}
+              type="button"
+              className={`pill ${currency === code ? 'p-c' : 'p'}`}
+              style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              onClick={() => { setCurrency(code); setError(null); }}
+            >
+              <CurrencyLogo code={code} size={18} />
+              {code}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div
       role="dialog"
@@ -191,10 +279,9 @@ export default function AddFundsModal({
         </div>
         <p style={{ fontSize: 12, color: 'var(--text-mid)', marginBottom: 16 }}>
           {t('wallet.fund.subtitle')}
-          {regCountry ? ` (${regCountry})` : ''}
+          {regCountry ? ` · ${regCountry}` : ''}
         </p>
 
-        {/* Steps indicator */}
         <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
           {(['amount', 'providers', 'confirm'] as Step[]).map((s, i) => (
             <div
@@ -210,23 +297,22 @@ export default function AddFundsModal({
 
         {step === 'amount' && (
           <>
-            <label style={{ display: 'block', fontSize: 11, color: 'var(--text-dim)', marginBottom: 6 }}>
+            <label style={{ display: 'block', fontSize: 11, color: 'var(--text-dim)', marginBottom: 8 }}>
               {t('wallet.fund.currency')}
             </label>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-              {allowedCurrencies.map((code) => (
-                <button
-                  key={code}
-                  type="button"
-                  className={`pill ${currency === code ? 'p-c' : 'p'}`}
-                  style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                  onClick={() => setCurrency(code)}
-                >
-                  <CurrencyLogo code={code} size={18} />
-                  {code}
-                </button>
-              ))}
-            </div>
+            {resolvingCountry ? (
+              <div style={{ padding: 16, textAlign: 'center', marginBottom: 14 }}><TechLoader size="sm" /></div>
+            ) : !regCountry || regCountry.length !== 2 ? (
+              <div className="pill p-g" style={{ marginBottom: 14, display: 'block', width: 'fit-content' }}>
+                {t('wallet.fund.noCountry')}
+              </div>
+            ) : (
+              <>
+                {renderCurrencyGroup(t('wallet.fund.fiat'), fiat)}
+                {renderCurrencyGroup(t('wallet.fund.crypto'), crypto)}
+              </>
+            )}
+
             <label style={{ display: 'block', fontSize: 11, color: 'var(--text-dim)', marginBottom: 6 }}>
               {t('wallet.fund.amount')}
             </label>
@@ -238,10 +324,18 @@ export default function AddFundsModal({
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               style={{ width: '100%', marginBottom: 14 }}
+              disabled={!regCountry || regCountry.length !== 2}
             />
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
               <button type="button" className="btn btn-ghost" onClick={onClose}>{t('wallet.tab.close')}</button>
-              <button type="button" className="btn btn-cyan" onClick={goProviders}>{t('wallet.fund.nextProviders')}</button>
+              <button
+                type="button"
+                className="btn btn-cyan"
+                onClick={goProviders}
+                disabled={!regCountry || regCountry.length !== 2 || resolvingCountry}
+              >
+                {t('wallet.fund.nextProviders')}
+              </button>
             </div>
           </>
         )}

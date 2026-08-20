@@ -125,4 +125,23 @@ final class FundingProposalServiceTest extends TestCase
         $this->assertNotContains('XOF', $currencies);
         $this->assertTrue(FundingProposalService::isDepositCurrencyAllowed('CG', 'XAF'));
     }
+
+    public function test_proposals_filtrent_crypto_vs_fiat(): void
+    {
+        $eur = FundingProposalService::listForUser(['id' => 1, 'country_of_residence' => 'FR'], 'EUR');
+        $this->assertContains('EUR', $eur['deposit_currencies']);
+        $this->assertSame('EUR', $eur['default_currency']);
+        foreach ($eur['proposals'] as $p) {
+            $this->assertNotSame('crypto', $p['method']);
+        }
+
+        $usdt = FundingProposalService::listForUser(['id' => 1, 'country_of_residence' => 'FR'], 'USDT');
+        foreach ($usdt['proposals'] as $p) {
+            $this->assertSame('crypto', $p['method']);
+        }
+
+        $bad = FundingProposalService::listForUser(['id' => 1, 'country_of_residence' => 'FR'], 'XAF');
+        $this->assertSame([], $bad['proposals']);
+        $this->assertNotNull($bad['message']);
+    }
 }

@@ -79,6 +79,21 @@ export function depositCurrenciesForCountry(country: string): string[] {
   return [...new Set([...fiat, ...CRYPTO_DEPOSIT])];
 }
 
+export function isCryptoDepositCurrency(code: string): boolean {
+  return (CRYPTO_DEPOSIT as readonly string[]).includes(code.toUpperCase());
+}
+
+/** Sépare fiat / crypto pour l’UI de recharge. */
+export function splitDepositCurrencies(currencies: string[]): { fiat: string[]; crypto: string[] } {
+  const fiat: string[] = [];
+  const crypto: string[] = [];
+  for (const c of currencies) {
+    if (isCryptoDepositCurrency(c)) crypto.push(c);
+    else fiat.push(c);
+  }
+  return { fiat, crypto };
+}
+
 /** Calcule les modes autorisés pour un pays (sans appel API). */
 export function paymentModesForCountry(country: string): LocalPaymentModes | null {
   const cc = country.trim().toUpperCase();

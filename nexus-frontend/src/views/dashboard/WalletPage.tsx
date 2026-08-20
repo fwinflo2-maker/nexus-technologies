@@ -12,7 +12,6 @@ import {
   type WalletTx,
 } from '../../api/client';
 import AccountsPanel from './AccountsPanel';
-import PendingHolds from '../../components/dashboard/PendingHolds';
 import AnimatedCounter from '../../components/AnimatedCounter';
 import EmptyState from '../../components/EmptyState';
 import { useI18n } from '../../context/I18nContext';
@@ -342,8 +341,6 @@ export default function WalletPage() {
 
       {tab === 'devises' && (
         <div className="animate-up delay-2">
-          {/* ─── Réservations en cours (holds pending) ─── */}
-          <PendingHolds />
           {/* Section : soldes par devise + ajout de devise */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
             <div>

@@ -208,6 +208,8 @@ final class FundingProposalService
      * @return array{
      *   country: string|null,
      *   currency_requested: string|null,
+     *   default_currency: string|null,
+     *   deposit_currencies: list<string>,
      *   sandbox: bool,
      *   message: string|null,
      *   proposals: list<array<string, mixed>>
@@ -223,24 +225,60 @@ final class FundingProposalService
 
         if ($country === null) {
             return [
-                'country'            => null,
-                'currency_requested' => $currency,
-                'sandbox'            => $sandbox,
-                'message'            => 'Complétez le pays d’enregistrement (KYC) pour voir les moyens de dépôt.',
-                'proposals'          => [],
+                'country'             => null,
+                'currency_requested'  => $currency,
+                'default_currency'    => null,
+                'deposit_currencies'  => [],
+                'sandbox'             => $sandbox,
+                'message'             => 'Complétez le pays d’enregistrement (KYC) pour voir les moyens de dépôt.',
+                'proposals'           => [],
+            ];
+        }
+
+        $depositCurrencies = self::depositCurrenciesForCountry($country);
+        $defaultCurrency   = self::COUNTRY_CURRENCY[$country]
+            ?? (in_array($country, self::EU_COUNTRIES, true) ? 'EUR' : 'USD');
+
+        if ($currency !== null && !self::isDepositCurrencyAllowed($country, $currency)) {
+            return [
+                'country'             => $country,
+                'currency_requested'  => $currency,
+                'default_currency'    => $defaultCurrency,
+                'deposit_currencies'  => $depositCurrencies,
+                'sandbox'             => $sandbox,
+                'message'             => sprintf(
+                    'La devise %s n’est pas disponible pour un dépôt depuis %s.',
+                    $currency,
+                    $country
+                ),
+                'proposals'           => [],
             ];
         }
 
         $proposals = self::buildProposalsForCountry($country, $currency, $sandbox);
 
+        // Fiat → rails bancaires / MoMo / carte ; crypto → rails crypto uniquement.
+        if ($currency !== null) {
+            $wantCrypto = in_array($currency, self::CRYPTO_DEPOSIT, true);
+            $proposals = array_values(array_filter(
+                $proposals,
+                static function (array $p) use ($wantCrypto): bool {
+                    $method = (string) ($p['method'] ?? '');
+                    return $wantCrypto ? $method === 'crypto' : $method !== 'crypto';
+                }
+            ));
+        }
+
         return [
-            'country'            => $country,
-            'currency_requested' => $currency,
-            'sandbox'            => $sandbox,
-            'message'            => count($proposals) === 0
+            'country'             => $country,
+            'currency_requested'  => $currency,
+            'default_currency'    => $defaultCurrency,
+            'deposit_currencies'  => $depositCurrencies,
+            'sandbox'             => $sandbox,
+            'message'             => count($proposals) === 0
                 ? sprintf('Aucun rail de dépôt NEXUS n’est disponible pour %s parmi vos providers.', $country)
                 : null,
-            'proposals'          => $proposals,
+            'proposals'           => $proposals,
         ];
     }
 

@@ -15,6 +15,7 @@ use Nexus\Controllers\AuthController;
 use Nexus\Controllers\BeneficiaryController;
 use Nexus\Controllers\BusinessController;
 use Nexus\Controllers\DashboardController;
+use Nexus\Controllers\FundingController;
 use Nexus\Controllers\IntentController;
 use Nexus\Controllers\ControlCenterController;
 use Nexus\Controllers\MaintenanceController;
@@ -129,6 +130,13 @@ $router->post('/notifications/read-all', [NotificationController::class, 'readAl
 $router->get('/wallets', [WalletController::class, 'index']);
 $router->get('/wallets/rates', [WalletController::class, 'rates']);
 $router->get('/wallets/{currency}/transactions', [WalletController::class, 'transactions']);
+$router->post('/wallets/topup', [WalletController::class, 'topUp']);
+
+// funding : webhook public HMAC + routes authentifiées (proposals / collect).
+$router->post('/funding/deposit', [FundingController::class, 'deposit']);
+$router->get('/funding/proposals', [FundingController::class, 'proposals']);
+$router->get('/funding/payment-methods', [FundingController::class, 'paymentMethods']);
+$router->post('/funding/collect', [FundingController::class, 'collect']);
 
 // --- Wallet : Hold Lifecycle (protégé) ---------------------------------------
 $router->get('/wallets/holds', [WalletController::class, 'pendingHolds']);

@@ -1030,6 +1030,95 @@ export async function apiNotificationsReadAll(): Promise<ApiResponse<{ updated: 
   return request<{ updated: number; unread_count: number }>('POST', '/notifications/read-all');
 }
 
+// --- Funding (Ajouter des fonds) --------------------------------------------
+
+export type FundingMethod = 'mobile_money' | 'bank' | 'card' | 'crypto' | string;
+
+export interface FundingProposal {
+  id: string;
+  provider_slug: string;
+  method: FundingMethod;
+  label: string;
+  operator: string | null;
+  local_currency: string;
+  wallet_currency: string | null;
+  estimated_fee_pct: number;
+  eta_minutes: number;
+  sandbox: boolean;
+  requires_reference: boolean;
+}
+
+export interface FundingProposalsData {
+  country: string | null;
+  currency_requested: string | null;
+  default_currency: string | null;
+  deposit_currencies: string[];
+  sandbox: boolean;
+  message: string | null;
+  proposals: FundingProposal[];
+}
+
+export interface FundingCollectData {
+  collect: {
+    operation_id?: string;
+    status: string;
+    proposal_id: string;
+    currency: string;
+    amount: string;
+    provider?: string;
+  };
+  wallet?: WalletState | null;
+  message: string;
+}
+
+export interface PaymentMethodsData {
+  country: string | null;
+  methods: string[];
+  account_kinds: {
+    source: AccountKind[];
+    destination: AccountKind[];
+  };
+  default_currency: string;
+  has_mobile_money: boolean;
+  deposit_currencies?: string[];
+  message?: string | null;
+}
+
+/** Propositions de dépôt par pays d’enregistrement (GET /api/funding/proposals). */
+export async function apiFundingProposals(currency?: string): Promise<ApiResponse<FundingProposalsData>> {
+  const q = currency ? `?currency=${encodeURIComponent(currency)}` : '';
+  return request<FundingProposalsData>('GET', `/funding/proposals${q}`);
+}
+
+/** Modes / devises / kinds autorisés pour un pays (GET /api/funding/payment-methods). */
+export async function apiFundingPaymentMethods(country?: string): Promise<ApiResponse<PaymentMethodsData>> {
+  const q = country ? `?country=${encodeURIComponent(country)}` : '';
+  return request<PaymentMethodsData>('GET', `/funding/payment-methods${q}`);
+}
+
+/** Collecte via une proposal (POST /api/funding/collect). */
+export async function apiFundingCollect(payload: {
+  proposal_id: string;
+  currency: string;
+  amount: string;
+  account_reference?: string;
+  idempotency_key?: string;
+}): Promise<ApiResponse<FundingCollectData>> {
+  return request<FundingCollectData>('POST', '/funding/collect', payload);
+}
+
+/** Crédit sandbox immédiat (POST /api/wallets/topup) — refusé en production. */
+export async function apiWalletsTopup(payload: {
+  currency: string;
+  amount: string;
+}): Promise<ApiResponse<{
+  topup: { operation_id: string; currency: string; amount: string; status: string };
+  wallet?: WalletState | null;
+  message?: string;
+}>> {
+  return request('POST', '/wallets/topup', payload);
+}
+
 // --- Accounts (Sources & Destinations) --------------------------------------
 
 /** Liste les comptes de l'utilisateur (filtrés par rôle). */

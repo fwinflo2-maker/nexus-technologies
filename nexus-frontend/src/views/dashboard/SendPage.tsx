@@ -1233,9 +1233,9 @@ export default function SendPage() {
           const walletsRes = await apiWalletsList();
           if (walletsRes.success && walletsRes.data) setWallets(walletsRes.data.wallets);
         }}
-        initialCurrency={sourceCurrency || 'EUR'}
+        initialCurrency={sourceCurrency || undefined}
         initialAmount={amount || '100'}
-        startAtProviders={fundingType === 'provider'}
+        startAtProviders={false}
       />
     </div>
   );

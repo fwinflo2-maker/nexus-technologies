@@ -44,7 +44,8 @@ final class AuthMiddleware
 
             // Utilisateur toujours présent ?
             $stmt = $pdo->prepare(
-                'SELECT id, full_name, email, phone, account_type, platform_role, auth_provider, status, kyc_level, kyb_status, avatar, created_at
+                'SELECT id, full_name, email, phone, account_type, platform_role, auth_provider, status,
+                        kyc_level, kyb_status, avatar, country_of_residence, created_at
                  FROM users
                  WHERE id = :id
                  LIMIT 1'
@@ -62,7 +63,7 @@ final class AuthMiddleware
             return $request;
         } catch (HttpException $e) {
             throw $e;
-        } catch (Throwable $t) {
+        } catch (\Throwable $t) {
             // On lève une HttpException pour que le front controller (index.php) 
             // puisse la capturer et renvoyer une réponse JSON propre.
             throw new HttpException(500, 'Erreur technique : ' . $t->getMessage(), 'INTERNAL_SERVER_ERROR');
