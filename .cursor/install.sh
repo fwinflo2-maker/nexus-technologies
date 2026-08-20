@@ -35,23 +35,55 @@ echo "==> Start MySQL and wait for readiness"
 # disk I/O, so poll for readiness ourselves and re-issue start across attempts.
 sudo mkdir -p /var/run/mysqld
 sudo chown mysql:mysql /var/run/mysqld 2>/dev/null || true
-mysql_ready=0
-for attempt in 1 2 3 4; do
-  sudo service mysql start >/dev/null 2>&1 || true
-  for _ in $(seq 1 45); do
-    if sudo mysqladmin ping --silent 2>/dev/null; then
-      mysql_ready=1
-      break
-    fi
-    sleep 1
+
+try_start_mysql() {
+  local attempts="${1:-4}"
+  for attempt in $(seq 1 "$attempts"); do
+    sudo service mysql start >/dev/null 2>&1 || true
+    for _ in $(seq 1 30); do
+      if sudo mysqladmin ping --silent 2>/dev/null; then
+        return 0
+      fi
+      sleep 1
+    done
+    echo "    MySQL not ready after attempt ${attempt}; retrying..."
   done
-  [ "$mysql_ready" = 1 ] && break
-  echo "    MySQL not ready after attempt ${attempt}; retrying..."
-done
-if [ "$mysql_ready" != 1 ]; then
-  echo "MySQL did not become ready." >&2
-  sudo tail -n 30 /var/log/mysql/error.log 2>/dev/null || true
-  exit 1
+  return 1
+}
+
+if ! try_start_mysql 2; then
+  # A data directory carried over in a snapshot is created on a raw disk and can
+  # be unreadable on the Cloud Agent build pod's container/FUSE filesystem
+  # (InnoDB aborts with "Operating system error number 22 ... Invalid argument").
+  # Reinitialise a fresh data directory in place — this is a dev database with no
+  # durable data, and the schema is rebuilt below.
+  echo "==> MySQL would not start from the existing data dir; reinitialising fresh"
+  sudo service mysql stop >/dev/null 2>&1 || true
+  sudo pkill -9 -x mysqld 2>/dev/null || true
+  sleep 2
+  sudo rm -rf /var/lib/mysql
+  sudo mkdir -p /var/lib/mysql /var/run/mysqld
+  sudo chown -R mysql:mysql /var/lib/mysql /var/run/mysqld
+  sudo mysqld --initialize-insecure --user=mysql --datadir=/var/lib/mysql
+  if ! try_start_mysql 4; then
+    echo "MySQL did not become ready even after reinitialising." >&2
+    sudo tail -n 40 /var/log/mysql/error.log 2>/dev/null || true
+    exit 1
+  fi
+fi
+
+echo "==> Restore Debian maintenance account (needed after a fresh initialise)"
+# The SysV init script stops/pings MySQL as debian-sys-maint using the password
+# in /etc/mysql/debian.cnf. A fresh --initialize does not create that account,
+# so recreate it to match, keeping service stop/start and logrotate working.
+DEBIAN_PW=$(sudo awk -F' *= *' '/^password/{print $2; exit}' /etc/mysql/debian.cnf 2>/dev/null || true)
+if [ -n "${DEBIAN_PW:-}" ]; then
+  sudo mysql <<SQL || true
+CREATE USER IF NOT EXISTS 'debian-sys-maint'@'localhost' IDENTIFIED WITH mysql_native_password BY '${DEBIAN_PW}';
+ALTER USER 'debian-sys-maint'@'localhost' IDENTIFIED WITH mysql_native_password BY '${DEBIAN_PW}';
+GRANT ALL PRIVILEGES ON *.* TO 'debian-sys-maint'@'localhost' WITH GRANT OPTION;
+FLUSH PRIVILEGES;
+SQL
 fi
 
 echo "==> Configure MySQL users (dev defaults: root/empty + nexus/nexus_dev_pw)"
