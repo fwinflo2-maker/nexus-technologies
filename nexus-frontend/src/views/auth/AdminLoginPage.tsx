@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { apiLogin } from '../../api/client';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth, homePathForRole } from '../../context/AuthContext';
 import { ParticlesBackground } from '../../components/ParticlesBackground';
 import { EASE } from '../../components/anim/Premium';
 import './AdminLoginPage.css';
@@ -31,7 +31,7 @@ export default function AdminLoginPage() {
       if (!resp.success) { setError(resp.error ?? 'Échec de l\'authentification.'); return; }
       await refreshSession();
       // Seul le superadmin reste ici ; sinon retour au dashboard client.
-      navigate(resp.data?.user?.platform_role === 'superadmin' ? '/admin' : '/dashboard', { replace: true });
+      navigate(homePathForRole(resp.data?.user?.platform_role), { replace: true });
     } catch {
       setError('Service temporairement indisponible.');
     } finally {

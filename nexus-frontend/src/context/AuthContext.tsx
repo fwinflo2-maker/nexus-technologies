@@ -46,6 +46,13 @@ export function loginPathForLocation(pathname: string): string {
   return '/login';
 }
 
+/** Destination post-login selon le rôle plateforme. */
+export function homePathForRole(platformRole: string | undefined | null): string {
+  if (platformRole === 'superadmin') return '/admin';
+  if (platformRole && platformRole !== 'user') return '/staff';
+  return '/dashboard';
+}
+
 // ─── Provider ────────────────────────────────────────────────────────────
 
 export function AuthProvider({ children }: { children: ReactNode }) {

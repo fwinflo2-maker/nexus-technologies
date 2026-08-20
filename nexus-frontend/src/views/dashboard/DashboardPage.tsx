@@ -195,7 +195,7 @@ export default function DashboardPage({ mode }: DashboardProps) {
       message: t('dash.banner.corridor.message'),
       action: t('dash.banner.corridor.action'),
       tone: 'corridor' as const,
-      href: banner.href ?? '/wallet',
+      href: banner.href ?? '/wallet?fund=1',
     };
   })();
 
@@ -205,8 +205,10 @@ export default function DashboardPage({ mode }: DashboardProps) {
     { icon: '⇌', label: t('dash.quick.fund'), sub: t('dash.quick.fund.sub'), cls: 'ib-g', href: '/wallet?fund=1' },
     { icon: '⇄', label: t('dash.quick.convert'), sub: t('dash.quick.convert.sub'), cls: 'ib-v', href: '/convert' },
     { icon: '💳', label: t('dash.quick.cards'), sub: t('dash.quick.cards.sub'), cls: 'ib-v', href: '/cards' },
-    { icon: '👥', label: t('dash.quick.beneficiaries'), sub: t('dash.quick.beneficiaries.sub'), cls: 'ib-p', href: '/payments' },
   ];
+  if (isBiz) {
+    quickActions.push({ icon: '👥', label: t('dash.quick.beneficiaries'), sub: t('dash.quick.beneficiaries.sub'), cls: 'ib-p', href: '/beneficiaries' });
+  }
 
   if (kycPending) quickActions.push({ icon: '🛡️', label: t('dash.quick.kyc'), sub: t('dash.quick.kyc.sub'), cls: 'ib-v', href: '/kyc' });
   else if (user.account_type === 'business') quickActions.push({ icon: '🏢', label: t('dash.quick.pay'), sub: t('dash.quick.pay.sub'), cls: 'ib-v', href: '/payments' });
@@ -418,7 +420,7 @@ export default function DashboardPage({ mode }: DashboardProps) {
                 ? t('dash.rates.one', { base: rates.base, rate: rates.fx_rate_xaf.toLocaleString(locale, { maximumFractionDigits: 3 }) })
                 : t('dash.rates.unavailable')}
             </div>
-            <Link to="/wallet" className="btn btn-ghost" style={{ marginTop: 10, fontSize: 10 }}>{t('wallet.convert')}</Link>
+            <Link to="/convert" className="btn btn-ghost" style={{ marginTop: 10, fontSize: 10 }}>{t('wallet.convert')}</Link>
           </div>
         )}
 

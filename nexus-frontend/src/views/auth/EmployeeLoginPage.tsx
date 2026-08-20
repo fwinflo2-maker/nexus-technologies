@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, MotionConfig, useMotionValue, useSpring } from 'framer-motion';
 import { apiLogin } from '../../api/client';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth, homePathForRole } from '../../context/AuthContext';
 import { ParticlesBackground } from '../../components/ParticlesBackground';
 import { TiltCard, AnimatedTitle, EASE } from '../../components/anim/Premium';
 import './AdminLoginPage.css';
@@ -84,8 +84,7 @@ export default function EmployeeLoginPage() {
       const role = resp.data?.user?.platform_role;
       // Super admin → Console Admin ; personnel interne → Espace Employé ;
       // compte client → dashboard client habituel.
-      const target = role === 'superadmin' ? '/admin' : role !== 'user' ? '/staff' : '/dashboard';
-      navigate(target, { replace: true });
+      navigate(homePathForRole(role), { replace: true });
     } catch {
       setError('Service temporairement indisponible.');
     } finally {
