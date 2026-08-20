@@ -9,6 +9,7 @@ export const ADMIN_NAV = [
   { id: 'send', label: 'Envoyer', icon: '↗️' },
   { id: 'wallet', label: 'Portefeuille', icon: '💼' },
   { id: 'accounts', label: 'Comptes', icon: '👥' },
+  { id: 'employees', label: 'Employés', icon: '👔' },
   { id: 'transactions', label: 'Transactions', icon: '🔄' },
   { id: 'operations', label: 'Opérations', icon: '⚙️' },
   { id: 'treasury', label: 'Trésorerie', icon: '💰' },
@@ -76,8 +77,8 @@ export default function AdminLayout({
         </nav>
 
         <div style={{ marginTop: 'auto', padding: 16 }}>
-          <Link to="/dashboard" style={{ fontSize: 12, color: 'var(--text-dim)', textDecoration: 'none', display: 'block', padding: '6px 12px' }}>
-            ← Dashboard client
+          <Link to="/wallet" style={{ fontSize: 12, color: 'var(--text-dim)', textDecoration: 'none', display: 'block', padding: '6px 12px' }}>
+            ← Portefeuille
           </Link>
         </div>
       </aside>

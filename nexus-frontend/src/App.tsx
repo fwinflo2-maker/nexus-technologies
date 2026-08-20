@@ -34,6 +34,7 @@ import BeneficiariesPage from './views/business/BeneficiariesPage';
 import ApprovalsPage from './views/business/ApprovalsPage';
 import TeamPage from './views/business/TeamPage';
 import ReconciliationPage from './views/business/ReconciliationPage';
+import TreasuryPage from './views/business/TreasuryPage';
 import SuperAdminDashboard from './views/admin/SuperAdminDashboard';
 import { useDashT } from './data/dashboard-i18n';
 import './styles/design-system.css';
@@ -153,19 +154,15 @@ function DashboardLayout() {
             <Route path="/history" element={<><DashTopbar mode={effectiveMode} title={t('page.history')} subtitle="" /><HistoryPage /></>} />
             <Route path="/notifications" element={<><DashTopbar mode={effectiveMode} title={t('page.notifications')} subtitle="" /><NotificationsPage /></>} />
 
-            {/* Routes réservées exclusivement aux comptes Business.
-                Trésorerie & Reporting (analytics) relèvent désormais de l'admin. */}
-            <Route path="/treasury" element={<Navigate to="/dashboard" replace />} />
+            {/* Routes réservées exclusivement aux comptes Business. */}
+            <Route path="/treasury" element={<BusinessRoute><DashTopbar mode={effectiveMode} title={t('page.treasury')} subtitle="" /><TreasuryPage /></BusinessRoute>} />
             <Route path="/payments" element={<BusinessRoute><DashTopbar mode={effectiveMode} title={t('page.payments')} subtitle="" /><PaymentsPage /></BusinessRoute>} />
             <Route path="/approvals" element={<BusinessRoute><DashTopbar mode={effectiveMode} title={t('page.approvals')} subtitle="" /><ApprovalsPage /></BusinessRoute>} />
             <Route path="/beneficiaries" element={<BusinessRoute><DashTopbar mode={effectiveMode} title={t('page.beneficiaries')} subtitle="" /><BeneficiariesPage /></BusinessRoute>} />
             <Route path="/reconciliation" element={<BusinessRoute><DashTopbar mode={effectiveMode} title={t('page.reconciliation')} subtitle="" /><ReconciliationPage /></BusinessRoute>} />
             <Route path="/team" element={<BusinessRoute><DashTopbar mode={effectiveMode} title={t('page.team')} subtitle="" /><TeamPage /></BusinessRoute>} />
-            <Route path="/reporting" element={<Navigate to="/dashboard" replace />} />
 
             <Route path="/kyc" element={<><DashTopbar mode={effectiveMode} title={t('page.kyc')} subtitle="" /><KycPage /></>} />
-            {/* /providers est une fonctionnalité du Back Office : plus accessible depuis les dashboards */}
-            <Route path="/providers" element={<Navigate to="/dashboard" replace />} />
             <Route path="/agents" element={<><DashTopbar mode={effectiveMode} title={t('page.agents')} subtitle="" /><AgentsPage /></>} />
             <Route path="/settings" element={<><DashTopbar mode={effectiveMode} title={t('page.settings')} subtitle="" /><SettingsPage /></>} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
