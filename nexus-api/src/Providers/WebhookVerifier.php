@@ -71,4 +71,81 @@ final class WebhookVerifier
 
         return hash_equals($expected, strtolower($provided));
     }
+
+    /**
+     * Vérifie une signature HMAC HORODATÉE (anti-rejeu temporel).
+     *
+     * Format d'en-tête (schéma Stripe-like, propre à Nexus) :
+     *   t=<unix>,v1=<hex hmac_sha256(t . "." . payload, secret)>
+     *
+     * Plusieurs `v1` sont acceptés (rotation de secret) : une seule signature
+     * valide suffit. Le timestamp signé est comparé à l'horloge serveur avec
+     * une fenêtre de tolérance (±300 s par défaut) : une signature capturée
+     * puis rejouée plus tard est refusée (`stale_timestamp`) même si le HMAC
+     * est cryptographiquement correct.
+     *
+     * @param string   $payload          Corps brut du webhook (tel que reçu).
+     * @param string   $signatureHeader  Valeur de l'en-tête `t=...,v1=...`.
+     * @param string   $secret           Secret partagé du provider.
+     * @param int      $toleranceSeconds Fenêtre de validité (défaut 300 s).
+     * @param int|null $now              Horloge injectable pour les tests.
+     *
+     * @return array{valid:bool, reason:?string, timestamp:?int}
+     */
+    public static function verifyTimestamped(
+        string $payload,
+        string $signatureHeader,
+        string $secret,
+        int $toleranceSeconds = 300,
+        ?int $now = null
+    ): array {
+        if ($secret === '' || trim($signatureHeader) === '') {
+            return ['valid' => false, 'reason' => 'missing_signature', 'timestamp' => null];
+        }
+
+        $timestamp = null;
+        $candidates = [];
+        foreach (explode(',', $signatureHeader) as $element) {
+            $parts = explode('=', trim($element), 2);
+            if (count($parts) !== 2) {
+                continue;
+            }
+            [$k, $v] = [trim($parts[0]), trim($parts[1])];
+            if ($k === 't' && ctype_digit($v)) {
+                $timestamp = (int) $v;
+            } elseif ($k === 'v1' && $v !== '' && ctype_xdigit($v)) {
+                $candidates[] = strtolower($v);
+            }
+        }
+
+        if ($timestamp === null) {
+            return ['valid' => false, 'reason' => 'missing_timestamp', 'timestamp' => null];
+        }
+        if ($candidates === []) {
+            return ['valid' => false, 'reason' => 'missing_signature', 'timestamp' => $timestamp];
+        }
+
+        // Le HMAC couvre le timestamp : impossible de déplacer la fenêtre
+        // sans invalider la signature.
+        $expected = hash_hmac('sha256', $timestamp . '.' . $payload, $secret);
+        $signatureValid = false;
+        foreach ($candidates as $candidate) {
+            if (strlen($candidate) === strlen($expected) && hash_equals($expected, $candidate)) {
+                $signatureValid = true;
+                break;
+            }
+        }
+        if (!$signatureValid) {
+            return ['valid' => false, 'reason' => 'signature_mismatch', 'timestamp' => $timestamp];
+        }
+
+        // Fenêtre APRÈS la crypto : ne révèle jamais si un HMAC hors fenêtre
+        // aurait été correct pour un timestamp forgé non signé.
+        $clock = $now ?? time();
+        if (abs($clock - $timestamp) > max(0, $toleranceSeconds)) {
+            return ['valid' => false, 'reason' => 'stale_timestamp', 'timestamp' => $timestamp];
+        }
+
+        return ['valid' => true, 'reason' => null, 'timestamp' => $timestamp];
+    }
 }

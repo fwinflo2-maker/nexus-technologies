@@ -219,12 +219,7 @@ export default function SuperAdminDashboard() {
           {/* ═══ PROVIDERS ═══ */}
           {section === 'providers' && (
             <>
-              <Header title="Providers" desc="Réseau de providers, credentials et clés API / publiques associées." />
-              <div className="g3" style={{ marginBottom: 20 }}>
-                <Card title="Total providers" icon="🔌"><Num v={ov.providers.total} /></Card>
-                <Card title="Configurés" icon="✅"><Num v={ov.providers.configured} c="var(--green)" /></Card>
-                <Card title="Clés actives" icon="🗝️"><Num v={ov.provider_top.length} c="var(--cyan)" /></Card>
-              </div>
+              <Header title="Providers" desc="Catalogue opérationnel : configurez et testez les credentials plateforme (Stripe Issuing pour les cartes virtuelles)." />
               <ProviderKeys />
             </>
           )}

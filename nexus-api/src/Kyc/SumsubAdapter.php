@@ -49,12 +49,38 @@ final class SumsubAdapter implements KycProvider
     /** Transport HTTP injectable — permet de tester sans appel réseau réel (§34). */
     private $transport;
 
+    /** Credentials résolues via Credential Manager (null = fallback env). */
+    private ?array $managedCredentials = null;
+
+    /** Environnement forcé quand résolu via Credential Manager. */
+    private ?string $managedEnvironment = null;
+
     /**
      * @param null|callable(string,string,string,array):array{status:int,body:string} $transport
      */
     public function __construct(?callable $transport = null)
     {
         $this->transport = $transport;
+    }
+
+    /**
+     * Construit un adaptateur dont les secrets viennent UNIQUEMENT du
+     * Credential Manager (base chiffrée), jamais des variables d'env.
+     *
+     * @param null|callable(string,string,string,array):array{status:int,body:string} $transport
+     */
+    public static function fromCredentialManager(
+        \PDO $pdo,
+        string $environment,
+        mixed $unused = null,
+        ?callable $transport = null
+    ): self {
+        $env = $environment === 'production' ? 'production' : 'sandbox';
+        $creds = \Nexus\Services\ProviderCredentialService::resolvePlatform($pdo, self::SLUG, $env) ?? [];
+        $adapter = new self($transport);
+        $adapter->managedEnvironment = $env;
+        $adapter->managedCredentials = is_array($creds) ? $creds : [];
+        return $adapter;
     }
 
     public function slug(): string
@@ -64,6 +90,9 @@ final class SumsubAdapter implements KycProvider
 
     public function environment(): string
     {
+        if ($this->managedEnvironment !== null) {
+            return $this->managedEnvironment;
+        }
         $raw = strtolower(trim((string) (getenv('SUMSUB_ENVIRONMENT') ?: '')));
         return $raw === 'production' ? 'production' : 'sandbox';
     }
@@ -97,20 +126,105 @@ final class SumsubAdapter implements KycProvider
 
     private function appToken(): ?string
     {
+        if ($this->managedCredentials !== null) {
+            $v = trim((string) ($this->managedCredentials['app_token'] ?? ''));
+            return $v !== '' ? $v : null;
+        }
         $v = trim((string) (getenv('SUMSUB_APP_TOKEN') ?: ''));
         return $v !== '' ? $v : null;
     }
 
     private function secretKey(): ?string
     {
+        if ($this->managedCredentials !== null) {
+            $v = trim((string) ($this->managedCredentials['secret_key'] ?? ''));
+            return $v !== '' ? $v : null;
+        }
         $v = trim((string) (getenv('SUMSUB_SECRET_KEY') ?: ''));
         return $v !== '' ? $v : null;
     }
 
     private function webhookSecret(): ?string
     {
+        if ($this->managedCredentials !== null) {
+            $v = trim((string) ($this->managedCredentials['webhook_secret'] ?? ''));
+            return $v !== '' ? $v : null;
+        }
         $v = trim((string) (getenv('SUMSUB_WEBHOOK_SECRET') ?: ''));
         return $v !== '' ? $v : null;
+    }
+
+    /**
+     * Test de connexion authentifié (GET /resources/applicants/-;status).
+     *
+     * @return array{status:string,message?:string,tested_at?:string}
+     */
+    public function testConnection(string $environment): array
+    {
+        if (!$this->isConfigured()) {
+            return [
+                'status'  => 'PROVIDER_NOT_CONFIGURED',
+                'message' => 'Credentials Sumsub absentes pour cet environnement.',
+            ];
+        }
+
+        try {
+            $path = '/resources/applicants/-;status';
+            $encoded = '';
+            $timestamp = time();
+            $signature = $this->signRequest('GET', $path, $encoded, $timestamp);
+            $headers = [
+                'X-App-Token: ' . (string) $this->appToken(),
+                'X-App-Access-Ts: ' . $timestamp,
+                'X-App-Access-Sig: ' . $signature,
+                'Accept: application/json',
+            ];
+            $url = $this->baseUrl() . $path;
+            $response = $this->dispatch('GET', $url, $encoded, $headers);
+            $status = (int) ($response['status'] ?? 0);
+
+            if ($status === 401 || $status === 403) {
+                return ['status' => 'INVALID_CREDENTIALS', 'tested_at' => gmdate(DATE_ATOM)];
+            }
+            if ($status === 0 || $status >= 500) {
+                return ['status' => 'PROVIDER_UNAVAILABLE', 'tested_at' => gmdate(DATE_ATOM)];
+            }
+            // 200 OK ou 4xx métier (ex. 422 applicantId requis) = auth OK.
+            return [
+                'status'    => 'CONNECTION_SUCCESS',
+                'tested_at' => gmdate(DATE_ATOM),
+            ];
+        } catch (\Throwable $e) {
+            return [
+                'status'  => 'PROVIDER_UNAVAILABLE',
+                'message' => 'Sumsub injoignable.',
+            ];
+        }
+    }
+
+    /**
+     * @param list<string> $headers
+     * @return array{status:int,body:string}
+     */
+    private function dispatch(string $method, string $url, string $body, array $headers): array
+    {
+        if ($this->transport !== null) {
+            return ($this->transport)($method, $url, $body, $headers);
+        }
+        // Production : pas d'appel réel depuis testConnection sans transport
+        // injecté hors Credential Manager — curl minimal.
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_CUSTOMREQUEST  => $method,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER     => $headers,
+            CURLOPT_POSTFIELDS     => $body !== '' ? $body : null,
+            CURLOPT_TIMEOUT        => 15,
+        ]);
+        $raw = curl_exec($ch);
+        $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        return ['status' => $code, 'body' => is_string($raw) ? $raw : ''];
     }
 
     /**
@@ -298,6 +412,31 @@ final class SumsubAdapter implements KycProvider
                 ? $response['reviewDate']
                 : null,
         ];
+    }
+
+    /**
+     * Met à jour le pays dans fixedInfo Sumsub (doc officielle PATCH …/fixedInfo).
+     *
+     * Nexus stocke l'alpha-2 ; Sumsub attend l'alpha-3. Si le code est inconnu,
+     * on refuse plutôt que d'envoyer une valeur inventée.
+     *
+     * @see https://docs.sumsub.com/reference/change-provided-info-fixedinfo
+     * @see https://docs.sumsub.com/reference/change-provided-company-data
+     */
+    public function updateResidenceCountry(string $applicantId, string $countryAlpha2, bool $company): void
+    {
+        $alpha3 = CountryCodes::alpha2ToAlpha3($countryAlpha2);
+        if ($alpha3 === null) {
+            throw new RuntimeException('Code pays non convertible vers Sumsub (alpha-3).');
+        }
+
+        if ($company) {
+            $path = '/resources/applicants/' . rawurlencode($applicantId) . '/fixedInfo/companyInfo';
+        } else {
+            $path = '/resources/applicants/' . rawurlencode($applicantId) . '/fixedInfo';
+        }
+
+        $this->request('PATCH', $path, ['country' => $alpha3]);
     }
 
     /**

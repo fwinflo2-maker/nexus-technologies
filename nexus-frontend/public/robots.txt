@@ -1,0 +1,38 @@
+# Nexus Technologies — crawler policy for the SPA shell.
+# Authenticated / ops surfaces are disallowed; public marketing & legal stay indexable.
+# TODO(SEO): REPLACE_WITH_PRODUCTION_ORIGIN — set an absolute Sitemap URL at go-live
+# (same token as public/sitemap.xml), e.g. Sitemap: https://www.example.com/sitemap.xml
+
+User-agent: *
+Allow: /
+Allow: /login
+Allow: /register
+Allow: /privacy
+Allow: /terms
+Allow: /docs
+Allow: /support
+Allow: /forgot-password
+
+Disallow: /dashboard
+Disallow: /wallet
+Disallow: /send
+Disallow: /receive
+Disallow: /convert
+Disallow: /cards
+Disallow: /history
+Disallow: /notifications
+Disallow: /payments
+Disallow: /approvals
+Disallow: /beneficiaries
+Disallow: /reconciliation
+Disallow: /team
+Disallow: /kyc
+Disallow: /agents
+Disallow: /settings
+Disallow: /admin
+Disallow: /admin-login
+Disallow: /staff
+Disallow: /staff-login
+Disallow: /api/
+
+Sitemap: /sitemap.xml

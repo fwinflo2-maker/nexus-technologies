@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nexus\Tests;
 
 use Nexus\Providers\ProviderCapabilityMatrix;
+use Nexus\Providers\ProviderAuthProbe;
 use Nexus\Services\ProviderCatalog;
 use PHPUnit\Framework\TestCase;
 
@@ -23,12 +24,11 @@ final class ProviderCapabilityMatrixTest extends TestCase
         $caps = ProviderCapabilityMatrix::for('pawapay');
 
         self::assertSame(ProviderCapabilityMatrix::IMPLEMENTED, $caps['test_connection']);
-        self::assertSame(ProviderCapabilityMatrix::IMPLEMENTED, $caps['balance']);
-        self::assertSame(ProviderCapabilityMatrix::IMPLEMENTED, $caps['quote']);
+        self::assertSame(ProviderCapabilityMatrix::NOT_IMPLEMENTED, $caps['balance']);
+        self::assertSame(ProviderCapabilityMatrix::NOT_IMPLEMENTED, $caps['quote']);
         self::assertSame(ProviderCapabilityMatrix::IMPLEMENTED, $caps['payout']);
-        self::assertSame(ProviderCapabilityMatrix::IMPLEMENTED, $caps['webhook']);
+        self::assertSame(ProviderCapabilityMatrix::CONFIG_REQUIRED, $caps['webhook']);
         self::assertSame(ProviderCapabilityMatrix::IMPLEMENTED, $caps['reconciliation']);
-        // Doc pawaPay : un payout accepté est terminal — pas d'annulation.
         self::assertSame(ProviderCapabilityMatrix::NOT_SUPPORTED, $caps['refund']);
     }
 
@@ -37,8 +37,8 @@ final class ProviderCapabilityMatrixTest extends TestCase
         $caps = ProviderCapabilityMatrix::for('stripe');
 
         self::assertSame(ProviderCapabilityMatrix::IMPLEMENTED, $caps['test_connection']);
-        self::assertSame(ProviderCapabilityMatrix::IMPLEMENTED, $caps['balance']);
-        self::assertSame(ProviderCapabilityMatrix::IMPLEMENTED, $caps['webhook']);
+        self::assertSame(ProviderCapabilityMatrix::NOT_IMPLEMENTED, $caps['balance'], 'getBalance() non exposé.');
+        self::assertSame(ProviderCapabilityMatrix::CONFIG_REQUIRED, $caps['webhook'], 'Runtime = HMAC générique Nexus.');
         self::assertSame(ProviderCapabilityMatrix::NOT_IMPLEMENTED, $caps['payout'], 'Stripe Payouts non câblé.');
     }
 
@@ -46,7 +46,7 @@ final class ProviderCapabilityMatrixTest extends TestCase
     {
         $caps = ProviderCapabilityMatrix::for('sumsub');
 
-        self::assertSame(ProviderCapabilityMatrix::IMPLEMENTED, $caps['test_connection']);
+        self::assertSame(ProviderCapabilityMatrix::CONFIG_REQUIRED, $caps['test_connection']);
         self::assertSame(ProviderCapabilityMatrix::IMPLEMENTED, $caps['webhook']);
         self::assertSame(ProviderCapabilityMatrix::NOT_SUPPORTED, $caps['balance']);
         self::assertSame(ProviderCapabilityMatrix::NOT_SUPPORTED, $caps['payout']);
@@ -54,20 +54,21 @@ final class ProviderCapabilityMatrixTest extends TestCase
         self::assertSame(ProviderCapabilityMatrix::NOT_SUPPORTED, $caps['refund']);
     }
 
-    public function test_un_provider_sans_adapter_n_est_jamais_implemented(): void
+    public function test_un_provider_config_driven_n_a_pas_de_payout_invente(): void
     {
-        // dlocal est au catalogue mais n'a pas d'adaptateur réel.
         self::assertTrue(ProviderCatalog::exists('dlocal'));
 
         $caps = ProviderCapabilityMatrix::for('dlocal');
-        foreach ($caps as $capability => $status) {
-            self::assertNotSame(
-                ProviderCapabilityMatrix::IMPLEMENTED,
-                $status,
-                "dlocal.{$capability} ne doit JAMAIS être IMPLEMENTED sans adapter réel."
-            );
+        self::assertSame(
+            ProviderCapabilityMatrix::NOT_IMPLEMENTED,
+            $caps['payout'],
+            'dlocal.payout ne doit jamais être IMPLEMENTED sans adapter payout réel.'
+        );
+        // test_connection peut être IMPLEMENTED via ProviderAuthProbe (sonde HTTP).
+        if (ProviderAuthProbe::supports('dlocal')) {
+            self::assertSame(ProviderCapabilityMatrix::IMPLEMENTED, $caps['test_connection']);
+            self::assertSame(ProviderCapabilityMatrix::IMPLEMENTED, ProviderCapabilityMatrix::integrationStatus('dlocal'));
         }
-        self::assertSame(ProviderCapabilityMatrix::NOT_IMPLEMENTED, ProviderCapabilityMatrix::integrationStatus('dlocal'));
     }
 
     public function test_le_defaut_honnete_s_applique_a_tous_les_providers_du_catalogue(): void
@@ -92,17 +93,25 @@ final class ProviderCapabilityMatrixTest extends TestCase
             ProviderCapabilityMatrix::IMPLEMENTED,
             ProviderCapabilityMatrix::integrationStatus('pawapay')
         );
+        // Stripe : test_connection réel.
         self::assertSame(
             ProviderCapabilityMatrix::IMPLEMENTED,
             ProviderCapabilityMatrix::integrationStatus('stripe')
         );
+        // Sumsub : webhook KYC réel (hors catalogue paiement).
         self::assertSame(
             ProviderCapabilityMatrix::IMPLEMENTED,
             ProviderCapabilityMatrix::integrationStatus('sumsub')
         );
+        // Thunes : ConfigDriven + AuthProbe (Basic /ping) → test_connection.
+        self::assertSame(
+            ProviderCapabilityMatrix::IMPLEMENTED,
+            ProviderCapabilityMatrix::integrationStatus('thunes')
+        );
+        // Payout Thunes toujours NOT_IMPLEMENTED (pas d'adapter payout).
         self::assertSame(
             ProviderCapabilityMatrix::NOT_IMPLEMENTED,
-            ProviderCapabilityMatrix::integrationStatus('thunes')
+            ProviderCapabilityMatrix::for('thunes')['payout']
         );
     }
 }

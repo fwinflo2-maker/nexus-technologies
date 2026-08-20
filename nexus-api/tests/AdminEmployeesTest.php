@@ -90,6 +90,62 @@ final class AdminEmployeesTest extends TestCase
         return (int) $res['json']['data']['id'];
     }
 
+    public function test_client_cannot_create_employee(): void
+    {
+        $pdo = Database::getConnection();
+        $email = 'client.emp.' . (++self::$seq) . '@nexus.test';
+        $pdo->prepare(
+            "INSERT INTO users (full_name, email, password_hash, account_type, platform_role, status, kyc_level)
+             VALUES ('Client', :e, '', 'personal', 'user', 'ACTIVE', 'none')"
+        )->execute(['e' => $email]);
+        $clientId = (int) $pdo->lastInsertId();
+        $token = \Nexus\Auth\Jwt::encode(['sub' => (string) $clientId, 'email' => $email]);
+
+        $_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . $token;
+        $request = new Request([
+            'full_name' => 'Hacker',
+            'email'     => 'emp.hack.' . (++self::$seq) . '@nexus.test',
+            'role'      => 'operations_manager',
+        ]);
+        $request->setParams([]);
+        try {
+            AdminController::createEmployee($request);
+            $this->fail('Un client ne doit pas créer d\'employé.');
+        } catch (ResponseSent $e) {
+            $this->assertSame(403, $e->statusCode());
+        } catch (\Nexus\Core\HttpException $e) {
+            $this->assertSame(403, $e->statusCode());
+        } finally {
+            $pdo->prepare('DELETE FROM users WHERE id = :id')->execute(['id' => $clientId]);
+            unset($_SERVER['HTTP_AUTHORIZATION']);
+        }
+    }
+
+    public function test_create_employee_refuses_promoting_existing_client(): void
+    {
+        $pdo = Database::getConnection();
+        $email = 'client.promote.' . (++self::$seq) . '@nexus.test';
+        $pdo->prepare(
+            "INSERT INTO users (full_name, email, password_hash, account_type, platform_role, status, kyc_level)
+             VALUES ('Client Promote', :e, '', 'personal', 'user', 'ACTIVE', 'none')"
+        )->execute(['e' => $email]);
+        $clientId = (int) $pdo->lastInsertId();
+
+        $res = $this->call('createEmployee', [], [
+            'full_name'  => 'Should Fail',
+            'email'      => $email,
+            'role'       => 'operations_manager',
+            'department' => 'Operations',
+        ]);
+        $this->assertSame(409, $res['status'], 'Promotion silencieuse d\'un client refusée.');
+
+        $role = $pdo->prepare('SELECT platform_role FROM users WHERE id = :id');
+        $role->execute(['id' => $clientId]);
+        $this->assertSame('user', $role->fetchColumn(), 'platform_role client inchangé.');
+
+        $pdo->prepare('DELETE FROM users WHERE id = :id')->execute(['id' => $clientId]);
+    }
+
     public function test_create_employee_rejects_unknown_role(): void
     {
         $res = $this->call('createEmployee', [], [
@@ -196,5 +252,19 @@ final class AdminEmployeesTest extends TestCase
         $st = $pdo->prepare('SELECT platform_role FROM users WHERE id = :id');
         $st->execute(['id' => $uid]);
         $this->assertSame('treasury_manager', $st->fetchColumn());
+    }
+
+    public function test_permissions_payload_never_grants_backend_authorization(): void
+    {
+        $employeeId = $this->newEmployee('customer_support', 'Support');
+        $pdo = Database::getConnection();
+        $stmt = $pdo->prepare('SELECT user_id, permissions FROM employees WHERE id = :id');
+        $stmt->execute(['id' => $employeeId]);
+        $employee = $stmt->fetch();
+        $this->assertNull($employee['permissions'], 'Le pseudo-RBAC granulaire historique reste vide.');
+
+        $role = $pdo->prepare('SELECT platform_role FROM users WHERE id = :id');
+        $role->execute(['id' => $employee['user_id']]);
+        $this->assertSame('customer_support', $role->fetchColumn(), 'users.platform_role est l’unique autorité.');
     }
 }

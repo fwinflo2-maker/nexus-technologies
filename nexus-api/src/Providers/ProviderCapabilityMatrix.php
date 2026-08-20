@@ -52,32 +52,45 @@ final class ProviderCapabilityMatrix
      */
     private const DECLARED = [
         'pawapay' => [
-            'test_connection' => self::IMPLEMENTED,     // GET /balances réel (PawaPayAdapter)
-            'balance'         => self::IMPLEMENTED,     // getBalance() réel
-            'quote'           => self::IMPLEMENTED,     // getQuote() réel
-            'payout'          => self::IMPLEMENTED,     // createPayment() réel (ExecutionEngine)
-            'refund'          => self::NOT_SUPPORTED,   // doc : un payout accepté est terminal (cancelPayment lève)
-            'webhook'         => self::IMPLEMENTED,     // callbacks RFC-9421 + clé publique (verifyCallback)
-            'reconciliation'  => self::IMPLEMENTED,     // ProviderReconciliationService (pollable pawapay)
-            'account'         => self::CONFIG_REQUIRED, // provider_accounts (slug/env/devise)
+            // Merchant API v2 : payout + polling réellement câblés. Sans
+            // token, le runtime retourne CREDENTIALS_NOT_CONFIGURED.
+            'test_connection' => self::IMPLEMENTED,
+            'balance'         => self::NOT_IMPLEMENTED,
+            'quote'           => self::NOT_IMPLEMENTED,
+            'payout'          => self::IMPLEMENTED,
+            'refund'          => self::NOT_SUPPORTED,   // doc : payout accepté terminal
+            'webhook'         => self::CONFIG_REQUIRED, // code RFC-9421 réel ; token + signed callbacks requis
+            'reconciliation'  => self::IMPLEMENTED,     // GET /v2/payouts/{payoutId}
+            'account'         => self::CONFIG_REQUIRED,
         ],
         'stripe' => [
             'test_connection' => self::IMPLEMENTED,     // GET /v1/balance réel
-            'balance'         => self::IMPLEMENTED,     // getBalance() réel
+            'balance'         => self::NOT_IMPLEMENTED, // pas de getBalance() exposé
             'quote'           => self::NOT_IMPLEMENTED,
-            'payout'          => self::NOT_IMPLEMENTED, // Stripe Payouts non câblé
+            'payout'          => self::NOT_IMPLEMENTED,
             'refund'          => self::NOT_IMPLEMENTED,
-            'webhook'         => self::IMPLEMENTED,     // Stripe-Signature HMAC-SHA256 + tolérance timestamp
+            'webhook'         => self::CONFIG_REQUIRED, // Stripe-Signature natif ; whsec requis
             'reconciliation'  => self::NOT_IMPLEMENTED,
             'account'         => self::NOT_IMPLEMENTED,
         ],
-        'sumsub' => [
-            'test_connection' => self::IMPLEMENTED,     // GET /resources/applicants/-;status signé
-            'balance'         => self::NOT_SUPPORTED,   // provider KYC : pas de balance
+        'stripe_issuing' => [
+            // GET /v1/issuing/cardholders + POST cardholders/cards (virtual).
+            'test_connection' => self::IMPLEMENTED,
+            'balance'         => self::NOT_SUPPORTED,
             'quote'           => self::NOT_SUPPORTED,
             'payout'          => self::NOT_SUPPORTED,
             'refund'          => self::NOT_SUPPORTED,
-            'webhook'         => self::IMPLEMENTED,     // X-Payload-Digest (HMAC) + idempotence
+            'webhook'         => self::CONFIG_REQUIRED, // événements Issuing ; whsec Stripe requis
+            'reconciliation'  => self::NOT_IMPLEMENTED,
+            'account'         => self::CONFIG_REQUIRED, // cardholder Issuing
+        ],
+        'sumsub' => [
+            'test_connection' => self::CONFIG_REQUIRED, // adapter KYC réel ; hors ProviderCatalog
+            'balance'         => self::NOT_SUPPORTED,
+            'quote'           => self::NOT_SUPPORTED,
+            'payout'          => self::NOT_SUPPORTED,
+            'refund'          => self::NOT_SUPPORTED,
+            'webhook'         => self::IMPLEMENTED,     // /api/kyc/webhook + digest HMAC
             'reconciliation'  => self::NOT_SUPPORTED,
             'account'         => self::NOT_SUPPORTED,
         ],
@@ -110,6 +123,11 @@ final class ProviderCapabilityMatrix
         foreach (self::CAPABILITIES as $capability) {
             if (isset($declared[$capability])) {
                 $row[$capability] = $declared[$capability];
+                continue;
+            }
+            // Sonde HTTP réelle via ProviderAuthProbe → test_connection IMPLEMENTED.
+            if ($capability === 'test_connection' && ProviderAuthProbe::supports($slug)) {
+                $row[$capability] = self::IMPLEMENTED;
                 continue;
             }
             // Défaut honnête : jamais IMPLEMENTED pour un adaptateur générique.

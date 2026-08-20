@@ -39,15 +39,14 @@ final class RoutingOnlyImplementedProvidersTest extends TestCase
     }
 
     /**
-     * La matrice honnête : seuls pawapay (et stripe pour le test connection)
-     * ont un payout réellement implémenté. Les autres (nium, wise, …) sont
-     * NOT_IMPLEMENTED même s'ils sont configurés.
+     * La matrice honnête : pawaPay est le seul payout réellement câblé.
      */
     public function test_matrice_payout_est_la_source_de_verite(): void
     {
         self::assertSame(
             ProviderCapabilityMatrix::IMPLEMENTED,
-            ProviderCapabilityMatrix::for('pawapay')['payout']
+            ProviderCapabilityMatrix::for('pawapay')['payout'],
+            'pawaPay Merchant API v2 payout est câblé.'
         );
         foreach (['nium', 'wise', 'western_union', 'stripe'] as $slug) {
             self::assertSame(
@@ -94,7 +93,17 @@ final class RoutingOnlyImplementedProvidersTest extends TestCase
             'L\'exécution doit re-lire le rôle de l\'utilisateur.'
         );
         self::assertStringContainsString(
-            'validateOrigin($userId, $user, (string) $quote[\'origin_country\'], $isSuperAdmin)',
+            '$isSuperAdmin',
+            $src,
+            'L\'exécution doit calculer l\'exemption Super Admin.'
+        );
+        self::assertStringContainsString(
+            'validateOrigin(',
+            $src,
+            'L\'exécution doit re-valider l\'origine.'
+        );
+        self::assertMatchesRegularExpression(
+            '/validateOrigin\([\s\S]*\$isSuperAdmin/',
             $src,
             'L\'exécution doit propager $allowAny pour le Super Admin.'
         );

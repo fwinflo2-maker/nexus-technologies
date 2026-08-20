@@ -7,6 +7,8 @@ import { useAuth } from '../../context/AuthContext';
 import { useDashT } from '../../data/dashboard-i18n';
 import { AnimatedNumber, EASE, RevealGroup, HoverCard, SectionTransition } from '../../components/anim/Premium';
 import TechLoader from '../../components/anim/TechLoader';
+import Avatar from '../../components/Avatar';
+import { countries } from '../../data/countries';
 
 /** Business Dashboard — Financial Operations Console (données 100 % backend). */
 export default function BusinessDashboard() {
@@ -63,11 +65,26 @@ export default function BusinessDashboard() {
     <SectionTransition id="biz-dash">
     <div className="page">
       <motion.div className="page-header animate-up" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-        <div className="page-label">NEXUS · VOTRE ESPACE ENTREPRISE</div>
-        <div className="page-title">Tableau de bord entreprise</div>
-        <p style={{ marginTop: 10, fontSize: 13, color: 'var(--text-mid)' }}>
-          Bienvenue sur votre espace client Nexus. Gérez vos paiements, vos bénéficiaires et votre activité en toute simplicité.
-        </p>
+        <div className="card card-hi-c" style={{ padding: 18, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+          <Link to="/settings" style={{ textDecoration: 'none', flexShrink: 0 }}>
+            <Avatar avatar={user?.avatar} accountType="business" size={64} />
+          </Link>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div className="page-label">NEXUS · VOTRE ESPACE ENTREPRISE</div>
+            <div className="page-title" style={{ fontSize: 'clamp(22px, 2.8vw, 32px)' }}>
+              {user?.full_name || 'Tableau de bord entreprise'}
+            </div>
+            <p style={{ marginTop: 6, fontSize: 12, color: 'var(--text-mid)' }}>
+              {user?.country_of_residence
+                ? `Pays : ${countries.find((c) => c.code === user.country_of_residence)?.name ?? user.country_of_residence}`
+                : 'Pays de résidence non renseigné — à vérifier via Sumsub'}
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <Link to="/settings" className="btn btn-ghost" style={{ fontSize: 11 }}>Photo de profil</Link>
+            <Link to="/kyc" className="btn btn-ghost" style={{ fontSize: 11 }}>Pays via Sumsub →</Link>
+          </div>
+        </div>
       </motion.div>
 
       {/* Badge statut client */}

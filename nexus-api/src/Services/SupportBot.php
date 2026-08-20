@@ -121,18 +121,22 @@ final class SupportBot
     {
         $text = mb_strtolower($text, 'UTF-8');
         $text = str_replace(["'", "’", "‘", "`", "´"], ' ', $text);
-        $converted = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $text);
-        if (is_string($converted) && $converted !== '') {
-            $text = strtolower($converted);
-        } else {
-            $text = strtr($text, [
-                'à' => 'a', 'á' => 'a', 'â' => 'a', 'ä' => 'a', 'ã' => 'a',
-                'è' => 'e', 'é' => 'e', 'ê' => 'e', 'ë' => 'e',
-                'ì' => 'i', 'í' => 'i', 'î' => 'i', 'ï' => 'i',
-                'ò' => 'o', 'ó' => 'o', 'ô' => 'o', 'ö' => 'o',
-                'ù' => 'u', 'ú' => 'u', 'û' => 'u', 'ü' => 'u',
-                'ç' => 'c', 'ñ' => 'n', 'ÿ' => 'y', 'œ' => 'oe', 'æ' => 'ae',
-            ]);
+        // Map explicite : iconv TRANSLIT est instable (Windows → "bloqué" = "bloqu e").
+        $text = strtr($text, [
+            'à' => 'a', 'á' => 'a', 'â' => 'a', 'ä' => 'a', 'ã' => 'a', 'å' => 'a',
+            'è' => 'e', 'é' => 'e', 'ê' => 'e', 'ë' => 'e',
+            'ì' => 'i', 'í' => 'i', 'î' => 'i', 'ï' => 'i',
+            'ò' => 'o', 'ó' => 'o', 'ô' => 'o', 'ö' => 'o', 'õ' => 'o',
+            'ù' => 'u', 'ú' => 'u', 'û' => 'u', 'ü' => 'u',
+            'ý' => 'y', 'ÿ' => 'y',
+            'ç' => 'c', 'ñ' => 'n', 'œ' => 'oe', 'æ' => 'ae',
+            'š' => 's', 'ž' => 'z', 'đ' => 'd',
+        ]);
+        if (class_exists(\Normalizer::class)) {
+            $decomposed = \Normalizer::normalize($text, \Normalizer::FORM_D);
+            if (is_string($decomposed) && $decomposed !== '') {
+                $text = preg_replace('/\p{Mn}+/u', '', $decomposed) ?? $decomposed;
+            }
         }
         $text = preg_replace('/[^a-z0-9\s]+/', ' ', $text) ?? $text;
         $text = preg_replace('/\s+/', ' ', $text) ?? $text;
@@ -567,7 +571,7 @@ final class SupportBot
 
         if ($escalate && ($reply === null || $reply === '')) {
             $reply = $fr
-                ? 'Je vous connecte à un conseiller.'
+                ? 'Je vous mets en relation avec un conseiller.'
                 : 'I am connecting you with an advisor.';
         }
 
@@ -626,15 +630,17 @@ final class SupportBot
 
         return match ($intent) {
             'human' => [
-                $fr ? 'Je vous connecte à un conseiller.' : 'I am connecting you with an advisor.',
+                $fr
+                    ? 'Je vous mets en relation avec un conseiller Nexus. Un membre de l’équipe support prendra en charge votre demande sous peu.'
+                    : 'I am connecting you with a Nexus advisor. A member of the support team will take over shortly.',
                 'other',
                 $fr ? 'Demande de conseiller' : 'Request for an advisor',
                 [],
             ],
             'security' => [
                 $fr
-                    ? 'Je prends votre signalement au sérieux. Je vous connecte immédiatement à un conseiller.'
-                    : 'I am taking this report seriously. Connecting you with an advisor right away.',
+                    ? 'Je prends votre signalement au sérieux. Je vous mets immédiatement en relation avec un conseiller Nexus.'
+                    : 'I am taking this report seriously. I am connecting you with a Nexus advisor right away.',
                 'account',
                 mb_substr($message, 0, 120),
                 [],
@@ -720,8 +726,16 @@ final class SupportBot
     private static function replyTransferDelay(bool $fr, string $agent): array
     {
         $reply = $fr
-            ? 'Délais habituels : **mobile money** quelques minutes, **virement bancaire** 1 jour ouvré, **crypto** selon le réseau. Un contrôle complémentaire peut allonger le délai.'
-            : 'Typical timelines: **mobile money** a few minutes, **bank transfer** 1 business day, **crypto** depends on the network. An extra compliance check can add delay.';
+            ? "Délais habituels :\n"
+                . "• **Mobile money** — quelques minutes\n"
+                . "• **Virement bancaire** — 1 jour ouvré\n"
+                . "• **Crypto** — selon le réseau\n\n"
+                . 'Un contrôle complémentaire peut allonger le délai.'
+            : "Typical timelines:\n"
+                . "• **Mobile money** — a few minutes\n"
+                . "• **Bank transfer** — 1 business day\n"
+                . "• **Crypto** — depends on the network\n\n"
+                . 'An extra compliance check can add delay.';
 
         return [
             $reply,
@@ -1083,8 +1097,8 @@ final class SupportBot
     {
         if ($escalate) {
             $reply = $fr
-                ? 'Je n’ai pas bien compris. Je vous connecte à un conseiller qui pourra vous aider plus précisément.'
-                : 'I still don’t quite understand. I am connecting you with an advisor who can help more precisely.';
+                ? 'Je n’ai pas bien compris. Je vous mets en relation avec un conseiller Nexus qui pourra vous aider plus précisément.'
+                : 'I still don’t quite understand. I am connecting you with a Nexus advisor who can help more precisely.';
 
             return [$reply, 'other', mb_substr($message, 0, 120), []];
         }

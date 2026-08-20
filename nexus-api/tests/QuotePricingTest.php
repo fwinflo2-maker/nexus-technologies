@@ -195,6 +195,22 @@ final class QuotePricingTest extends TestCase
         );
     }
 
+    public function test_le_calcul_decimal_ne_derive_pas_sur_les_decimales_financieres(): void
+    {
+        $this->seedRate('EUR', 'XAF', '1.23456789', '0.1234', 'decimal_precision');
+
+        $quote = QuoteEngine::quote(
+            $this->intent('1000000.01', 'EUR', 'XAF'),
+            $this->provider(),
+            'decimal'
+        );
+
+        // 1.23456789 × (1 - 0.001234), arrondi seulement à la frontière API.
+        self::assertSame(1.233, $quote['effective_rate']);
+        self::assertSame(0.123, $quote['spread_pct']);
+        self::assertSame(1233041.0, $quote['received']);
+    }
+
     /**
      * Sans taux réel, la quote est refusée — jamais estimée.
      */
@@ -318,7 +334,7 @@ final class QuotePricingTest extends TestCase
 
     /** @return array<string, mixed> */
     private function intent(
-        float $amount,
+        float|string $amount,
         string $source,
         string $dest,
         string $method = 'mobile_money'

@@ -7,21 +7,23 @@ namespace Nexus\Services;
 use Nexus\Core\Database;
 use Nexus\Core\HttpException;
 use Nexus\Execution\ExecutionContext;
-use Nexus\Providers\PawaPayAdapter;
-use Nexus\Providers\ProviderConfig;
+use Nexus\Providers\ProviderCapabilityMatrix;
 use Nexus\Providers\ProviderRegistry;
 use PDO;
 use Throwable;
 
 /**
  * ProviderReconciliationService — réconciliation EXPLICITE entre Nexus et le
- * provider (pawaPay), par polling du statut côté provider.
+ * provider, par polling du statut côté adaptateur.
  *
  * Le webhook est un canal d'annonce ; il peut être perdu (réponse acceptée
  * mais callback jamais délivré, callback livré après expiration du retry…).
  * La réconciliation est le filet de sécurité : elle interroge le provider
  * pour les transactions restées 'processing' au-delà d'un délai et applique
  * l'état réel — ou signale les écarts qui exigent une décision humaine.
+ *
+ * Providers pollables = ceux dont la matrice déclare reconciliation=IMPLEMENTED
+ * (aujourd'hui : pawapay). Aucun hardcode métier hors de la matrice.
  *
  * Cas détectés :
  *   - provider COMPLETED   → Nexus 'processing' : régler (completed).
@@ -38,9 +40,6 @@ final class ProviderReconciliationService
 {
     /** Délai minimum avant de considérer une transaction « à réconcilier ». */
     public const DEFAULT_STALE_SECONDS = 120;
-
-    /** Providers disposant d'un vrai polling de statut (adaptateur intégré). */
-    private const POLLABLE = ['pawapay'];
 
     private function __construct()
     {
@@ -69,28 +68,41 @@ final class ProviderReconciliationService
             'missing_at_provider'=> [],
             'discrepancies'      => [],
             'errors'             => [],
+            'pollable_providers' => self::pollableProviders(),
         ];
 
-        $stmt = $pdo->prepare(
-            "SELECT id, user_id, provider, provider_operation_id, provider_status,
-                    dest_amount, dest_currency, amount, currency, environment, updated_at
-               FROM transactions
-              WHERE status = 'processing'
-                AND provider IN ('pawapay')
-                AND provider_operation_id IS NOT NULL
-                AND environment = :env
-                AND TIMESTAMPDIFF(SECOND, updated_at, NOW()) >= :stale
-              ORDER BY updated_at ASC
-              LIMIT 100"
-        );
-        $stmt->execute(['env' => $environment, 'stale' => $staleSeconds]);
+        $pollable = self::pollableProviders();
+        if ($pollable === []) {
+            $report['errors'][] = [
+                'error'   => 'NO_POLLABLE_PROVIDER',
+                'message' => 'Aucun provider avec reconciliation=IMPLEMENTED.',
+            ];
+            return $report;
+        }
+
+        $placeholders = implode(',', array_fill(0, count($pollable), '?'));
+        $sql = "SELECT id, user_id, provider, provider_operation_id, provider_status,
+                       dest_amount, dest_currency, amount, currency, environment, updated_at
+                  FROM transactions
+                 WHERE status = 'processing'
+                   AND provider IN ({$placeholders})
+                   AND provider_operation_id IS NOT NULL
+                   AND environment = ?
+                   AND TIMESTAMPDIFF(SECOND, updated_at, NOW()) >= ?
+                 ORDER BY updated_at ASC
+                 LIMIT 100";
+        $stmt = $pdo->prepare($sql);
+        $params = array_merge($pollable, [$environment, $staleSeconds]);
+        $stmt->execute($params);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
         foreach ($rows as $row) {
             $report['examined']++;
+            $providerSlug = (string) ($row['provider'] ?? '');
 
             try {
-                $providerStatus = ProviderRegistry::adapter('pawapay')->getPaymentStatus((string) $row['provider_operation_id']);
+                $providerStatus = ProviderRegistry::adapter($providerSlug)
+                    ->getPaymentStatus((string) $row['provider_operation_id']);
             } catch (HttpException $e) {
                 $report['errors'][] = [
                     'transaction_id' => (int) $row['id'],
@@ -189,10 +201,22 @@ final class ProviderReconciliationService
         ExecutionSettlementService::settle($tx, $mapped, $rawStatus, ['provider_status' => $rawStatus], $context);
     }
 
-    /** Providers réellement réconciliables (adaptateur + polling). */
+    /**
+     * Providers réellement réconciliables (matrice : reconciliation=IMPLEMENTED).
+     *
+     * @return list<string>
+     */
     public static function pollableProviders(): array
     {
-        return self::POLLABLE;
+        $out = [];
+        foreach (array_keys(ProviderCatalog::all()) as $slug) {
+            if (ProviderCapabilityMatrix::for($slug)['reconciliation']
+                === ProviderCapabilityMatrix::IMPLEMENTED
+            ) {
+                $out[] = $slug;
+            }
+        }
+        return $out;
     }
 
     // ══════════════════════════════════════════════════════════════════════

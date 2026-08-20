@@ -216,12 +216,11 @@ final class ExecutionSettlementTest extends TestCase
     {
         $f = $this->setupProcessingTransaction();
 
-        // Modèle cible : à la capture, le montant passe en TRANSIT (hold →
-        // in_transit), le débit de position n'a lieu qu'au RÈGLEMENT.
+        // La capture est le débit définitif.
         $w = $this->walletRow($f['walletId']);
-        $this->assertSame('500.00', $w['balance'], 'balance inchangé à la capture.');
+        $this->assertSame('400.00', $w['balance']);
         $this->assertSame('400.00', $w['available_balance']);
-        $this->assertSame('100.00', $w['in_transit_balance']);
+        $this->assertSame('0.00', $w['in_transit_balance']);
 
         $result = ExecutionSettlementService::settle(
             $this->loadTx($f['txId']),
@@ -233,11 +232,10 @@ final class ExecutionSettlementTest extends TestCase
         $this->assertSame('completed', $result['transaction']['status']);
         $this->assertSame('COMPLETED', $result['transaction']['provider_status']);
 
-        // Le règlement poste le débit (double entrée) et consomme le transit.
-        // Fixture : hold de 100 (frais 0) → position débitée de 100.
+        // Le règlement solde OUTBOUND_TRANSIT sans redébiter la position.
         $w = $this->walletRow($f['walletId']);
-        $this->assertSame('400.00', $w['balance'], 'Position débitée au règlement (100).');
-        $this->assertSame('0.00', $w['in_transit_balance'], 'Transit consommé.');
+        $this->assertSame('400.00', $w['balance']);
+        $this->assertSame('0.00', $w['in_transit_balance']);
         $this->assertSame(0, $this->countRefundEntries($f['txId']));
     }
 
@@ -247,8 +245,8 @@ final class ExecutionSettlementTest extends TestCase
     {
         $f = $this->setupProcessingTransaction('100.00');
         $w = $this->walletRow($f['walletId']);
-        $this->assertSame('500.00', $w['balance'], 'balance inchangé à la capture.');
-        $this->assertSame('100.00', $w['in_transit_balance']);
+        $this->assertSame('400.00', $w['balance']);
+        $this->assertSame('0.00', $w['in_transit_balance']);
 
         $result = ExecutionSettlementService::settle(
             $this->loadTx($f['txId']),
@@ -261,14 +259,13 @@ final class ExecutionSettlementTest extends TestCase
         $this->assertSame('failed', $result['transaction']['status']);
         $this->assertSame('FAILED', $result['transaction']['provider_status']);
 
-        // Modèle cible : AUCUN débit n'avait été posté (le débit n'a lieu qu'au
-        // règlement) → le montant retourne simplement du transit vers available.
+        // L'échec annule comptablement la capture et recrédite le wallet.
         $w = $this->walletRow($f['walletId']);
         $this->assertSame('500.00', $w['balance']);
         $this->assertSame('500.00', $w['available_balance'], 'Transit restitué au disponible.');
         $this->assertSame('0.00', $w['in_transit_balance']);
 
-        // Aucune écriture de compensation : rien n'avait été débité.
+        // Pas de reference_type refund : il s'agit d'une annulation de payout.
         $this->assertSame(0, $this->countRefundEntries($f['txId']));
     }
 

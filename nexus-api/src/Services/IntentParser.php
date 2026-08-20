@@ -28,7 +28,7 @@ final class IntentParser
 {
     /** Devises source autorisées (mêmes que Currency::WALLET_CURRENCIES). */
     private const VALID_SOURCE_CURRENCIES = [
-        'EUR', 'USD', 'GBP', 'XAF', 'XOF', 'USDT', 'USDC',
+        'EUR', 'USD', 'GBP', 'XAF', 'XOF', 'USDT', 'USDC', 'ETH', 'BTC',
     ];
 
     /** Modes de réception autorisés. */

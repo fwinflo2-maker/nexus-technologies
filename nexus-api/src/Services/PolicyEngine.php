@@ -32,16 +32,16 @@ use Nexus\Providers\ProviderConfig;
  */
 final class PolicyEngine
 {
-    /** Plafonds mensuels par niveau KYC (EUR). */
+    /** Plafonds mensuels par niveau KYC (EUR) — alignés normes UE (PolicyLimitsExposureTest). */
     private const KYC_LIMITS = [
-        'none'     => 200.0,
-        'basic'    => 500.0,
-        'standard' => 2000.0,
-        'advanced' => 10000.0,
+        'none'     => '250.00',    // 5e directive AML / e-money sans CDD
+        'basic'    => '1000.00',   // règlement UE 2015/847
+        'standard' => '2000.00',   // KYC documentaire
+        'advanced' => '10000.00',  // due diligence renforcée
     ];
 
     /** Seuil KYC requis pour le transfert (montant EUR au-delà duquel KYC obligatoire). */
-    private const KYC_REQUIRED_THRESHOLD = 1000.0;
+    private const KYC_REQUIRED_THRESHOLD = '1000.00';
 
     /** Statuts qui bloquent les transferts. */
     private const BLOCKED_STATUSES = ['PENDING', 'SUSPENDED', 'CLOSED'];
@@ -74,7 +74,7 @@ final class PolicyEngine
     public static function evaluate(
         array $user,
         array $intent,
-        float $amountRef,
+        float|string $amountRef,
         ?ExecutionEnvironment $environment = null
     ): array {
         $environment ??= ExecutionEnvironment::fromString(ProviderConfig::defaultEnvironment());
@@ -82,7 +82,8 @@ final class PolicyEngine
         $status   = $user['status'];
         $kycLevel = $user['kyc_level'];
         $userId   = (int) $user['id'];
-        $amount   = (float) $intent['amount'];
+        $amount   = bcadd((string) $intent['amount'], '0', 8);
+        $amountRefDecimal = bcadd((string) $amountRef, '0', 8);
 
         $details = [];
         $decision = 'APPROVED';
@@ -106,10 +107,10 @@ final class PolicyEngine
 
             // Disponibilité du wallet (toujours vérifiée).
             $available = self::getWalletAvailable($userId, $intent['sourceCurrency']);
-            $details['wallet_available'] = $available;
-            if ($available < $amount) {
+            $details['wallet_available'] = (float) $available;
+            if (bccomp($available, $amount, 8) < 0) {
                 return self::declined(
-                    sprintf('Solde disponible insuffisant : %.2f %s.', $available, $intent['sourceCurrency']),
+                    sprintf('Solde disponible insuffisant : %.2f %s.', (float) $available, $intent['sourceCurrency']),
                     $details
                 );
             }
@@ -143,13 +144,17 @@ final class PolicyEngine
         $monthlyLimit = self::KYC_LIMITS[$kycLevel] ?? self::KYC_LIMITS['basic'];
         $monthlyTotal = self::getMonthlyTotal($userId, $intent['sourceCurrency']);
 
-        $newTotal = $monthlyTotal + $amountRef;
-        $details['monthly_limit']     = $monthlyLimit;
-        $details['monthly_used']      = round($monthlyTotal, 2);
-        $details['monthly_remaining'] = round(max(0, $monthlyLimit - $monthlyTotal), 2);
+        $newTotal = bcadd($monthlyTotal, $amountRefDecimal, 8);
+        $remainingDecimal = bcsub($monthlyLimit, $monthlyTotal, 8);
+        if (bccomp($remainingDecimal, '0', 8) < 0) {
+            $remainingDecimal = '0';
+        }
+        $details['monthly_limit']     = (float) $monthlyLimit;
+        $details['monthly_used']      = (float) bcadd($monthlyTotal, '0.005', 2);
+        $details['monthly_remaining'] = (float) bcadd($remainingDecimal, '0.005', 2);
 
-        if ($newTotal > $monthlyLimit) {
-            $remaining = max(0, $monthlyLimit - $monthlyTotal);
+        if (bccomp($newTotal, $monthlyLimit, 8) > 0) {
+            $remaining = $remainingDecimal;
             $reason = "Plafond mensuel de {$monthlyLimit} EUR (niveau KYC : {$kycLevel}) " .
                       "presque atteint. Il vous reste {$remaining} EUR ce mois-ci. " .
                       "Relevez votre niveau KYC pour augmenter vos limites.";
@@ -192,7 +197,8 @@ final class PolicyEngine
         }
 
         // ── 4. KYC requis au-delà du seuil ──────────────────────
-        if ($amountRef > self::KYC_REQUIRED_THRESHOLD && in_array($kycLevel, ['none', 'basic'], true)) {
+        if (bccomp($amountRefDecimal, self::KYC_REQUIRED_THRESHOLD, 8) > 0
+            && in_array($kycLevel, ['none', 'basic'], true)) {
             $decision = 'REVIEW_REQUIRED';
             $reason   = "Montant de {$amountRef} EUR nécessite un niveau KYC standard ou supérieur.";
             $details['kyc_required'] = 'standard';
@@ -200,9 +206,9 @@ final class PolicyEngine
 
         // ── 5. Disponibilité du wallet ──────────────────────────
         $available = self::getWalletAvailable($userId, $intent['sourceCurrency']);
-        $details['wallet_available'] = $available;
+        $details['wallet_available'] = (float) $available;
 
-        if ($available < $amount) {
+        if (bccomp($available, $amount, 8) < 0) {
             return self::declined(
                 "Fonds insuffisants. Solde disponible : {$available} {$intent['sourceCurrency']}.",
                 array_merge($details, ['wallet_shortage' => true])
@@ -220,9 +226,50 @@ final class PolicyEngine
     }
 
     /**
+     * Exposition des plafonds pour le frontend (dashboard / send).
+     *
+     * @param array{id:int,kyc_level:string,account_type?:string,kyb_status?:string} $user
+     * @return array{
+     *   kyc_level:string,
+     *   monthly_limit_eur:float,
+     *   monthly_used_eur:float,
+     *   monthly_remaining_eur:float,
+     *   kyc_required_threshold_eur:float,
+     *   verified:bool
+     * }
+     */
+    public static function limitsFor(array $user): array
+    {
+        $kyc = (string) ($user['kyc_level'] ?? 'none');
+        $limit = self::KYC_LIMITS[$kyc] ?? self::KYC_LIMITS['none'];
+        $used = self::getMonthlyTotal((int) $user['id'], 'EUR');
+        $remaining = bcsub($limit, $used, 8);
+        if (bccomp($remaining, '0', 8) < 0) {
+            $remaining = '0';
+        }
+
+        $accountType = (string) ($user['account_type'] ?? 'personal');
+        $kyb = (string) ($user['kyb_status'] ?? 'none');
+        if ($accountType === 'business') {
+            $verified = ($kyb === 'verified');
+        } else {
+            $verified = in_array($kyc, ['standard', 'advanced'], true);
+        }
+
+        return [
+            'kyc_level'                   => $kyc,
+            'monthly_limit_eur'           => (float) $limit,
+            'monthly_used_eur'            => (float) bcadd($used, '0.005', 2),
+            'monthly_remaining_eur'       => (float) bcadd($remaining, '0.005', 2),
+            'kyc_required_threshold_eur'  => (float) self::KYC_REQUIRED_THRESHOLD,
+            'verified'                    => $verified,
+        ];
+    }
+
+    /**
      * Calcule le total des transferts mensuels de l'utilisateur (en EUR).
      */
-    private static function getMonthlyTotal(int $userId, string $currency): float
+    private static function getMonthlyTotal(int $userId, string $currency): string
     {
         $pdo = Database::getConnection();
         $stmt = $pdo->prepare(
@@ -235,20 +282,20 @@ final class PolicyEngine
                AND created_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01')"
         );
         $stmt->execute(['uid' => $userId]);
-        return (float) $stmt->fetchColumn();
+        return bcadd((string) $stmt->fetchColumn(), '0', 8);
     }
 
     /**
      * Récupère le solde disponible d'un wallet pour une devise donnée.
      */
-    private static function getWalletAvailable(int $userId, string $currency): float
+    private static function getWalletAvailable(int $userId, string $currency): string
     {
         $wallet = WalletService::getWallet($userId, $currency);
         if ($wallet === null) {
-            return 0.0;
+            return '0.00000000';
         }
         $availableInfo = WalletService::getAvailable($wallet['id']);
-        return (float) $availableInfo['available_balance'];
+        return bcadd((string) $availableInfo['available_balance'], '0', 8);
     }
 
     /**

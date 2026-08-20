@@ -95,4 +95,14 @@ final class StripeWebhookSignatureTest extends TestCase
 
         self::assertFalse((new StripeAdapter())->verifyWebhook($payload, $signature));
     }
+
+    public function test_rotation_accepte_une_des_plusieurs_signatures_v1(): void
+    {
+        $payload = '{"id":"evt_rotation"}';
+        $timestamp = time();
+        $valid = hash_hmac('sha256', $timestamp . '.' . $payload, self::TEST_WEBHOOK_SECRET);
+        $header = 't=' . $timestamp . ',v1=' . str_repeat('0', 64) . ',v1=' . $valid;
+
+        self::assertTrue((new StripeAdapter())->verifyWebhook($payload, $header));
+    }
 }

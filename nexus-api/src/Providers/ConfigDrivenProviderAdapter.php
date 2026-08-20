@@ -7,14 +7,28 @@ namespace Nexus\Providers;
 /**
  * ConfigDrivenProviderAdapter — adaptateur générique piloté par le catalogue.
  *
- * Pour tout provider sans adaptateur dédié, la configuration et les capacités
- * sont dérivées du ProviderCatalog (schéma de credentials, catégorie, pays).
- * Ajouter un provider = l'ajouter au catalogue ; aucun code Core à modifier.
+ * Dès que des credentials sont saisies dans le SuperAdmin, testConnection()
+ * délègue à ProviderAuthProbe (auth adaptée au provider). Les opérations
+ * métier (payout, etc.) restent NOT_IMPLEMENTED jusqu'à un adaptateur dédié.
  */
 final class ConfigDrivenProviderAdapter extends AbstractProviderAdapter
 {
     public function __construct(string $slug)
     {
         parent::__construct($slug);
+    }
+
+    public function testConnection(string $environment, ?array $credentials = null): array
+    {
+        if (!ProviderAuthProbe::supports($this->slug)) {
+            return [
+                'status'    => 'CONFIGURATION_ERROR',
+                'message'   => 'Test d\'authentification non encore défini pour ce provider : '
+                    . 'les credentials peuvent être stockées, mais aucune validation HTTP n\'est câblée.',
+                'tested_at' => gmdate(DATE_ATOM),
+            ];
+        }
+
+        return ProviderAuthProbe::test($this->slug, $environment, $credentials);
     }
 }

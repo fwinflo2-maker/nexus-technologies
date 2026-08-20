@@ -24,7 +24,7 @@ final class WebhookRegistryTest extends TestCase
         self::assertSame('rfc9421', $wh['signature_type']);
         self::assertSame('public_key', $wh['verification_key_type']);
         self::assertTrue($wh['timestamp_validation']['enabled']);
-        self::assertSame('IMPLEMENTED', $wh['implementation']);
+        self::assertSame('CONFIG_REQUIRED', $wh['implementation']);
     }
 
     public function test_stripe_declare_stripe_signature_hmac(): void
@@ -35,7 +35,7 @@ final class WebhookRegistryTest extends TestCase
         self::assertSame('hmac_sha256_stripe_signature', $wh['signature_type']);
         self::assertSame('webhook_secret', $wh['verification_key_type']);
         self::assertTrue($wh['timestamp_validation']['enabled']);
-        self::assertSame('IMPLEMENTED', $wh['implementation']);
+        self::assertSame('CONFIG_REQUIRED', $wh['implementation']);
     }
 
     public function test_sumsub_declare_le_digest_hmac_sans_timestamp(): void

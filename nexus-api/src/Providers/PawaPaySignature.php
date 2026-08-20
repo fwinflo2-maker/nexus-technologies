@@ -180,8 +180,17 @@ final class PawaPaySignature
             return false;
         }
 
-        // 4) Expiration de la signature.
-        if ($parsed['expires'] !== null && $parsed['expires'] < time()) {
+        // 4) Fenêtre anti-rejeu. `expires` est honoré lorsqu'il est présent ;
+        // `created` ne peut être ni futur de plus de 5 minutes, ni vieux de
+        // plus de 5 minutes. Une signature sans aucune borne temporelle est
+        // refusée : l'intégrité sans fraîcheur autoriserait le rejeu.
+        $now = time();
+        if ($parsed['expires'] !== null && $parsed['expires'] < $now) {
+            return false;
+        }
+        if ($parsed['created'] === null
+            || $parsed['created'] > $now + 300
+            || $parsed['created'] < $now - 300) {
             return false;
         }
 

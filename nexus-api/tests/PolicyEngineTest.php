@@ -332,4 +332,31 @@ final class PolicyEngineTest extends TestCase
             $this->assertStringContainsString('Fonds insuffisants', $e->getMessage());
         }
     }
+
+    public function test_plafond_compare_les_decimales_sans_arrondi_flottant(): void
+    {
+        $s = $this->uniqueSuffix();
+        $uid = $this->createUser($s, 'ACTIVE', 'standard');
+        $this->createWallet($uid, 'EUR', '5000.00');
+
+        $user = [
+            'id' => $uid,
+            'status' => 'ACTIVE',
+            'kyc_level' => 'standard',
+            'account_type' => 'personal',
+        ];
+        $intent = [
+            'amount' => '1.00',
+            'sourceCurrency' => 'EUR',
+            'destCountry' => 'FR',
+        ];
+
+        try {
+            PolicyEngine::evaluate($user, $intent, '2000.00000001');
+            $this->fail('Un dépassement décimal, même inférieur au centime, doit être refusé.');
+        } catch (HttpException $e) {
+            $this->assertSame('POLICY_DECLINED', $e->errorCode());
+            $this->assertStringContainsString('Plafond mensuel', $e->getMessage());
+        }
+    }
 }

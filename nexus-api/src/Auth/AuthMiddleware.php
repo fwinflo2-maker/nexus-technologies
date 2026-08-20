@@ -43,6 +43,8 @@ final class AuthMiddleware
             }
 
             // Utilisateur toujours présent ?
+            // password_changed_at est optionnel (migration 0.40) : SELECT *
+            // évite de casser les suites avant application de la migration.
             $stmt = $pdo->prepare(
                 'SELECT id, full_name, email, phone, account_type, platform_role, auth_provider, status,
                         kyc_level, kyb_status, avatar, country_of_residence, created_at
@@ -55,6 +57,33 @@ final class AuthMiddleware
 
             if ($user === false) {
                 throw new HttpException(401, 'Session invalide ou expirée', 'TOKEN_INVALID');
+            }
+
+            // Reset / changement de mot de passe : invalide tous les JWT émis
+            // avant password_changed_at (sans nécessiter leurs jti).
+            try {
+                $pwdStmt = $pdo->prepare('SELECT password_changed_at FROM users WHERE id = :id LIMIT 1');
+                $pwdStmt->execute(['id' => $userId]);
+                $pwdChanged = $pwdStmt->fetchColumn();
+                if (is_string($pwdChanged) && $pwdChanged !== '') {
+                    $changedTs = strtotime($pwdChanged . ' UTC');
+                    $iat = (int) ($payload['iat'] ?? 0);
+                    if ($changedTs !== false && $iat > 0 && $iat < $changedTs) {
+                        throw new HttpException(401, 'Session invalide ou expirée', 'TOKEN_INVALID');
+                    }
+                }
+            } catch (HttpException $e) {
+                throw $e;
+            } catch (\Throwable) {
+                // Colonne absente (migration non appliquée) : ne pas bloquer l'auth.
+            }
+
+            // Une suspension ou une clôture doit prendre effet immédiatement,
+            // y compris pour un JWT émis avant le changement de statut. Sans ce
+            // contrôle côté serveur, un client suspendu pouvait continuer à
+            // appeler les API jusqu'à l'expiration naturelle de son jeton.
+            if (!in_array((string) $user['status'], ['ACTIVE', 'PENDING'], true)) {
+                throw new HttpException(403, 'Compte indisponible', 'ACCOUNT_RESTRICTED');
             }
 
             $request->setAttribute('user', $user);

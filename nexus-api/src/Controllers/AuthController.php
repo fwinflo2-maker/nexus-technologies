@@ -505,8 +505,16 @@ final class AuthController
 
         $pdo->beginTransaction();
         try {
-            $upd = $pdo->prepare('UPDATE users SET password_hash = :hash, updated_at = :updated WHERE id = :id');
-            $upd->execute(['hash' => $newHash, 'updated' => gmdate('Y-m-d H:i:s'), 'id' => $userId]);
+            $upd = $pdo->prepare(
+                'UPDATE users SET password_hash = :hash, password_changed_at = UTC_TIMESTAMP(), updated_at = :updated WHERE id = :id'
+            );
+            try {
+                $upd->execute(['hash' => $newHash, 'updated' => gmdate('Y-m-d H:i:s'), 'id' => $userId]);
+            } catch (\PDOException $e) {
+                // Migration 0.40 absente : bascule sans password_changed_at.
+                $upd = $pdo->prepare('UPDATE users SET password_hash = :hash, updated_at = :updated WHERE id = :id');
+                $upd->execute(['hash' => $newHash, 'updated' => gmdate('Y-m-d H:i:s'), 'id' => $userId]);
+            }
 
             $use = $pdo->prepare('UPDATE password_reset_tokens SET used_at = :used WHERE token_hash = :token_hash');
             $use->execute(['used' => gmdate('Y-m-d H:i:s'), 'token_hash' => $tokenHash]);

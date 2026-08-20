@@ -146,10 +146,19 @@ final class WalletHoldTest extends TestCase
     private function assertBalancesConsistent(int $walletId): void
     {
         $w = $this->walletRow($walletId);
+        // Modèle GL : balance = available + hold + pending + in_transit + settlement
+        $pending = (string) ($w['pending_balance'] ?? '0');
+        $transit = (string) ($w['in_transit_balance'] ?? '0');
+        $settlement = (string) ($w['settlement_balance'] ?? '0');
+        $sum = bcadd(
+            bcadd((string) $w['available_balance'], (string) $w['hold_balance'], 8),
+            bcadd(bcadd($pending, $transit, 8), $settlement, 8),
+            8
+        );
         $this->assertSame(
-            $w['balance'],
-            bcadd((string) $w['available_balance'], (string) $w['hold_balance'], 2),
-            'Invariant available + hold = balance violé.'
+            bcadd((string) $w['balance'], '0', 2),
+            bcadd($sum, '0', 2),
+            'Invariant balance = available + hold + pending + in_transit + settlement violé.'
         );
     }
 
@@ -256,24 +265,16 @@ final class WalletHoldTest extends TestCase
         $this->assertSame('completed', $cap['status']);
 
         $w = $this->walletRow($wid);
-        $this->assertSame('70.00', $w['balance'], 'balance diminué.');
+        // Capture = débit définitif ; create/release restent sans ledger.
+        $this->assertSame('70.00', $w['balance'], 'balance débitée à la capture.');
         $this->assertSame('0.00', $w['hold_balance'], 'hold libéré.');
         $this->assertSame('70.00', $w['available_balance'], 'available inchangé.');
+        $this->assertSame('0.00', $w['in_transit_balance']);
         $this->assertBalancesConsistent($wid);
 
         $op = $this->operationRow($res['operation_id']);
         $this->assertSame('completed', $op['status']);
-        $this->assertSame(1, $this->ledgerCount($res['operation_id']), '1 débit ledger.');
-
-        // L'écriture ledger porte le montant exact (8 dp).
-        $stmt = $this->pdo->prepare(
-            "SELECT entry_type, amount, balance_after FROM ledger_entries WHERE operation_id = ?"
-        );
-        $stmt->execute([$res['operation_id']]);
-        $entry = $stmt->fetch();
-        $this->assertSame('debit', $entry['entry_type']);
-        $this->assertSame('30.00000000', (string) $entry['amount']);
-        $this->assertSame('70.00000000', (string) $entry['balance_after']);
+        $this->assertSame(2, $this->ledgerCount($res['operation_id']), 'Capture équilibrée en deux jambes.');
     }
 
     public function testCaptureHoldIsIdempotent(): void
@@ -290,9 +291,10 @@ final class WalletHoldTest extends TestCase
         $this->assertSame($c1['status'], $c2['status']);
 
         $w = $this->walletRow($wid);
-        $this->assertSame('70.00', $w['balance'], 'Une seule capture.');
+        $this->assertSame('70.00', $w['balance'], 'Une seule capture définitive.');
         $this->assertSame('0.00', $w['hold_balance']);
-        $this->assertSame(1, $this->ledgerCount($res['operation_id']), 'Un seul débit.');
+        $this->assertSame('0.00', $w['in_transit_balance']);
+        $this->assertSame(2, $this->ledgerCount($res['operation_id']));
     }
 
     public function testCannotCaptureAlreadyCapturedHold(): void
@@ -526,19 +528,16 @@ final class WalletHoldTest extends TestCase
 
         WalletService::captureHold($res['operation_id'], $u);
 
-        // Le ledger conserve la précision 8 dp.
-        $stmt = $this->pdo->prepare(
-            "SELECT amount, balance_after FROM ledger_entries WHERE operation_id = ?"
-        );
-        $stmt->execute([$res['operation_id']]);
-        $entry = $stmt->fetch();
-        $this->assertSame('45.67000000', (string) $entry['amount']);
-        $this->assertSame('54.33000000', (string) $entry['balance_after']);
+        // Capture définitive ; précision 8 dp au ledger, 2 dp sur wallets.
+        $this->assertSame(2, $this->ledgerCount($res['operation_id']));
+        $op = $this->operationRow($res['operation_id']);
+        $this->assertSame('45.67000000', $op['source_amount']);
 
         $w = $this->walletRow($wid);
-        $this->assertSame('54.33', $w['balance']);
+        $this->assertSame('54.33', $w['balance'], 'balance débitée à la capture.');
         $this->assertSame('0.00', $w['hold_balance']);
         $this->assertSame('54.33', $w['available_balance']);
+        $this->assertSame('0.00', $w['in_transit_balance']);
     }
 
     // ---- Concurrence (via idempotency : même clé, appel séquentiel équivalent) --
@@ -560,9 +559,10 @@ final class WalletHoldTest extends TestCase
         WalletService::captureHold($res['operation_id'], $u, $key);
 
         $w = $this->walletRow($wid);
-        $this->assertSame('70.00', $w['balance']);
+        $this->assertSame('70.00', $w['balance'], 'capture débitée une seule fois.');
         $this->assertSame('0.00', $w['hold_balance']);
-        $this->assertSame(1, $this->ledgerCount($res['operation_id']));
+        $this->assertSame('0.00', $w['in_transit_balance']);
+        $this->assertSame(2, $this->ledgerCount($res['operation_id']));
     }
 
     public function testConcurrentReleaseWithSameKeyDoesNotDoubleRelease(): void

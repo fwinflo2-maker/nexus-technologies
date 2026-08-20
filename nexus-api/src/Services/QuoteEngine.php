@@ -50,10 +50,10 @@ final class QuoteEngine
 {
     /** Frais de base par méthode de réception (EUR). */
     private const BASE_FEES = [
-        'mobile_money' => 2.90,
-        'bank'         => 4.50,
-        'crypto'       => 3.50,
-        'cash_pickup'  => 5.50,
+        'mobile_money' => '2.90',
+        'bank'         => '4.50',
+        'crypto'       => '3.50',
+        'cash_pickup'  => '5.50',
     ];
 
     /** Origine du barème de frais, exposée au client (§12). */
@@ -100,7 +100,7 @@ final class QuoteEngine
 
         $methodType   = $intent['receivingMethod'];
         $destCurrency = $intent['destCurrency'];
-        $sourceAmount = (float) $intent['amount'];
+        $sourceAmount = bcadd((string) $intent['amount'], '0', 8);
 
         // ── Taux : résolu depuis la source FX, ou pas de quote ──
         // La paire réellement cotée est source → destination. Utiliser le
@@ -116,26 +116,27 @@ final class QuoteEngine
             );
         }
 
-        $baseRate = (float) $pricing['rate'];
+        $baseRate = (string) ($pricing['rate_decimal'] ?? $pricing['rate']);
 
         // ── Spread : celui déclaré par la source, jamais tiré au sort ──
-        $spreadPct = (float) $pricing['spread_pct'];
+        $spreadPct = (string) ($pricing['spread_decimal'] ?? $pricing['spread_pct']);
 
         // ── Frais : barème Nexus, fixe et reproductible ────────
         // La variation aléatoire de ±10 % « pour simuler la concurrence »
         // faisait varier un frais facturé à un client : elle est supprimée.
-        $fees = round(self::BASE_FEES[$methodType] ?? 3.50, 2);
+        $fees = self::BASE_FEES[$methodType] ?? '3.50';
 
         // ── Montant reçu ───────────────────────────────────────
         // Les frais sont exprimés en EUR : ils se déduisent du montant source
         // converti en EUR, avant application du taux vers la destination.
-        $sourceToEur    = self::rateToEur((string) $intent['sourceCurrency'], $environment);
-        $amountInEur    = $sourceToEur > 0.0 ? $sourceAmount / $sourceToEur : 0.0;
-        $feesInSource   = $fees * $sourceToEur;
-        $amountAfterFee = max(0.0, $sourceAmount - $feesInSource);
-
-        $effectiveRate = $baseRate * (1 - $spreadPct);
-        $received      = round($amountAfterFee * $effectiveRate, 0);
+        $sourceToEur = self::rateToEur((string) $intent['sourceCurrency'], $environment);
+        $feesInSource = bcmul($fees, $sourceToEur, 8);
+        $amountAfterFee = bcsub($sourceAmount, $feesInSource, 8);
+        if (bccomp($amountAfterFee, '0', 8) < 0) {
+            $amountAfterFee = '0.00000000';
+        }
+        $effectiveRate = bcmul($baseRate, bcsub('1', $spreadPct, 8), 8);
+        $received = self::roundHalfUp(bcmul($amountAfterFee, $effectiveRate, 8), 0);
 
         // ── Délai moyen (référence, arrondi en minutes) ─────────
         // Délai : mesuré (médiane, en secondes) ou inconnu. La moyenne d'une
@@ -150,15 +151,15 @@ final class QuoteEngine
         return [
             'provider_slug'    => $provider['slug'],
             'provider_name'    => $provider['name'],
-            'received'         => $received,
+            'received'         => (float) $received,
             'received_currency' => $destCurrency,
-            'fees'             => $fees,
+            'fees'             => (float) $fees,
             'fee_currency'     => 'EUR',
             // Barème Nexus, pas un frais provider réel : la nature du chiffre
             // doit être lisible par le client.
             'fee_source'       => self::FEE_SOURCE,
-            'rate'             => $baseRate,
-            'spread_pct'       => round($spreadPct * 100, 3),
+            'rate'             => (float) $baseRate,
+            'spread_pct'       => (float) self::roundHalfUp(bcmul($spreadPct, '100', 8), 3),
             // Provenance du taux : sans elle, aucun chiffre de la quote n'est
             // auditable a posteriori.
             'rate_source'      => $pricing['source'],
@@ -176,7 +177,7 @@ final class QuoteEngine
             'reliability_status' => $provider['reliability_status']
                 ?? ProviderReliability::UNAVAILABLE,
             'reliability_obs'    => $provider['reliability_obs'] ?? 0,
-            'effective_rate'   => round($effectiveRate, 4),
+            'effective_rate'   => (float) self::roundHalfUp($effectiveRate, 4),
         ];
     }
 
@@ -189,11 +190,11 @@ final class QuoteEngine
      * impossible — refus explicite (§7) : aucun tableau de taux statique ne
      * subsiste.
      */
-    private static function rateToEur(string $currency, ExecutionEnvironment $environment): float
+    private static function rateToEur(string $currency, ExecutionEnvironment $environment): string
     {
         $pricing = QuotePricing::resolveRate('EUR', $currency, $environment);
         if ($pricing['status'] === QuotePricing::RESOLVED && $pricing['rate'] !== null) {
-            return (float) $pricing['rate'];
+            return (string) ($pricing['rate_decimal'] ?? $pricing['rate']);
         }
 
         throw new QuoteRateUnavailable(
@@ -201,5 +202,11 @@ final class QuoteEngine
             $currency,
             sprintf('Aucun taux de change disponible pour EUR → %s : frais non calculables.', $currency)
         );
+    }
+
+    private static function roundHalfUp(string $value, int $scale): string
+    {
+        $increment = $scale === 0 ? '0.5' : '0.' . str_repeat('0', $scale) . '5';
+        return bcadd($value, $increment, $scale);
     }
 }

@@ -40,6 +40,7 @@ final class Response
     {
         http_response_code($status);
         header('Content-Type: application/json; charset=utf-8');
+        header('X-Request-Id: ' . Correlation::id());
 
         $json = json_encode(
             $payload,

@@ -8,6 +8,11 @@ use Nexus\Auth\AuthMiddleware;
 use Nexus\Core\Database;
 use Nexus\Core\Request;
 use Nexus\Core\Response;
+use Nexus\Kyc\KycStatus;
+use Nexus\Kyc\KycSubjectType;
+use Nexus\Kyc\SumsubAdapter;
+use Nexus\Services\KycService;
+use PDO;
 
 /**
  * Gestion du profil utilisateur : mise à jour, sécurité, sessions.
@@ -112,16 +117,113 @@ final class UserController
 
             $pdo->commit();
 
-            // Audit log
-            self::audit($userId, 'profile_updated', null, null, ['fields' => $changedFields], $request);
+            // Pays de résidence → Sumsub fixedInfo (hors transaction : HTTP externe).
+            $sumsubSync = null;
+            if (in_array('country_of_residence', $changedFields, true)) {
+                $sumsubSync = self::syncResidenceCountryToSumsub(
+                    $pdo,
+                    $user,
+                    (string) $params[':country_of_residence']
+                );
+            }
 
-            Response::success(['updated' => true]);
+            // Audit log
+            self::audit($userId, 'profile_updated', null, null, [
+                'fields' => $changedFields,
+                'sumsub' => $sumsubSync,
+            ], $request);
+
+            $payload = ['updated' => true];
+            if (is_array($sumsubSync)) {
+                $payload['sumsub'] = $sumsubSync;
+            }
+
+            Response::success($payload);
         } catch (\PDOException $e) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
             Response::serverError('Erreur lors de la mise à jour du profil.');
         }
+    }
+
+    /**
+     * Pousse le nouveau pays vers Sumsub et marque le dossier KYC à revoir.
+     *
+     * @param array<string,mixed> $user
+     * @return array{synced:bool,reverification_required:bool,reason?:string}
+     */
+    private static function syncResidenceCountryToSumsub(PDO $pdo, array $user, string $countryAlpha2): array
+    {
+        $provider = new SumsubAdapter();
+        if (!$provider->isConfigured()) {
+            return [
+                'synced' => false,
+                'reverification_required' => true,
+                'reason' => 'SUMSUB_NOT_CONFIGURED',
+            ];
+        }
+
+        $type = (($user['account_type'] ?? 'personal') === 'business')
+            ? KycSubjectType::COMPANY
+            : KycSubjectType::INDIVIDUAL;
+
+        $existing = KycService::findVerification($pdo, $provider, (int) $user['id'], $type);
+        $applicantId = is_array($existing) ? (string) ($existing['applicant_id'] ?? '') : '';
+
+        if ($applicantId === '') {
+            // Pas encore d'applicant : le prochain POST /kyc/session enverra le pays.
+            return [
+                'synced' => false,
+                'reverification_required' => true,
+                'reason' => 'NO_APPLICANT_YET',
+            ];
+        }
+
+        try {
+            $provider->updateResidenceCountry($applicantId, $countryAlpha2, $type->isCompany());
+        } catch (\Throwable $e) {
+            return [
+                'synced' => false,
+                'reverification_required' => true,
+                'reason' => 'SUMSUB_UPDATE_FAILED',
+            ];
+        }
+
+        // Le pays a changé : l'identité doit être revalidée côté Sumsub.
+        $pdo->prepare(
+            'UPDATE kyc_verifications
+                SET status = :st, reason = :reason, reviewed_at = NULL, updated_at = NOW()
+              WHERE user_id = :uid AND provider = :p AND environment = :e AND subject_type = :t'
+        )->execute([
+            'st'     => KycStatus::RESUBMISSION_REQUESTED->value,
+            'reason' => 'country_of_residence_changed',
+            'uid'    => (int) $user['id'],
+            'p'      => $provider->slug(),
+            'e'      => $provider->environment(),
+            't'      => $type->value,
+        ]);
+
+        // Niveau KYC local : on ne prétend plus que le dossier est validé.
+        $pdo->prepare(
+            'UPDATE users SET kyc_level = CASE
+                WHEN kyc_level IN (\'standard\', \'advanced\', \'basic\') THEN \'none\'
+                ELSE kyc_level
+             END, updated_at = NOW()
+             WHERE id = :id'
+        )->execute(['id' => (int) $user['id']]);
+
+        if ($type->isCompany()) {
+            $pdo->prepare(
+                'UPDATE users SET kyb_status = \'none\', kyb_verified_at = NULL, updated_at = NOW() WHERE id = :id'
+            )->execute(['id' => (int) $user['id']]);
+        }
+
+        return [
+            'synced' => true,
+            'reverification_required' => true,
+            'reason' => 'SUMSUB_FIXEDINFO_UPDATED',
+        ];
     }
 
     /** PUT /api/users/me/password — change le mot de passe. */
@@ -162,11 +264,21 @@ final class UserController
         // Hacher le nouveau mot de passe
         $newPasswordHash = password_hash($newPassword, PASSWORD_DEFAULT);
 
-        $stmt = $pdo->prepare('UPDATE users SET password_hash = :password_hash, updated_at = NOW() WHERE id = :id');
-        $stmt->execute([
-            ':password_hash' => $newPasswordHash,
-            ':id' => $userId,
-        ]);
+        $stmt = $pdo->prepare(
+            'UPDATE users SET password_hash = :password_hash, password_changed_at = UTC_TIMESTAMP(), updated_at = NOW() WHERE id = :id'
+        );
+        try {
+            $stmt->execute([
+                ':password_hash' => $newPasswordHash,
+                ':id' => $userId,
+            ]);
+        } catch (\PDOException $e) {
+            $stmt = $pdo->prepare('UPDATE users SET password_hash = :password_hash, updated_at = NOW() WHERE id = :id');
+            $stmt->execute([
+                ':password_hash' => $newPasswordHash,
+                ':id' => $userId,
+            ]);
+        }
 
         // Audit log
         self::audit($userId, 'password_changed', null, null, [], $request);

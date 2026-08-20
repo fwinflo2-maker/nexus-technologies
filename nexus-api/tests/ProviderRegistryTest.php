@@ -235,9 +235,8 @@ final class ProviderRegistryTest extends TestCase
 
     public function test_routing_filters_unconfigured_providers(): void
     {
-        // Seul pawaPay est configuré → le CapabilityEngine ne doit renvoyer
-        // QUE pawaPay pour le corridor EUR→CG mobile_money (les autres
-        // providers mobile_money non configurés sont exclus).
+        // pawaPay est configuré et son payout v2 est implémenté : il est le
+        // seul provider routable sur ce corridor.
         putenv('PROVIDER_PAWAPAY_ENABLED=true');
         putenv('PROVIDER_PAWAPAY_ENV=sandbox');
         putenv('PROVIDER_PAWAPAY_SANDBOX_API_TOKEN=test_token_123');
@@ -252,10 +251,7 @@ final class ProviderRegistryTest extends TestCase
         ];
 
         $eligible = \Nexus\Services\CapabilityEngine::findEligible($intent);
-        $slugs = array_column($eligible, 'slug');
-
-        $this->assertNotEmpty($slugs);
-        $this->assertSame(['pawapay'], $slugs);
+        $this->assertSame(['pawapay'], array_column($eligible, 'slug'));
     }
 
     // ── 5. AUCUN mode démo : catalogue ≠ opérationnel (§10) ─────────────────

@@ -27,22 +27,21 @@
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
-/*M!999999\- enable the sandbox mode */ 
 /*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
 /*!40103 SET TIME_ZONE='+00:00' */;
 /*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
 /*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
 /*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
-/*M!100616 SET @OLD_NOTE_VERBOSITY=@@NOTE_VERBOSITY, NOTE_VERBOSITY=0 */;
+/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `audit_logs` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `user_id` bigint(20) unsigned DEFAULT NULL,
   `action` varchar(50) NOT NULL,
   `entity_type` varchar(50) DEFAULT NULL,
   `entity_id` bigint(20) unsigned DEFAULT NULL,
-  `environment` enum('sandbox','production') DEFAULT NULL COMMENT 'Environnement de la dÃ©cision. NULL si la demande Ã©tait invalide (aucune valeur valide Ã  consigner).',
+  `environment` enum('sandbox','production') DEFAULT NULL COMMENT 'Environnement de la d├®cision. NULL si la demande ├®tait invalide (aucune valeur valide ├á consigner).',
   `metadata` json DEFAULT NULL,
   `ip_address` varchar(45) DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
@@ -54,7 +53,7 @@ CREATE TABLE `audit_logs` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `beneficiaries` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `user_id` bigint(20) unsigned NOT NULL,
@@ -75,7 +74,22 @@ CREATE TABLE `beneficiaries` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `chart_of_accounts` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `code` varchar(60) NOT NULL,
+  `name` varchar(190) NOT NULL,
+  `currency` varchar(5) DEFAULT NULL,
+  `account_type` enum('asset','liability','equity','revenue','expense','gain_loss') NOT NULL,
+  `environment` enum('sandbox','production') DEFAULT NULL,
+  `active` tinyint(1) NOT NULL DEFAULT 1,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_chart_code` (`code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `connect_accounts` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `user_id` bigint(20) unsigned DEFAULT NULL,
@@ -99,7 +113,7 @@ CREATE TABLE `connect_accounts` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `connect_events` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `connect_account_id` bigint(20) unsigned NOT NULL,
@@ -113,7 +127,24 @@ CREATE TABLE `connect_events` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `credential_rotations` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `provider_slug` varchar(50) NOT NULL,
+  `environment` enum('sandbox','production') NOT NULL DEFAULT 'sandbox',
+  `credentials_enc` text DEFAULT NULL,
+  `status` enum('staged','active','revoked') NOT NULL DEFAULT 'staged',
+  `configured_by` bigint(20) unsigned DEFAULT NULL,
+  `last_tested_at` datetime DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `activated_at` datetime DEFAULT NULL,
+  `revoked_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_rotation_provider` (`provider_slug`,`environment`,`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `employees` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `user_id` bigint(20) unsigned NOT NULL,
@@ -135,7 +166,31 @@ CREATE TABLE `employees` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `funding_intents` (
+  `id` varchar(36) NOT NULL,
+  `user_id` bigint(20) unsigned NOT NULL,
+  `wallet_id` bigint(20) unsigned NOT NULL,
+  `provider` varchar(50) NOT NULL,
+  `provider_reference` varchar(190) NOT NULL,
+  `environment` enum('sandbox','production') NOT NULL DEFAULT 'sandbox',
+  `currency` varchar(5) NOT NULL,
+  `expected_amount` decimal(20,8) NOT NULL,
+  `status` enum('created','processing','completed','expired','cancelled') NOT NULL DEFAULT 'created',
+  `funding_operation_id` varchar(36) DEFAULT NULL,
+  `expires_at` datetime NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_funding_provider_reference` (`provider`,`environment`,`provider_reference`),
+  KEY `idx_funding_owner` (`user_id`,`status`),
+  KEY `fk_funding_intent_wallet` (`wallet_id`),
+  CONSTRAINT `fk_funding_intent_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_funding_intent_wallet` FOREIGN KEY (`wallet_id`) REFERENCES `wallets` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `fx_rates_cache` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `base_currency` varchar(5) NOT NULL,
@@ -152,12 +207,12 @@ CREATE TABLE `fx_rates_cache` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `idempotency_keys` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `idempotency_key` varchar(64) NOT NULL,
   `user_id` bigint(20) unsigned NOT NULL,
-  `environment` enum('sandbox','production') NOT NULL DEFAULT 'sandbox' COMMENT 'Scope de la clÃ©. Deux environnements ne partagent jamais un espace de noms d''idempotence.',
+  `environment` enum('sandbox','production') NOT NULL DEFAULT 'sandbox' COMMENT 'Scope de la cl├®. Deux environnements ne partagent jamais un espace de noms d''idempotence.',
   `operation_id` varchar(36) DEFAULT NULL,
   `response_json` mediumtext DEFAULT NULL,
   `status` enum('processing','completed','error') NOT NULL DEFAULT 'processing',
@@ -169,7 +224,55 @@ CREATE TABLE `idempotency_keys` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `internal_chat_members` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `chat_id` bigint(20) unsigned NOT NULL,
+  `user_id` bigint(20) unsigned NOT NULL,
+  `last_read_at` datetime DEFAULT NULL,
+  `joined_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_ichat_member` (`chat_id`,`user_id`),
+  KEY `idx_ichatmem_user` (`user_id`),
+  CONSTRAINT `fk_ichatmem_chat` FOREIGN KEY (`chat_id`) REFERENCES `internal_chats` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_ichatmem_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `internal_chat_messages` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `chat_id` bigint(20) unsigned NOT NULL,
+  `sender_id` bigint(20) unsigned NOT NULL,
+  `is_system` tinyint(1) NOT NULL DEFAULT 0,
+  `body` text NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_ichatmsg_chat` (`chat_id`,`id`),
+  KEY `fk_ichatmsg_sender` (`sender_id`),
+  CONSTRAINT `fk_ichatmsg_chat` FOREIGN KEY (`chat_id`) REFERENCES `internal_chats` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_ichatmsg_sender` FOREIGN KEY (`sender_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `internal_chats` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `title` varchar(190) NOT NULL DEFAULT '',
+  `creator_id` bigint(20) unsigned NOT NULL,
+  `related_conversation_id` bigint(20) unsigned DEFAULT NULL COMMENT 'Ticket support li├® (escalade).',
+  `status` enum('open','closed') NOT NULL DEFAULT 'open',
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_ichat_creator` (`creator_id`),
+  KEY `idx_ichat_conv` (`related_conversation_id`),
+  CONSTRAINT `fk_ichat_conv` FOREIGN KEY (`related_conversation_id`) REFERENCES `support_conversations` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_ichat_creator` FOREIGN KEY (`creator_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `kyc_verifications` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `user_id` bigint(20) unsigned NOT NULL,
@@ -191,7 +294,7 @@ CREATE TABLE `kyc_verifications` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `kyc_webhook_events` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `provider` varchar(50) NOT NULL,
@@ -209,17 +312,20 @@ CREATE TABLE `kyc_webhook_events` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `ledger_entries` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `operation_id` varchar(36) NOT NULL,
   `sequence` int(10) unsigned NOT NULL,
   `entry_type` enum('debit','credit') NOT NULL,
-  `wallet_id` bigint(20) unsigned NOT NULL,
+  `account_code` varchar(60) DEFAULT NULL,
+  `is_legacy` tinyint(1) NOT NULL DEFAULT 0,
+  `migrated_at` datetime DEFAULT NULL,
+  `wallet_id` bigint(20) unsigned DEFAULT NULL,
   `wallet_currency` varchar(5) NOT NULL,
-  `environment` enum('sandbox','production') NOT NULL DEFAULT 'sandbox' COMMENT 'Environnement de l''Ã©criture comptable. HÃ©ritÃ© de l''opÃ©ration source.',
+  `environment` enum('sandbox','production') NOT NULL DEFAULT 'sandbox' COMMENT 'Environnement de l''├®criture comptable. H├®rit├® de l''op├®ration source.',
   `amount` decimal(20,8) NOT NULL,
-  `balance_after` decimal(20,8) NOT NULL,
+  `balance_after` decimal(20,8) DEFAULT NULL,
   `description` varchar(255) DEFAULT NULL,
   `reference_type` varchar(50) DEFAULT NULL,
   `reference_id` varchar(36) DEFAULT NULL,
@@ -232,12 +338,13 @@ CREATE TABLE `ledger_entries` (
   KEY `idx_ledger_ref` (`reference_type`,`reference_id`),
   KEY `idx_ledger_environment` (`environment`,`created_at`),
   KEY `fk_ledger_operation_env` (`operation_id`,`environment`),
+  KEY `idx_ledger_account` (`account_code`),
   CONSTRAINT `fk_ledger_operation_env` FOREIGN KEY (`operation_id`, `environment`) REFERENCES `wallet_operations` (`id`, `environment`) ON DELETE CASCADE,
   CONSTRAINT `fk_ledger_wallet` FOREIGN KEY (`wallet_id`) REFERENCES `wallets` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `login_attempts` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `email` varchar(190) NOT NULL,
@@ -249,7 +356,7 @@ CREATE TABLE `login_attempts` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `notifications` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `user_id` bigint(20) unsigned NOT NULL,
@@ -265,13 +372,13 @@ CREATE TABLE `notifications` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `password_reset_tokens` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `user_id` bigint(20) unsigned NOT NULL,
-  `token_hash` char(64) NOT NULL COMMENT 'SHA-256 du jeton brut (jamais stockÃ© en clair).',
+  `token_hash` char(64) NOT NULL COMMENT 'SHA-256 du jeton brut (jamais stock├® en clair).',
   `expires_at` datetime NOT NULL COMMENT 'Date d''expiration du jeton.',
-  `used_at` datetime DEFAULT NULL COMMENT 'ConsommÃ© (NULL tant que non utilisÃ©).',
+  `used_at` datetime DEFAULT NULL COMMENT 'Consomm├® (NULL tant que non utilis├®).',
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_reset_token_hash` (`token_hash`),
@@ -281,7 +388,7 @@ CREATE TABLE `password_reset_tokens` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `payment_accounts` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `user_id` bigint(20) unsigned NOT NULL,
@@ -314,7 +421,7 @@ CREATE TABLE `payment_accounts` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `payments` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `user_id` bigint(20) unsigned NOT NULL,
@@ -329,7 +436,7 @@ CREATE TABLE `payments` (
   `dest_amount` decimal(20,2) DEFAULT NULL,
   `fx_rate` decimal(20,8) DEFAULT NULL,
   `provider` varchar(50) DEFAULT NULL,
-  `environment` enum('sandbox','production') NOT NULL DEFAULT 'sandbox' COMMENT 'Environnement d''exÃ©cution rÃ©el du paiement (jamais dÃ©duit d''une credential disponible).',
+  `environment` enum('sandbox','production') NOT NULL DEFAULT 'sandbox' COMMENT 'Environnement d''ex├®cution r├®el du paiement (jamais d├®duit d''une credential disponible).',
   `route_id` varchar(10) DEFAULT NULL,
   `destination` varchar(190) DEFAULT NULL,
   `status` enum('draft','pending_approval','approved','executing','completed','failed','rejected','cancelled') NOT NULL DEFAULT 'draft',
@@ -349,7 +456,46 @@ CREATE TABLE `payments` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `provider_accounts` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `provider_slug` varchar(50) NOT NULL,
+  `environment` enum('sandbox','production') NOT NULL DEFAULT 'sandbox',
+  `external_account_id` varchar(190) DEFAULT NULL,
+  `currency` varchar(5) NOT NULL,
+  `account_type` enum('safeguarding','settlement','operating','pool') NOT NULL DEFAULT 'safeguarding',
+  `status` enum('active','paused','closed') NOT NULL DEFAULT 'active',
+  `provider_credentials_id` bigint(20) unsigned DEFAULT NULL,
+  `label` varchar(190) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_provider_account` (`provider_slug`,`environment`,`currency`),
+  KEY `idx_provider_account_cred` (`provider_credentials_id`),
+  CONSTRAINT `fk_provider_account_cred` FOREIGN KEY (`provider_credentials_id`) REFERENCES `provider_credentials` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `provider_balances` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `provider_account_id` bigint(20) unsigned NOT NULL,
+  `currency` varchar(5) NOT NULL,
+  `available_balance` decimal(20,8) NOT NULL DEFAULT 0.00000000,
+  `pending_balance` decimal(20,8) NOT NULL DEFAULT 0.00000000,
+  `reserved` decimal(20,8) NOT NULL DEFAULT 0.00000000,
+  `reported_at` datetime NOT NULL,
+  `source` enum('api','webhook','statement') NOT NULL DEFAULT 'api',
+  `method` varchar(50) DEFAULT NULL,
+  `raw` longtext DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_provider_balance_account` (`provider_account_id`,`reported_at`),
+  CONSTRAINT `fk_provider_balance_account` FOREIGN KEY (`provider_account_id`) REFERENCES `provider_accounts` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `provider_credentials` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `user_id` bigint(20) unsigned DEFAULT NULL,
@@ -370,7 +516,7 @@ CREATE TABLE `provider_credentials` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `provider_webhook_events` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `provider` varchar(50) NOT NULL,
@@ -385,7 +531,7 @@ CREATE TABLE `provider_webhook_events` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `quotes` (
   `id` varchar(22) NOT NULL,
   `user_id` bigint(20) unsigned NOT NULL,
@@ -394,12 +540,14 @@ CREATE TABLE `quotes` (
   `dest_country` char(2) NOT NULL,
   `dest_currency` varchar(5) NOT NULL DEFAULT 'XAF',
   `receiving_method` varchar(30) NOT NULL DEFAULT 'mobile_money',
+  `destination` varchar(190) DEFAULT NULL,
+  `operator` varchar(50) DEFAULT NULL,
   `amount_sent` decimal(20,2) NOT NULL DEFAULT 0.00,
   `objective` varchar(30) NOT NULL DEFAULT 'optimized',
   `routes_json` json NOT NULL,
   `selected_route_id` varchar(10) DEFAULT NULL,
   `status` enum('QUOTED','SELECTED','EXECUTED','EXPIRED','CANCELLED') NOT NULL DEFAULT 'QUOTED',
-  `environment` enum('sandbox','production') NOT NULL DEFAULT 'sandbox' COMMENT 'Environnement dans lequel la quote a Ã©tÃ© calculÃ©e. ComparÃ© au contexte lors de l''exÃ©cution.',
+  `environment` enum('sandbox','production') NOT NULL DEFAULT 'sandbox' COMMENT 'Environnement dans lequel la quote a ├®t├® calcul├®e. Compar├® au contexte lors de l''ex├®cution.',
   `expires_at` datetime NOT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
@@ -411,11 +559,14 @@ CREATE TABLE `quotes` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `reconciliation_items` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `user_id` bigint(20) unsigned NOT NULL,
   `transaction_id` bigint(20) unsigned DEFAULT NULL,
+  `run_id` bigint(20) unsigned DEFAULT NULL,
+  `source` enum('polling','webhook','balance','statement') NOT NULL DEFAULT 'polling',
+  `operation_id` varchar(36) DEFAULT NULL,
   `provider_reference` varchar(190) DEFAULT NULL,
   `expected_amount` decimal(20,2) NOT NULL,
   `actual_amount` decimal(20,2) DEFAULT NULL,
@@ -427,12 +578,34 @@ CREATE TABLE `reconciliation_items` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_recon_tx` (`transaction_id`),
   KEY `idx_recon_user_status` (`user_id`,`status`),
+  KEY `idx_recon_run` (`run_id`),
+  CONSTRAINT `fk_recon_run_item` FOREIGN KEY (`run_id`) REFERENCES `reconciliation_runs` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_recon_tx` FOREIGN KEY (`transaction_id`) REFERENCES `transactions` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_recon_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `reconciliation_runs` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `provider_account_id` bigint(20) unsigned NOT NULL,
+  `environment` enum('sandbox','production') NOT NULL DEFAULT 'sandbox',
+  `period_start` date NOT NULL,
+  `period_end` date NOT NULL,
+  `opening_balance` decimal(20,8) NOT NULL DEFAULT 0.00000000,
+  `expected_balance` decimal(20,8) NOT NULL DEFAULT 0.00000000,
+  `provider_balance` decimal(20,8) NOT NULL DEFAULT 0.00000000,
+  `difference` decimal(20,8) NOT NULL DEFAULT 0.00000000,
+  `status` enum('pending','matched','discrepancy') NOT NULL DEFAULT 'pending',
+  `notes` varchar(255) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_recon_run` (`provider_account_id`,`period_start`),
+  CONSTRAINT `fk_recon_run_account` FOREIGN KEY (`provider_account_id`) REFERENCES `provider_accounts` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `revoked_tokens` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `jti` char(32) NOT NULL,
@@ -446,15 +619,15 @@ CREATE TABLE `revoked_tokens` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `support_conversations` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `user_id` bigint(20) unsigned NOT NULL COMMENT 'Client propriÃ©taire du ticket.',
+  `user_id` bigint(20) unsigned NOT NULL COMMENT 'Client propri├®taire du ticket.',
   `subject` varchar(190) NOT NULL DEFAULT '',
   `category` varchar(60) DEFAULT NULL COMMENT 'ex : compte, transfert, kyc, facturation, autre',
   `status` enum('open','waiting','resolved','closed') NOT NULL DEFAULT 'open',
   `priority` enum('low','normal','high','urgent') NOT NULL DEFAULT 'normal',
-  `assigned_to` bigint(20) unsigned DEFAULT NULL COMMENT 'EmployÃ©/agent assignÃ© (nullable).',
+  `assigned_to` bigint(20) unsigned DEFAULT NULL COMMENT 'Employ├®/agent assign├® (nullable).',
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
@@ -466,13 +639,13 @@ CREATE TABLE `support_conversations` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `support_messages` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `conversation_id` bigint(20) unsigned NOT NULL,
   `customer_id` bigint(20) unsigned DEFAULT NULL COMMENT 'Auteur = client (NULL si non-client).',
-  `agent_id` bigint(20) unsigned DEFAULT NULL COMMENT 'Auteur = agent/employÃ© (NULL sinon).',
-  `is_bot` tinyint(1) NOT NULL DEFAULT 0 COMMENT '1 si message gÃ©nÃ©rÃ© par le bot auto.',
+  `agent_id` bigint(20) unsigned DEFAULT NULL COMMENT 'Auteur = agent/employ├® (NULL sinon).',
+  `is_bot` tinyint(1) NOT NULL DEFAULT 0 COMMENT '1 si message g├®n├®r├® par le bot auto.',
   `is_internal` tinyint(1) NOT NULL DEFAULT 0,
   `attachment_name` varchar(255) DEFAULT NULL,
   `attachment_url` varchar(500) DEFAULT NULL,
@@ -489,7 +662,7 @@ CREATE TABLE `support_messages` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `team_members` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `business_user_id` bigint(20) unsigned NOT NULL,
@@ -507,7 +680,7 @@ CREATE TABLE `team_members` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `transactions` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `quote_id` varchar(22) DEFAULT NULL,
@@ -527,9 +700,13 @@ CREATE TABLE `transactions` (
   `fx_rate` decimal(20,8) DEFAULT NULL,
   `fee` decimal(20,2) NOT NULL DEFAULT 0.00,
   `fee_currency` varchar(5) NOT NULL DEFAULT 'EUR',
-  `status` enum('completed','processing','pending','failed','cancelled') NOT NULL DEFAULT 'pending',
+  `status` enum('created','quoted','authorized','processing','completed','pending','failed','cancelled','reversed','refunded','reconciliation_required') NOT NULL DEFAULT 'pending',
   `provider` varchar(50) DEFAULT NULL,
-  `environment` enum('sandbox','production') NOT NULL DEFAULT 'sandbox' COMMENT 'Environnement d''exÃ©cution rÃ©el de l''opÃ©ration (jamais dÃ©duit d''une credential disponible).',
+  `provider_account_id` bigint(20) unsigned DEFAULT NULL,
+  `source_provider_account_id` bigint(20) unsigned DEFAULT NULL,
+  `provider_operation_id` varchar(64) DEFAULT NULL,
+  `provider_status` varchar(30) DEFAULT NULL,
+  `environment` enum('sandbox','production') NOT NULL DEFAULT 'sandbox' COMMENT 'Environnement d''ex├®cution r├®el de l''op├®ration (jamais d├®duit d''une credential disponible).',
   `destination` varchar(190) DEFAULT NULL,
   `execution_time_seconds` int(10) unsigned DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT current_timestamp(),
@@ -538,26 +715,32 @@ CREATE TABLE `transactions` (
   KEY `idx_tx_user_created` (`user_id`,`created_at`),
   KEY `idx_tx_user_status` (`user_id`,`status`),
   KEY `idx_transactions_environment` (`environment`,`created_at`),
+  KEY `idx_tx_provider_op` (`provider`,`provider_operation_id`),
+  KEY `idx_tx_provider_account` (`provider_account_id`),
+  KEY `idx_tx_source_provider_account` (`source_provider_account_id`),
+  CONSTRAINT `fk_tx_provider_account` FOREIGN KEY (`provider_account_id`) REFERENCES `provider_accounts` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_tx_source_provider_account` FOREIGN KEY (`source_provider_account_id`) REFERENCES `provider_accounts` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_tx_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `users` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `full_name` varchar(120) NOT NULL,
   `email` varchar(190) NOT NULL,
   `phone` varchar(20) DEFAULT NULL,
   `password_hash` varchar(255) NOT NULL DEFAULT '',
+  `password_changed_at` datetime DEFAULT NULL,
   `account_type` enum('personal','business') NOT NULL DEFAULT 'personal',
-  `platform_role` enum('user','superadmin','operations_manager','finance_treasury','treasury_manager','compliance_officer','risk_fraud','risk_analyst','provider_manager','customer_support','security_technical','security_admin','technical_admin','business_manager','support_operator','compliance_operator','finance_operator','security_engineer','provider_engineer','backend_engineer','qa_engineer','sre_operator','ai_agent') NOT NULL DEFAULT 'user' COMMENT 'RÃ´le d''exploitation de la plateforme. Distinct de account_type (type de client).',
+  `platform_role` enum('user','superadmin','operations_manager','finance_treasury','treasury_manager','compliance_officer','risk_fraud','risk_analyst','provider_manager','customer_support','security_technical','security_admin','technical_admin','business_manager','support_operator','compliance_operator','finance_operator','security_engineer','provider_engineer','backend_engineer','qa_engineer','sre_operator','ai_agent') NOT NULL DEFAULT 'user' COMMENT 'R├┤le d''exploitation de la plateforme. Distinct de account_type (type de client).',
   `auth_provider` enum('local','google') NOT NULL DEFAULT 'local',
   `provider_id` varchar(191) DEFAULT NULL,
   `status` enum('PENDING','ACTIVE','SUSPENDED','CLOSED') NOT NULL DEFAULT 'PENDING',
   `kyc_level` enum('none','basic','standard','advanced') NOT NULL DEFAULT 'none',
-  `kyb_status` enum('none','in_progress','pending','verified','resubmission_requested','rejected','on_hold') NOT NULL DEFAULT 'none' COMMENT 'VÃ©rification d''entreprise (KYB, Sumsub subject_type=company)',
+  `kyb_status` enum('none','in_progress','pending','verified','resubmission_requested','rejected','on_hold') NOT NULL DEFAULT 'none' COMMENT 'V├®rification d''entreprise (KYB, Sumsub subject_type=company)',
   `kyb_verified_at` datetime DEFAULT NULL,
-  `risk_level` enum('low','medium','high') DEFAULT NULL COMMENT 'Niveau de risque KYB (approche basée sur le risque) — Business uniquement',
+  `risk_level` enum('low','medium','high') DEFAULT NULL COMMENT 'Niveau de risque KYB (approche bas├®e sur le risque) ÔÇö Business uniquement',
   `country_of_residence` char(2) DEFAULT NULL,
   `birth_date` date DEFAULT NULL,
   `gender` varchar(20) DEFAULT NULL,
@@ -583,13 +766,14 @@ CREATE TABLE `users` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `wallet_operations` (
   `id` varchar(36) NOT NULL,
   `user_id` bigint(20) unsigned NOT NULL,
-  `type` enum('deposit','withdrawal','send','receive','convert','fee','refund','welcome_bonus','hold') NOT NULL,
+  `type` enum('deposit','withdrawal','send','receive','convert','fee','refund','welcome_bonus','hold','opening_balance') NOT NULL,
   `status` enum('initiated','pending','processing','completed','failed','cancelled','reversed') NOT NULL DEFAULT 'initiated',
-  `environment` enum('sandbox','production') NOT NULL DEFAULT 'sandbox' COMMENT 'Environnement de l''opÃ©ration. Lu depuis la ligne lors de la capture/annulation, jamais recalculÃ©.',
+  `environment` enum('sandbox','production') NOT NULL DEFAULT 'sandbox' COMMENT 'Environnement de l''op├®ration. Lu depuis la ligne lors de la capture/annulation, jamais recalcul├®.',
+  `provider_account_id` bigint(20) unsigned DEFAULT NULL,
   `expires_at` datetime DEFAULT NULL,
   `source_wallet_id` bigint(20) unsigned DEFAULT NULL,
   `source_currency` varchar(5) DEFAULT NULL,
@@ -621,7 +805,7 @@ CREATE TABLE `wallet_operations` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8mb4 */;
+/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `wallets` (
   `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `user_id` bigint(20) unsigned NOT NULL,
@@ -644,7 +828,7 @@ CREATE TABLE `wallets` (
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
 /*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
 /*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
-/*M!100616 SET NOTE_VERBOSITY=@OLD_NOTE_VERBOSITY */;
+/*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
 
 SET FOREIGN_KEY_CHECKS = 1;

@@ -18,7 +18,7 @@ use Nexus\Providers\AbstractProviderAdapter;
  * d'environnement `PROVIDER_STRIPE_*` (le mécanisme d'un vrai déploiement) ;
  * seule la réponse API est scriptée.
  */
-final class ScriptedProviderAdapter extends AbstractProviderAdapter
+class ScriptedProviderAdapter extends AbstractProviderAdapter
 {
     /** @var list<array<string, mixed>> Derniers appels reçus par createPayment(). */
     public static array $calls = [];

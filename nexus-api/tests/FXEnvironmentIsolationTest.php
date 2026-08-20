@@ -10,6 +10,7 @@ use Nexus\Execution\ExecutionEnvironment;
 use Nexus\Models\FXRate;
 use Nexus\Services\FXRateCache;
 use Nexus\Services\FXService;
+use Nexus\Services\OfficialPegFXProvider;
 use Nexus\Services\QuotePricing;
 use PDO;
 use PHPUnit\Framework\TestCase;
@@ -113,16 +114,34 @@ final class FXEnvironmentIsolationTest extends TestCase
     /**
      * LE test de la boucle : le scénario exact constaté en HTTP, où un taux
      * de test cotait de l'argent réel.
+     *
+     * Cycle 5 : EUR↔XAF est désormais couvert par la parité de droit
+     * (OfficialPegFXProvider). La production sans taux cache ne lit TOUJOURS
+     * PAS le taux sandbox : elle dérive la parité officielle, attribuée.
      */
     public function test_un_taux_sandbox_ne_cote_jamais_en_production(): void
     {
         // Seul un taux SANDBOX existe.
         $this->seed('EUR', 'XAF', '100.00000000', 'sandbox');
 
+        $rate = FXService::resolve('EUR', 'XAF', ExecutionEnvironment::PRODUCTION);
+
+        self::assertNotSame('100.00000000', $rate->getRate(), 'Le taux sandbox ne cote jamais la production.');
+        self::assertSame(OfficialPegFXProvider::EUR_XAF_RATE, $rate->getRate());
+        self::assertSame(OfficialPegFXProvider::SOURCE, $rate->getSource(), 'Provenance attribuée, pas une fuite.');
+    }
+
+    /**
+     * Une paire SANS source autoritaire garde le refus strict inter-env.
+     */
+    public function test_un_taux_sandbox_sans_source_autoritaire_refuse_en_production(): void
+    {
+        $this->seed('EUR', 'USD', '1.10000000', 'sandbox');
+
         $this->expectException(RuntimeException::class);
 
         try {
-            FXService::resolve('EUR', 'XAF', ExecutionEnvironment::PRODUCTION);
+            FXService::resolve('EUR', 'USD', ExecutionEnvironment::PRODUCTION);
         } catch (RuntimeException $e) {
             self::assertStringContainsString('production', strtolower($e->getMessage()));
             throw $e;
@@ -178,18 +197,14 @@ final class FXEnvironmentIsolationTest extends TestCase
 
     public function test_un_taux_sandbox_expire_ne_bascule_pas_sur_la_production(): void
     {
-        // Le taux de production porte une valeur RECONNAISSABLE, distincte de
-        // celle du provider manuel (655.957). Une première version de ce test
-        // utilisait 655.957 des deux côtés : le repli manuel légitime était
-        // alors indiscernable d'une contamination, et le test échouait sans
-        // qu'aucun défaut n'existe.
-        $this->seed('EUR', 'XAF', '100.00000000', 'sandbox', -3600);   // expiré
-        $this->seed('EUR', 'XAF', '777.00000000', 'production', 3600); // valide
+        // Paire SANS source autoritaire : l'expiration reste un refus strict.
+        $this->seed('EUR', 'USD', '1.00000000', 'sandbox', -3600);   // expiré
+        $this->seed('EUR', 'USD', '7.77000000', 'production', 3600); // valide
 
         // La sandbox a un taux EXPIRÉ pour cette paire et AUCUN repli :
         // elle refuse, et surtout ne lit pas le taux de production.
         try {
-            FXService::resolve('EUR', 'XAF', ExecutionEnvironment::SANDBOX);
+            FXService::resolve('EUR', 'USD', ExecutionEnvironment::SANDBOX);
             self::fail('Un taux sandbox expiré ne doit pas être remplacé par celui de production, ni par un taux codé en dur.');
         } catch (RuntimeException $e) {
             self::assertStringContainsString('EUR', $e->getMessage());
@@ -198,18 +213,35 @@ final class FXEnvironmentIsolationTest extends TestCase
 
     public function test_un_taux_production_expire_ne_bascule_pas_sur_la_sandbox(): void
     {
-        $this->seed('EUR', 'XAF', '123.00000000', 'sandbox', 3600);     // valide
-        $this->seed('EUR', 'XAF', '655.95700000', 'production', -3600); // expiré
+        $this->seed('EUR', 'USD', '1.23000000', 'sandbox', 3600);   // valide
+        $this->seed('EUR', 'USD', '1.08000000', 'production', -3600); // expiré
 
         $this->expectException(RuntimeException::class);
 
         try {
-            FXService::resolve('EUR', 'XAF', ExecutionEnvironment::PRODUCTION);
+            FXService::resolve('EUR', 'USD', ExecutionEnvironment::PRODUCTION);
         } catch (RuntimeException $e) {
-            // Surtout pas le taux sandbox à 123.
-            self::assertStringNotContainsString('123', $e->getMessage());
+            // Surtout pas le taux sandbox à 1.23.
+            self::assertStringNotContainsString('1.23', $e->getMessage());
             throw $e;
         }
+    }
+
+    /**
+     * Paire à parité de droit : un cache expiré est re-dérivé depuis la
+     * source autoritaire DE CET environnement — jamais lu de l'autre monde.
+     */
+    public function test_un_taux_xaf_expire_est_rederive_depuis_la_parite_officielle(): void
+    {
+        $this->seed('EUR', 'XAF', '100.00000000', 'sandbox', -3600);   // expiré
+        $this->seed('EUR', 'XAF', '777.00000000', 'production', 3600); // valide
+
+        $rate = FXService::resolve('EUR', 'XAF', ExecutionEnvironment::SANDBOX);
+
+        self::assertSame(OfficialPegFXProvider::EUR_XAF_RATE, $rate->getRate());
+        self::assertSame(OfficialPegFXProvider::SOURCE, $rate->getSource());
+        self::assertNotSame('777.00000000', $rate->getRate(), 'Jamais le taux de production.');
+        self::assertNotSame('100.00000000', $rate->getRate(), 'Jamais le taux expiré.');
     }
 
     // ── Cohérence de bout en bout ───────────────────────────────────────────
@@ -237,12 +269,23 @@ final class FXEnvironmentIsolationTest extends TestCase
 
     public function test_quote_pricing_refuse_la_production_sans_taux(): void
     {
+        // Paire de MARCHÉ (aucune source autoritaire) : refus strict.
+        $this->seed('EUR', 'USD', '1.10000000', 'sandbox');
+
+        $res = QuotePricing::resolveRate('EUR', 'USD', ExecutionEnvironment::PRODUCTION);
+
+        self::assertSame(QuotePricing::UNAVAILABLE, $res['status']);
+        self::assertNull($res['rate'], 'Aucun taux ne doit être servi à la production sans source réelle.');
+    }
+
+    public function test_quote_pricing_production_xaf_derive_la_parite_jamais_le_taux_sandbox(): void
+    {
         $this->seed('EUR', 'XAF', '100.00000000', 'sandbox');
 
         $res = QuotePricing::resolveRate('EUR', 'XAF', ExecutionEnvironment::PRODUCTION);
 
-        self::assertSame(QuotePricing::UNAVAILABLE, $res['status']);
-        self::assertNull($res['rate'], 'Aucun taux ne doit être servi à la production sans source réelle.');
+        self::assertNotSame(100.0, $res['rate'], 'Le taux sandbox ne cote jamais la production.');
+        self::assertSame(655.957, $res['rate'], 'La production dérive la parité officielle attribuée.');
     }
 
     // ── Écriture : store() respecte l'environnement ─────────────────────────
@@ -331,5 +374,8 @@ final class FXEnvironmentIsolationTest extends TestCase
     private function purge(): void
     {
         $this->pdo->prepare('DELETE FROM fx_rates_cache WHERE source = ?')->execute([self::TEST_SOURCE]);
+        // Lignes dérivées par la parité officielle pendant ces tests.
+        $this->pdo->prepare('DELETE FROM fx_rates_cache WHERE source = ?')
+            ->execute([OfficialPegFXProvider::SOURCE]);
     }
 }

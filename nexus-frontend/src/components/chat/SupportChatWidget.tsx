@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   apiSupportConversations, apiSupportMessages, apiSupportSendMessage, apiSupportUnread, apiSupportBot,
@@ -9,12 +9,45 @@ import { EASE } from '../anim/Premium';
 
 interface BotMsg { sender: 'customer' | 'bot'; body: string; quickReplies?: string[]; }
 
+const CONNECTING_REPLY =
+  'Je vous mets en relation avec un conseiller Nexus. Un membre de l’équipe support prendra en charge votre demande sous peu.';
+
+/** Affiche le gras **…** et les retours à la ligne (réponses bot), sans HTML brut. */
+function ChatRichBody({ text }: { text: string }) {
+  const lines = text.split('\n');
+  return (
+    <div className="chat-bubble-body">
+      {lines.map((line, i) => (
+        <p key={i} className={`chat-bubble-line${line.trim() === '' ? ' is-gap' : ''}`}>
+          {renderInlineMarkdown(line)}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function renderInlineMarkdown(line: string): ReactNode[] {
+  const parts = line.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+      return <strong key={i}>{part.slice(2, -2)}</strong>;
+    }
+    return part === '' ? null : <span key={i}>{part}</span>;
+  });
+}
+
+function bubbleClass(m: SupportMessage): string {
+  if (m.is_bot) return 'bot';
+  if (m.agent_id) return 'agent';
+  return 'mine';
+}
+
 /** Widget de chat support (client). Flux : d'abord un bot pré-ticket, qui
  * escalade vers un ticket + agent humain si le bot ne sait pas répondre ou si
  * l'utilisateur demande un agent. */
 export default function SupportChatWidget() {
   const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<'bot' | 'conv'>('bot'); // conv = ticket ouvert
+  const [mode, setMode] = useState<'bot' | 'conv'>('bot');
   const [activeConv, setActiveConv] = useState<SupportConversation | null>(null);
   const [convMessages, setConvMessages] = useState<SupportMessage[]>([]);
   const [botHistory, setBotHistory] = useState<BotMsg[]>([]);
@@ -26,7 +59,9 @@ export default function SupportChatWidget() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Notifications : badge non-lu sur le FAB.
+  const agentConnected = Boolean(activeConv?.assigned_to || activeConv?.assigned_name);
+  const agentLabel = activeConv?.assigned_name?.trim() || null;
+
   useEffect(() => {
     let alive = true;
     const tick = async () => {
@@ -38,53 +73,82 @@ export default function SupportChatWidget() {
     return () => { alive = false; clearInterval(iv); };
   }, [open]);
 
-  // Polling des messages du ticket ouvert.
+  // Polling messages + meta conversation (prise en charge agent).
   useEffect(() => {
-    if (!activeConv || !open) return;
+    if (!activeConv || !open || mode !== 'conv') return;
     let alive = true;
     const tick = async () => {
       const res = await apiSupportMessages(activeConv.id, lastMsgId.current);
-      if (alive && res.success && res.data) {
-        const newItems = res.data.items.filter((m) => m.id > lastMsgId.current && !m.is_internal);
-        if (newItems.length) {
-          setConvMessages((prev) => [...prev, ...newItems]);
-          lastMsgId.current = Math.max(...res.data.items.map((m) => m.id));
-        }
+      if (!alive || !res.success || !res.data) return;
+      if (res.data.conversation) {
+        setActiveConv((prev) => (prev ? { ...prev, ...res.data!.conversation! } : res.data!.conversation!));
+      }
+      const newItems = res.data.items.filter((m) => m.id > lastMsgId.current && !m.is_internal);
+      if (newItems.length) {
+        setConvMessages((prev) => [...prev, ...newItems]);
+        lastMsgId.current = Math.max(lastMsgId.current, ...newItems.map((m) => m.id));
       }
     };
     tick();
     const iv = setInterval(tick, 2500);
     return () => { alive = false; clearInterval(iv); };
-  }, [activeConv, open]);
+  }, [activeConv?.id, open, mode]);
 
-  useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }); }, [convMessages, botHistory]);
-
-  // À l'ouverture : réinitialiser en mode bot (sauf si un ticket est déjà en cours).
   useEffect(() => {
-    if (open) {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+  }, [convMessages, botHistory]);
+
+  // À l'ouverture : reprendre un ticket open/waiting, sinon mode bot.
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    (async () => {
+      const list = await apiSupportConversations();
+      if (!alive) return;
+      const items = list.success && list.data ? list.data.items : [];
+      const resume = items.find((c) => c.status === 'waiting' || c.status === 'open');
+      if (resume) {
+        await openConv(resume.id, resume);
+        return;
+      }
       setBotHistory([]);
       setConvMessages([]);
       setActiveConv(null);
       setMode('bot');
-    }
+      lastMsgId.current = 0;
+    })();
+    return () => { alive = false; };
   }, [open]);
+
+  function historyPayload(msgs: BotMsg[]) {
+    return msgs.map((m) => ({ sender: m.sender, body: m.body }));
+  }
+
+  async function escalateToAgent(subject: string, category: string, history: BotMsg[]) {
+    const create = await apiSupportCreateConversation(subject, category, {
+      history: historyPayload(history),
+    });
+    if (create.success && create.data) {
+      await openConv(create.data.conversation.id, create.data.conversation);
+    }
+  }
 
   async function sendQuick(q: string) {
     if (sending) return;
     setDraft(q);
     setSending(true);
+    const prior = historyPayload(botHistory);
     const history = [...botHistory, { sender: 'customer' as const, body: q }];
     setBotHistory(history);
-    const res = await apiSupportBot(q);
+    const res = await apiSupportBot(q, prior);
     setSending(false);
     if (!res.success || !res.data) return;
     const r = res.data;
-    const botMsg = r.reply ?? (r.escalate ? 'Je transmets votre demande à un agent humain. 📨' : '');
+    const botMsg = r.reply ?? (r.escalate ? CONNECTING_REPLY : '');
     if (botMsg) setBotHistory((h) => [...h, { sender: 'bot', body: botMsg, quickReplies: r.quick_replies ?? [] }]);
     if (r.escalate) {
-      await new Promise((resolve) => setTimeout(resolve, 600));
-      const create = await apiSupportCreateConversation(r.subject || q, r.category, { history });
-      if (create.success && create.data) openConv(create.data.conversation.id, create.data.conversation);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      await escalateToAgent(r.subject || q, r.category, history);
     }
   }
 
@@ -93,22 +157,18 @@ export default function SupportChatWidget() {
     if (!text || sending) return;
     setDraft('');
     setSending(true);
+    const prior = historyPayload(botHistory);
     const history = [...botHistory, { sender: 'customer' as const, body: text }];
     setBotHistory(history);
-    const res = await apiSupportBot(text);
+    const res = await apiSupportBot(text, prior);
     setSending(false);
     if (!res.success || !res.data) return;
     const r = res.data;
-    // Affiche la réponse du bot (même si escalate, on montre un message).
-    const botMsg = r.reply ?? (r.escalate ? 'Je transmets votre demande à un agent humain. 📨' : '');
+    const botMsg = r.reply ?? (r.escalate ? CONNECTING_REPLY : '');
     if (botMsg) setBotHistory((h) => [...h, { sender: 'bot', body: botMsg, quickReplies: r.quick_replies ?? [] }]);
-    // Escalade → création du ticket avec tout l'historique.
     if (r.escalate) {
-      await new Promise((resolve) => setTimeout(resolve, 600));
-      const create = await apiSupportCreateConversation(r.subject || text, r.category, { history });
-      if (create.success && create.data) {
-        openConv(create.data.conversation.id, create.data.conversation);
-      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      await escalateToAgent(r.subject || text, r.category, history);
     }
   }
 
@@ -116,13 +176,18 @@ export default function SupportChatWidget() {
     setMode('conv');
     setConvMessages([]);
     lastMsgId.current = 0;
+    if (conv) setActiveConv(conv);
     const res = await apiSupportMessages(id);
     if (res.success && res.data) {
       setConvMessages(res.data.items.filter((m) => !m.is_internal));
       lastMsgId.current = res.data.items.reduce((a, m) => Math.max(a, m.id), 0);
-    }
-    if (conv) setActiveConv(conv);
-    else {
+      if (res.data.conversation) {
+        setActiveConv((prev) => ({ ...(prev ?? conv ?? { id } as SupportConversation), ...res.data!.conversation! }));
+      } else if (!conv) {
+        const list = await apiSupportConversations();
+        setActiveConv(list.success ? list.data!.items.find((c) => c.id === id) ?? null : null);
+      }
+    } else if (!conv) {
       const list = await apiSupportConversations();
       setActiveConv(list.success ? list.data!.items.find((c) => c.id === id) ?? null : null);
     }
@@ -157,9 +222,15 @@ export default function SupportChatWidget() {
     setSending(false);
   }
 
+  const title =
+    mode === 'bot'
+      ? 'Assistant Nexus'
+      : agentConnected && agentLabel
+        ? `${agentLabel} · Support`
+        : 'Mise en relation…';
+
   return (
     <>
-      {/* Bouton flottant + badge non-lu */}
       <motion.button
         className="chat-fab"
         onClick={() => setOpen((o) => !o)}
@@ -175,7 +246,6 @@ export default function SupportChatWidget() {
         {!open && unread > 0 && <span className="chat-fab-badge">{unread}</span>}
       </motion.button>
 
-      {/* Panneau */}
       <AnimatePresence>
         {open && (
           <motion.div
@@ -187,21 +257,37 @@ export default function SupportChatWidget() {
           >
             <div className="chat-panel-head">
               {mode === 'conv' && activeConv && (
-                <button className="chat-back" onClick={() => { setMode('bot'); setActiveConv(null); setConvMessages([]); }}>←</button>
+                <button
+                  className="chat-back"
+                  onClick={() => { setMode('bot'); setActiveConv(null); setConvMessages([]); setBotHistory([]); }}
+                >
+                  ←
+                </button>
               )}
               <div className="chat-title">
-                <span className="chat-live" />
-                {mode === 'bot' ? 'Assistant Nexus' : 'Ticket · assistance humaine'}
+                <span className={`chat-live${mode === 'conv' && !agentConnected ? ' pending' : ''}`} />
+                {title}
               </div>
               <button className="chat-close" onClick={() => setOpen(false)} aria-label="Fermer">✕</button>
             </div>
 
+            {mode === 'conv' && !agentConnected && (
+              <div className="chat-connecting" role="status">
+                Mise en relation avec un conseiller… Merci de patienter.
+              </div>
+            )}
+            {mode === 'conv' && agentConnected && agentLabel && (
+              <div className="chat-connected" role="status">
+                {agentLabel} du support client est connecté(e)
+              </div>
+            )}
+
             <div className="chat-panel-body" ref={scrollRef}>
               {mode === 'bot' ? (
                 <div className="chat-thread">
-                  {[{ sender: 'bot', body: '👋 Bonjour ! Je suis l\'assistant Nexus. Décrivez votre besoin, ou écrivez « agent » pour être mis en relation avec un conseiller.', quickReplies: ['Je veux envoyer de l\'argent', 'Question sur mon solde', 'Vérification KYC', 'Mes frais', 'Parler à un agent'] }, ...botHistory].map((m, i) => (
+                  {[{ sender: 'bot' as const, body: 'Bonjour. Je suis l’assistant Nexus. Décrivez votre besoin, ou demandez à parler à un conseiller.', quickReplies: ['Je veux envoyer de l\'argent', 'Question sur mon solde', 'Vérification KYC', 'Mes frais', 'Parler à un agent'] }, ...botHistory].map((m, i) => (
                     <div key={i} className={`chat-bubble ${m.sender === 'customer' ? 'mine' : 'bot'}`}>
-                      <div className="chat-bubble-body">{m.body}</div>
+                      <ChatRichBody text={m.body} />
                       {m.sender === 'bot' && m.quickReplies && m.quickReplies.length > 0 && (
                         <div className="chat-quick">
                           {m.quickReplies.map((q, j) => (
@@ -215,15 +301,16 @@ export default function SupportChatWidget() {
               ) : (
                 <div className="chat-thread">
                   {convMessages.map((m) => (
-                    <div key={m.id} className={`chat-bubble ${m.agent_id ? 'agent' : m.is_bot ? 'bot' : 'mine'}`}>
-                      <div className="chat-bubble-body">
-                        {m.body}
-                        {m.attachment_url && (
-                          <div style={{ marginTop: 6 }}>
-                            <a href={m.attachment_url} target="_blank" rel="noreferrer" className="chat-attach">📎 {m.attachment_name ?? 'pièce jointe'}</a>
-                          </div>
-                        )}
-                      </div>
+                    <div key={m.id} className={`chat-bubble ${bubbleClass(m)}`}>
+                      {!m.is_bot && m.agent_id && m.agent_name && (
+                        <div className="chat-bubble-author">{m.agent_name}</div>
+                      )}
+                      <ChatRichBody text={m.body} />
+                      {m.attachment_url && (
+                        <div style={{ marginTop: 6 }}>
+                          <a href={m.attachment_url} target="_blank" rel="noreferrer" className="chat-attach">📎 {m.attachment_name ?? 'pièce jointe'}</a>
+                        </div>
+                      )}
                       <div className="chat-bubble-time">{new Date(m.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</div>
                     </div>
                   ))}
@@ -240,7 +327,13 @@ export default function SupportChatWidget() {
               {file && <span className="chat-file-tag">{file.name} ✕</span>}
               <input ref={fileRef} type="file" hidden accept="image/*,.pdf,.txt" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
               <input
-                placeholder={mode === 'bot' ? 'Écrivez votre besoin…' : 'Écrivez votre message…'}
+                placeholder={
+                  mode === 'bot'
+                    ? 'Écrivez votre besoin…'
+                    : agentConnected
+                      ? 'Écrivez votre message…'
+                      : 'Un conseiller va vous rejoindre…'
+                }
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) void (mode === 'bot' ? sendBot() : sendConv()); }}

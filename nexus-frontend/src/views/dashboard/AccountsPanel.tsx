@@ -68,9 +68,6 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
   const [allowedKinds, setAllowedKinds] = useState<AccountKind[]>(() =>
     kindsForCountry(registrationCountry || '', role).kinds
   );
-  const [defaultCurrency, setDefaultCurrency] = useState(() =>
-    kindsForCountry(registrationCountry || '', role).currency
-  );
   const [modesHint, setModesHint] = useState<string | null>(null);
 
   // Modal state
@@ -105,7 +102,6 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
   const applyModes = useCallback((country: string, message?: string | null) => {
     const local = kindsForCountry(country, role);
     setAllowedKinds(local.kinds);
-    setDefaultCurrency(local.currency);
     if (!country || country.length !== 2) {
       setModesHint('Complétez le pays d’enregistrement (Paramètres / KYC) pour adapter les modes de paiement.');
       return;
@@ -122,7 +118,6 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
     const kinds = (res.data.account_kinds?.[role] ?? []) as AccountKind[];
     if (kinds.length > 0) {
       setAllowedKinds(kinds);
-      if (res.data.default_currency) setDefaultCurrency(res.data.default_currency);
       setModesHint(res.data.message ?? null);
       return;
     }
@@ -164,7 +159,6 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
     setEditTarget(null);
     setFormKind(kinds[0] ?? 'bank_iban');
     setAllowedKinds(kinds);
-    setDefaultCurrency(currency);
     setFormData({
       role,
       country: country || '',

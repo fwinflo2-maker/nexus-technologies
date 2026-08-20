@@ -51,6 +51,14 @@ final class IntentEngine
         'cash_pickup'  => '💵',
     ];
 
+    /** Actifs crypto proposés comme devises de réception (en plus de la devise locale). */
+    private const CRYPTO_DEST_ASSETS = [
+        ['code' => 'USDT', 'name' => 'Tether USD', 'symbol' => 'USDT'],
+        ['code' => 'USDC', 'name' => 'USD Coin',   'symbol' => 'USDC'],
+        ['code' => 'ETH',  'name' => 'Ethereum',   'symbol' => 'ETH'],
+        ['code' => 'BTC',  'name' => 'Bitcoin',    'symbol' => 'BTC'],
+    ];
+
     // ── Opérateurs Mobile Money par pays (source : AccountController) ──────
     private const MOBILE_MONEY_OPERATORS = [
         'CG' => ['Airtel Money', 'MTN Mobile Money', 'Moov Africa'],
@@ -215,17 +223,49 @@ final class IntentEngine
                 ];
             }
 
-            // Devises : pour l'instant une seule devise par pays (la devise légale)
+            // Devise légale locale + actifs crypto (USDT / USDC / ETH / BTC).
+            $methods = self::getMethodsForCountry($cc, $countryProviders[$cc]);
             $currencies = [[
                 'code'    => $ref['currency'],
                 'name'    => $ref['currency_name'],
                 'symbol'  => $ref['symbol'],
-                'methods' => self::getMethodsForCountry($cc, $countryProviders[$cc]),
+                'methods' => $methods,
             ]];
+
+            $cryptoMethod = null;
+            foreach ($methods as $method) {
+                if (($method['type'] ?? '') === 'crypto') {
+                    $cryptoMethod = $method;
+                    break;
+                }
+            }
+            if ($cryptoMethod === null) {
+                $cryptoMethod = [
+                    'type'      => 'crypto',
+                    'label'     => self::METHOD_LABELS['crypto'],
+                    'icon'      => self::METHOD_ICONS['crypto'],
+                    'providers' => [],
+                    'operators' => null,
+                ];
+            }
+
+            $existingCodes = [$ref['currency']];
+            foreach (self::CRYPTO_DEST_ASSETS as $asset) {
+                if (in_array($asset['code'], $existingCodes, true)) {
+                    continue;
+                }
+                $currencies[] = [
+                    'code'    => $asset['code'],
+                    'name'    => $asset['name'],
+                    'symbol'  => $asset['symbol'],
+                    'methods' => [$cryptoMethod],
+                ];
+                $existingCodes[] = $asset['code'];
+            }
 
             // Si le pays a une monnaie CFA, on pourrait aussi proposer USD
             // comme alternative pour les corridors internationaux.
-            // Pour le MVP, on garde la devise locale uniquement.
+            // Pour le MVP, on garde la devise locale + cryptos.
 
             $countries[] = [
                 'code'      => $cc,
@@ -245,7 +285,15 @@ final class IntentEngine
             \Nexus\Providers\ProviderConfig::defaultEnvironment()
         );
         $rates = [];
-        foreach (Currency::WALLET_CURRENCIES as $currency) {
+        // Les devises proposées à la réception doivent pouvoir afficher un
+        // taux réel quand le cache FX en contient un, même si l'actif n'est
+        // pas (encore) un wallet Nexus. Sinon ETH/BTC étaient proposés sans
+        // jamais pouvoir refléter leur taux disponible.
+        $rateCurrencies = Currency::WALLET_CURRENCIES;
+        foreach (self::CRYPTO_DEST_ASSETS as $asset) {
+            $rateCurrencies[] = $asset['code'];
+        }
+        foreach (array_values(array_unique($rateCurrencies)) as $currency) {
             $rate = \Nexus\Services\FXService::rateToRef($currency, $environment);
             if ($rate !== null) {
                 $rates[$currency] = $rate;
@@ -261,6 +309,18 @@ final class IntentEngine
             ],
             'rates'             => $rates,
         ];
+    }
+
+    /** Un actif crypto est global : il ne dépend pas de la devise locale du pays. */
+    public static function isCryptoDestination(string $currency): bool
+    {
+        $currency = strtoupper(trim($currency));
+        foreach (self::CRYPTO_DEST_ASSETS as $asset) {
+            if ($currency === $asset['code']) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // ── Méthodes privées ─────────────────────────────────────────────────

@@ -104,7 +104,7 @@ final class ControlCenterController
     /** GET /api/control/providers — matrice complète (§21). */
     public static function providers(Request $request): void
     {
-        $user = self::authorize($request);
+        $user = self::authorize($request, 'credential_inventory');
         $pdo  = Database::getConnection();
 
         $items = [];
@@ -123,7 +123,7 @@ final class ControlCenterController
     /** GET /api/control/providers/{slug} — fiche détaillée (§4). */
     public static function providerDetail(Request $request): void
     {
-        $user = self::authorize($request);
+        $user = self::authorize($request, 'credential_inventory');
         $slug = (string) $request->param('slug', '');
 
         if (!ProviderCatalog::exists($slug)) {
@@ -487,5 +487,435 @@ final class ControlCenterController
                 'transactions'         => $tx->fetchAll(),
             ],
         ]);
+    }
+
+    /**
+     * POST /api/control/clients/{id}/status — suspension, clôture ou réactivation.
+     *
+     * Cette action est volontairement limitée au superadmin : elle invalide
+     * l'accès API du client au prochain appel, mais ne touche jamais aux
+     * soldes, au ledger ou aux transactions en cours.
+     */
+    public static function clientStatus(Request $request): void
+    {
+        $actor = self::authorize($request, 'superadmin');
+        $pdo = Database::getConnection();
+        $id = (int) $request->param('id', '0');
+        $status = strtoupper(trim((string) $request->input('status', '')));
+        $reason = trim((string) $request->input('reason', ''));
+
+        if ($id <= 0 || !in_array($status, ['ACTIVE', 'SUSPENDED', 'CLOSED'], true)) {
+            Response::badRequest('Identifiant ou statut de client invalide.');
+        }
+        if (in_array($status, ['SUSPENDED', 'CLOSED'], true) && $reason === '') {
+            Response::badRequest('Un motif est requis pour restreindre un compte.');
+        }
+        if ($id === (int) $actor['id']) {
+            Response::forbidden('Vous ne pouvez pas modifier votre propre compte.');
+        }
+
+        $find = $pdo->prepare(
+            'SELECT id, status, platform_role FROM users WHERE id = :id FOR UPDATE'
+        );
+        $pdo->beginTransaction();
+        try {
+            $find->execute(['id' => $id]);
+            $target = $find->fetch();
+            if ($target === false) {
+                $pdo->rollBack();
+                Response::notFound('Client introuvable.');
+            }
+            if (PlatformRole::of($target) !== PlatformRole::USER) {
+                $pdo->rollBack();
+                Response::forbidden('Les comptes internes sont gérés par le module Employés.');
+            }
+
+            $previous = (string) $target['status'];
+            $pdo->prepare('UPDATE users SET status = :status WHERE id = :id')
+                ->execute(['status' => $status, 'id' => $id]);
+            $pdo->prepare(
+                'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, metadata)
+                 VALUES (:user_id, :action, :entity_type, :entity_id, :metadata)'
+            )->execute([
+                'user_id' => (int) $actor['id'],
+                'action' => 'CLIENT_' . $status,
+                'entity_type' => 'users',
+                'entity_id' => $id,
+                'metadata' => json_encode([
+                    'previous_status' => $previous,
+                    'status' => $status,
+                    'reason' => $reason !== '' ? $reason : null,
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            ]);
+            $pdo->commit();
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+
+        Response::success(['id' => $id, 'status' => $status]);
+    }
+
+    /** GET /api/control/clients/linked — signaux de comptes clients liés. */
+    public static function linkedClients(Request $request): void
+    {
+        self::authorize($request, 'superadmin');
+        $pdo = Database::getConnection();
+        $rows = $pdo->query(
+            "SELECT id, full_name, email, phone, status FROM users
+             WHERE COALESCE(platform_role, 'user') = 'user'
+             ORDER BY id ASC"
+        )->fetchAll();
+
+        $byEmail = [];
+        $byPhone = [];
+        foreach ($rows as $row) {
+            $email = self::normalizedEmail((string) $row['email']);
+            if ($email !== '') {
+                $byEmail[$email][] = $row;
+            }
+            $phone = preg_replace('/\D+/', '', (string) ($row['phone'] ?? ''));
+            if ($phone !== '') {
+                $byPhone[$phone][] = $row;
+            }
+        }
+
+        $groups = [];
+        foreach ([['email', $byEmail], ['phone', $byPhone]] as [$signal, $buckets]) {
+            foreach ($buckets as $value => $members) {
+                if (count($members) < 2) {
+                    continue;
+                }
+                $groups[] = [
+                    'signal' => $signal,
+                    'detail' => self::maskLinkedValue($signal, (string) $value),
+                    'risk' => $signal === 'email' ? 'high' : 'medium',
+                    'members' => array_map(static fn (array $member): array => [
+                        'id' => (int) $member['id'],
+                        'full_name' => $member['full_name'],
+                        'status' => $member['status'],
+                    ], $members),
+                ];
+            }
+        }
+        Response::success(['groups' => $groups, 'total' => count($groups)]);
+    }
+
+    /** GET /api/control/staff/dashboard — dashboard strictement scopé au rôle. */
+    public static function staffDashboard(Request $request): void
+    {
+        $request = AuthMiddleware::handle($request);
+        $user = $request->attribute('user');
+        $role = PlatformRole::of($user);
+        $dashboard = PlatformRole::dashboardOf($user);
+        if ($dashboard === null) {
+            throw new \Nexus\Core\HttpException(
+                403,
+                'Aucun dashboard interne pour ce compte.',
+                PlatformRole::ERROR_CODE
+            );
+        }
+        $pdo = Database::getConnection();
+        $sections = [];
+        $sections[$dashboard] = match ($dashboard) {
+            'operations' => self::operationsDashboard($pdo),
+            'compliance' => self::complianceDashboard($pdo),
+            'providers' => self::providersDashboard($pdo),
+            'support' => self::supportDashboard($pdo),
+            'executive' => [
+                'note' => 'Vue exécutive volontairement non sensible. Utilisez les surfaces dédiées selon le besoin d’en connaître.',
+            ],
+            'finance' => ['counters' => ['processing' => self::count($pdo, "SELECT COUNT(*) FROM transactions WHERE status = 'processing'")]],
+            'risk' => ['counters' => ['high_risk' => self::count($pdo, "SELECT COUNT(*) FROM users WHERE risk_level = 'high'")]],
+            'business' => ['counters' => ['pending_kyb' => self::count($pdo, "SELECT COUNT(*) FROM users WHERE account_type = 'business' AND COALESCE(kyb_status,'pending') = 'pending'")]],
+            'technical' => ['note' => 'Diagnostic technique via les surfaces d’exploitation autorisées.'],
+            default => ['note' => 'Aucune donnée disponible.'],
+        };
+        Response::success(['role' => $role, 'dashboard' => $dashboard, 'sections' => $sections]);
+    }
+
+    /** POST /api/control/staff/action — mutations métier auditées et scopées. */
+    public static function staffAction(Request $request): void
+    {
+        $request = AuthMiddleware::handle($request);
+        $actor = $request->attribute('user');
+        $console = strtolower(trim((string) $request->input('console', '')));
+        $action = strtolower(trim((string) $request->input('action', '')));
+        $dashboard = PlatformRole::dashboardOf($actor);
+        if ($dashboard === null || (!PlatformRole::isSuperadmin($actor) && $dashboard !== $console)) {
+            throw new \Nexus\Core\HttpException(
+                403,
+                'Action hors du périmètre de ce rôle.',
+                PlatformRole::ERROR_CODE
+            );
+        }
+        $allowed = [
+            'operations' => ['tx_approve', 'tx_cancel', 'tx_retry'],
+            'compliance' => ['kyc_approve', 'kyc_reject'],
+            'support' => ['ticket_assign', 'ticket_status', 'ticket_escalate'],
+            'risk' => ['suspend', 'unsuspend', 'risk_level'],
+            'business' => ['kyb_approve', 'kyb_reject'],
+        ];
+        if (!in_array($action, $allowed[$console] ?? [], true)) {
+            Response::badRequest('Action staff inconnue ou interdite.');
+        }
+
+        $pdo = Database::getConnection();
+        $pdo->beginTransaction();
+        try {
+            $result = match ($console) {
+                'operations' => self::staffTransactionAction($pdo, $action, $request),
+                'compliance' => self::staffKycAction($pdo, $action, $request),
+                'support' => self::staffSupportAction($pdo, (int) $actor['id'], $action, $request),
+                'risk' => self::staffRiskAction($pdo, $action, $request),
+                'business' => self::staffBusinessAction($pdo, $action, $request),
+                default => throw new \Nexus\Core\HttpException(400, 'Console invalide.', 'INVALID_STAFF_CONSOLE'),
+            };
+            $pdo->prepare(
+                'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, metadata)
+                 VALUES (:user, :action, :type, :id, :metadata)'
+            )->execute([
+                'user' => (int) $actor['id'],
+                'action' => 'staff.' . $console . '.' . $action,
+                'type' => (string) ($result['entity_type'] ?? $console),
+                'id' => $result['entity_id'] ?? null,
+                'metadata' => json_encode(['console' => $console, 'action' => $action], JSON_UNESCAPED_UNICODE),
+            ]);
+            $pdo->commit();
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+        Response::success($result);
+    }
+
+    private static function staffTransactionAction(\PDO $pdo, string $action, Request $request): array
+    {
+        $id = (int) $request->input('transaction_id', 0);
+        $stmt = $pdo->prepare('SELECT id, status FROM transactions WHERE id = :id FOR UPDATE');
+        $stmt->execute(['id' => $id]);
+        $tx = $stmt->fetch();
+        if ($tx === false) {
+            Response::notFound('Transaction introuvable.');
+        }
+        $from = (string) $tx['status'];
+        $to = match ($action) {
+            'tx_approve' => $from === 'pending' ? 'processing' : null,
+            'tx_cancel' => $from === 'pending' ? 'cancelled' : null,
+            'tx_retry' => $from === 'failed' ? 'pending' : null,
+            default => null,
+        };
+        if ($to === null) {
+            Response::badRequest('Transition de transaction interdite.');
+        }
+        $pdo->prepare('UPDATE transactions SET status = :status, updated_at = NOW() WHERE id = :id')
+            ->execute(['status' => $to, 'id' => $id]);
+        return ['entity_type' => 'transactions', 'entity_id' => $id, 'status' => $to];
+    }
+
+    private static function staffKycAction(\PDO $pdo, string $action, Request $request): array
+    {
+        $id = (int) $request->input('verification_id', 0);
+        $reason = trim((string) $request->input('reason', ''));
+        if ($action === 'kyc_reject' && $reason === '') {
+            Response::badRequest('Un motif de rejet est requis.');
+        }
+        $stmt = $pdo->prepare('SELECT id, user_id, status FROM kyc_verifications WHERE id = :id FOR UPDATE');
+        $stmt->execute(['id' => $id]);
+        $kyc = $stmt->fetch();
+        if ($kyc === false) {
+            Response::notFound('Vérification introuvable.');
+        }
+        $status = $action === 'kyc_approve' ? 'verified' : 'rejected';
+        $pdo->prepare('UPDATE kyc_verifications SET status = :status, reason = :reason, reviewed_at = NOW() WHERE id = :id')
+            ->execute(['status' => $status, 'reason' => $reason !== '' ? $reason : null, 'id' => $id]);
+        if ($status === 'verified') {
+            $pdo->prepare("UPDATE users SET kyc_level = 'standard' WHERE id = :id")
+                ->execute(['id' => $kyc['user_id']]);
+        }
+        return ['entity_type' => 'kyc_verifications', 'entity_id' => $id, 'status' => $status];
+    }
+
+    private static function staffSupportAction(\PDO $pdo, int $actorId, string $action, Request $request): array
+    {
+        $id = (int) $request->input('conversation_id', 0);
+        $stmt = $pdo->prepare('SELECT id, subject FROM support_conversations WHERE id = :id FOR UPDATE');
+        $stmt->execute(['id' => $id]);
+        $ticket = $stmt->fetch();
+        if ($ticket === false) {
+            Response::notFound('Conversation introuvable.');
+        }
+        if ($action === 'ticket_assign') {
+            $pdo->prepare('UPDATE support_conversations SET assigned_to = :actor WHERE id = :id')
+                ->execute(['actor' => $actorId, 'id' => $id]);
+            return ['entity_type' => 'support_conversations', 'entity_id' => $id, 'assigned_to' => $actorId];
+        }
+        if ($action === 'ticket_status') {
+            $status = strtolower((string) $request->input('status', ''));
+            if (!in_array($status, ['open', 'pending', 'resolved', 'closed'], true)) {
+                Response::badRequest('Statut de ticket invalide.');
+            }
+            $pdo->prepare('UPDATE support_conversations SET status = :status WHERE id = :id')
+                ->execute(['status' => $status, 'id' => $id]);
+            return ['entity_type' => 'support_conversations', 'entity_id' => $id, 'status' => $status];
+        }
+
+        $specialistId = (int) $request->input('specialist_id', 0);
+        $reason = trim((string) $request->input('reason', ''));
+        $difficulty = trim((string) $request->input('difficulty', ''));
+        if ($specialistId <= 0 || $specialistId === $actorId || $reason === '') {
+            Response::badRequest('Spécialiste distinct et motif requis.');
+        }
+        $sp = $pdo->prepare('SELECT id, platform_role FROM users WHERE id = :id AND status = \'ACTIVE\'');
+        $sp->execute(['id' => $specialistId]);
+        $specialist = $sp->fetch();
+        if ($specialist === false || PlatformRole::of($specialist) === PlatformRole::USER) {
+            Response::badRequest('Spécialiste interne invalide.');
+        }
+        $pdo->prepare("UPDATE support_conversations SET assigned_to = :specialist, priority = 'high' WHERE id = :id")
+            ->execute(['specialist' => $specialistId, 'id' => $id]);
+        $pdo->prepare(
+            'INSERT INTO internal_chats (title, creator_id, related_conversation_id)
+             VALUES (:title, :creator, :conversation)'
+        )->execute([
+            'title' => substr('Escalade · ' . (string) $ticket['subject'], 0, 190),
+            'creator' => $actorId,
+            'conversation' => $id,
+        ]);
+        $chatId = (int) $pdo->lastInsertId();
+        $member = $pdo->prepare('INSERT INTO internal_chat_members (chat_id, user_id) VALUES (:chat, :user)');
+        $member->execute(['chat' => $chatId, 'user' => $actorId]);
+        $member->execute(['chat' => $chatId, 'user' => $specialistId]);
+        $pdo->prepare(
+            'INSERT INTO internal_chat_messages (chat_id, sender_id, is_system, body)
+             VALUES (:chat, :sender, 1, :body)'
+        )->execute([
+            'chat' => $chatId,
+            'sender' => $actorId,
+            'body' => 'Escalade ' . ($difficulty !== '' ? $difficulty : 'non classée') . ' — ' . $reason,
+        ]);
+        return ['entity_type' => 'support_conversations', 'entity_id' => $id, 'chat_id' => $chatId, 'assigned_to' => $specialistId];
+    }
+
+    private static function staffRiskAction(\PDO $pdo, string $action, Request $request): array
+    {
+        $id = (int) $request->input('user_id', 0);
+        $stmt = $pdo->prepare('SELECT id, platform_role FROM users WHERE id = :id FOR UPDATE');
+        $stmt->execute(['id' => $id]);
+        $target = $stmt->fetch();
+        if ($target === false) {
+            Response::notFound('Utilisateur introuvable.');
+        }
+        if (PlatformRole::of($target) !== PlatformRole::USER) {
+            throw new \Nexus\Core\HttpException(403, 'Un rôle risk ne peut modifier un compte interne.', PlatformRole::ERROR_CODE);
+        }
+        if ($action === 'risk_level') {
+            $level = strtolower((string) $request->input('level', ''));
+            if (!in_array($level, ['low', 'medium', 'high'], true)) {
+                Response::badRequest('Niveau de risque invalide.');
+            }
+            $pdo->prepare('UPDATE users SET risk_level = :level WHERE id = :id')->execute(['level' => $level, 'id' => $id]);
+            return ['entity_type' => 'users', 'entity_id' => $id, 'risk_level' => $level];
+        }
+        $status = $action === 'suspend' ? 'SUSPENDED' : 'ACTIVE';
+        if ($action === 'suspend' && trim((string) $request->input('reason', '')) === '') {
+            Response::badRequest('Un motif de suspension est requis.');
+        }
+        $pdo->prepare('UPDATE users SET status = :status WHERE id = :id')->execute(['status' => $status, 'id' => $id]);
+        return ['entity_type' => 'users', 'entity_id' => $id, 'status' => $status];
+    }
+
+    private static function staffBusinessAction(\PDO $pdo, string $action, Request $request): array
+    {
+        $id = (int) $request->input('user_id', 0);
+        $reason = trim((string) $request->input('reason', ''));
+        if ($action === 'kyb_reject' && $reason === '') {
+            Response::badRequest('Un motif de rejet est requis.');
+        }
+        $stmt = $pdo->prepare("SELECT id FROM users WHERE id = :id AND account_type = 'business' AND COALESCE(platform_role,'user') = 'user'");
+        $stmt->execute(['id' => $id]);
+        if ($stmt->fetchColumn() === false) {
+            Response::notFound('Entreprise cliente introuvable.');
+        }
+        $status = $action === 'kyb_approve' ? 'verified' : 'rejected';
+        $pdo->prepare('UPDATE users SET kyb_status = :status WHERE id = :id')->execute(['status' => $status, 'id' => $id]);
+        return ['entity_type' => 'users', 'entity_id' => $id, 'kyb_status' => $status];
+    }
+
+    private static function operationsDashboard(\PDO $pdo): array
+    {
+        $queue = $pdo->query(
+            "SELECT id, user_id, amount, currency, status, provider, created_at
+             FROM transactions WHERE status IN ('pending','processing','reconciliation_required')
+             ORDER BY created_at ASC LIMIT 100"
+        )->fetchAll();
+        return ['counters' => [
+            'pending' => self::count($pdo, "SELECT COUNT(*) FROM transactions WHERE status = 'pending'"),
+            'processing' => self::count($pdo, "SELECT COUNT(*) FROM transactions WHERE status = 'processing'"),
+        ], 'queue' => $queue];
+    }
+
+    private static function complianceDashboard(\PDO $pdo): array
+    {
+        $pending = $pdo->query(
+            "SELECT k.id, k.user_id, k.subject_type, k.status, k.created_at
+             FROM kyc_verifications k WHERE k.status = 'pending' ORDER BY k.created_at ASC LIMIT 100"
+        )->fetchAll();
+        return ['counters' => ['pending' => count($pending)], 'pending' => $pending];
+    }
+
+    private static function providersDashboard(\PDO $pdo): array
+    {
+        return [
+            'providers' => ['total' => count(ProviderCatalog::all())],
+            'credentials' => [
+                'configured' => self::count($pdo, "SELECT COUNT(*) FROM provider_credentials WHERE credentials_enc IS NOT NULL AND status NOT IN ('error','disabled')"),
+            ],
+        ];
+    }
+
+    private static function supportDashboard(\PDO $pdo): array
+    {
+        $recent = $pdo->query(
+            'SELECT id, subject, status, priority, assigned_to, created_at
+             FROM support_conversations ORDER BY updated_at DESC LIMIT 100'
+        )->fetchAll();
+        return ['counters' => [
+            'open' => self::count($pdo, "SELECT COUNT(*) FROM support_conversations WHERE status = 'open'"),
+        ], 'recent' => $recent];
+    }
+
+    private static function count(\PDO $pdo, string $sql): int
+    {
+        return (int) $pdo->query($sql)->fetchColumn();
+    }
+
+    private static function normalizedEmail(string $email): string
+    {
+        $email = strtolower(trim($email));
+        $parts = explode('@', $email, 2);
+        if (count($parts) !== 2) {
+            return '';
+        }
+        [$local, $domain] = $parts;
+        if (in_array($domain, ['gmail.com', 'googlemail.com'], true)) {
+            $local = explode('+', $local, 2)[0];
+            $local = str_replace('.', '', $local);
+            $domain = 'gmail.com';
+        }
+        return $local . '@' . $domain;
+    }
+
+    private static function maskLinkedValue(string $signal, string $value): string
+    {
+        if ($signal === 'email') {
+            [$local, $domain] = explode('@', $value, 2);
+            return mb_substr($local, 0, 2) . '…@' . $domain;
+        }
+        return str_repeat('•', max(0, strlen($value) - 4)) . substr($value, -4);
     }
 }

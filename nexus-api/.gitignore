@@ -6,3 +6,6 @@
 
 # Cache de tests PHPUnit
 .phpunit.cache/
+
+# Clés de harness sandbox (PEM) — jamais versionnées.
+scripts/provider_sandbox/.keys/

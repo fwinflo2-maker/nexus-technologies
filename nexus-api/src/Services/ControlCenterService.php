@@ -38,6 +38,7 @@ final class ControlCenterService
         'cancelPayment',
         'getBalance',
         'verifyWebhook',
+        'testConnection',
     ];
 
     private function __construct()
@@ -151,6 +152,7 @@ final class ControlCenterService
         }
 
         $operations = self::operationMatrix($slug);
+        $caps = \Nexus\Providers\ProviderCapabilityMatrix::for($slug);
 
         return [
             'slug'            => $slug,
@@ -170,6 +172,8 @@ final class ControlCenterService
             // Opérations RÉELLEMENT implémentées (§30).
             'operations'      => $operations,
             'operations_enabled' => in_array(true, $operations, true),
+            'integration'     => \Nexus\Providers\ProviderCapabilityMatrix::integrationStatus($slug),
+            'capabilities'    => $caps,
             'credential_schema'  => ProviderCredentialSchema::describe($slug),
             'documentation'   => self::documentationStatus($slug),
         ];

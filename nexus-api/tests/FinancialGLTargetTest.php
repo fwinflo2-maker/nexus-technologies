@@ -438,13 +438,13 @@ final class FinancialGLTargetTest extends TestCase
         $this->assertSame('102.00', $b['hold_balance']);
         $this->assertInvariant($b);
 
-        // 2) Capture : hold → in_transit (la position ne bouge pas).
+        // 2) Capture : débit définitif de la position.
         $capKey = 'gl-bkt-cap-' . bin2hex(random_bytes(4));
         $this->trackKey($capKey);
         WalletService::captureHold($hold['operation_id'], $u, $capKey, $ctx);
 
         $b = $this->walletRow($wid);
-        $this->assertSame('102.00', $b['in_transit_balance']);
+        $this->assertSame('0.00', $b['in_transit_balance']);
         $this->assertSame('0.00', $b['hold_balance']);
         $this->assertInvariant($b);
 

@@ -1,5 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { AuthProvider, useAuth, loginPathForLocation } from './context/AuthContext';
 import { I18nProvider } from './context/I18nContext';
 import { NotificationsProvider } from './context/NotificationsContext';
 import SupportChatWidget from './components/chat/SupportChatWidget';
@@ -8,9 +8,12 @@ import { LoginPage } from './views/auth/LoginPage';
 import { RegisterPage } from './views/auth/RegisterPage';
 import ForgotPasswordPage from './views/auth/ForgotPasswordPage';
 import AdminLoginPage from './views/auth/AdminLoginPage';
+import EmployeeLoginPage from './views/auth/EmployeeLoginPage';
+import StaffHome from './views/staff/StaffHome';
 import { PrivacyPage, TermsPage, DocumentationPage, SupportPage } from './views/public/InfoPages';
 import GearsBackground from './components/dashboard/GearsBackground';
 import { ParticlesBackground } from './components/ParticlesBackground';
+import { SeoMeta } from './components/SeoMeta';
 import Sidebar from './components/dashboard/Sidebar';
 import DashTopbar from './components/dashboard/DashTopbar';
 import DashboardPage from './views/dashboard/DashboardPage';
@@ -20,6 +23,7 @@ import NotificationsPage from './views/dashboard/NotificationsPage';
 import SendPage from './views/dashboard/SendPage';
 import ReceivePage from './views/dashboard/ReceivePage';
 import ConvertPage from './views/dashboard/ConvertPage';
+import CardsPage from './views/dashboard/CardsPage';
 import HistoryPage from './views/dashboard/HistoryPage';
 import SettingsPage from './views/dashboard/SettingsPage';
 import KycPage from './views/dashboard/KycPage';
@@ -86,17 +90,23 @@ function PublicRouter() {
         />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/admin-login" element={<AdminLoginPage />} />
+        <Route path="/staff-login" element={<EmployeeLoginPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/docs" element={<DocumentationPage />} />
         <Route path="/support" element={<SupportPage />} />
         {/* Toute route inconnue ou protégée atteinte sans session (ex. juste
-            après une déconnexion depuis /admin ou /dashboard) mène à la page
-            de connexion, et non à la landing. */}
-        <Route path="*" element={<Navigate to="/login" replace />} />
+            après une déconnexion) mène au login de l'espace correspondant. */}
+        <Route path="*" element={<PublicAuthFallback />} />
       </Routes>
     </>
   );
+}
+
+/** Redirige vers /login, /admin-login ou /staff-login selon l'URL d'origine. */
+function PublicAuthFallback() {
+  const { pathname } = useLocation();
+  return <Navigate to={loginPathForLocation(pathname)} replace />;
 }
 
 function DashboardLayout() {
@@ -139,6 +149,7 @@ function DashboardLayout() {
             <Route path="/send" element={<><DashTopbar mode={effectiveMode} title={t('page.send')} subtitle="" /><SendPage /></>} />
             <Route path="/receive" element={<><DashTopbar mode={effectiveMode} title={t('page.receive')} subtitle="" /><ReceivePage /></>} />
             <Route path="/convert" element={<><DashTopbar mode={effectiveMode} title={t('page.convert')} subtitle="" /><ConvertPage /></>} />
+            <Route path="/cards" element={<><DashTopbar mode={effectiveMode} title={t('page.cards')} subtitle="" /><CardsPage /></>} />
             <Route path="/history" element={<><DashTopbar mode={effectiveMode} title={t('page.history')} subtitle="" /><HistoryPage /></>} />
             <Route path="/notifications" element={<><DashTopbar mode={effectiveMode} title={t('page.notifications')} subtitle="" /><NotificationsPage /></>} />
 
@@ -197,6 +208,7 @@ function AppRoutes() {
   // Dashboard Super Admin : réservé au rôle superadmin. Les autres comptes
   // sont redirigés vers leur dashboard client.
   const isSuperAdmin = user.platform_role === 'superadmin';
+  const isInternalStaff = user.platform_role !== 'user';
 
   return (
     <Routes>
@@ -214,6 +226,9 @@ function AppRoutes() {
           </div>
         } />
       )}
+      {isInternalStaff && (
+        <Route path="/staff" element={<StaffHome />} />
+      )}
       <Route path="*" element={<DashboardLayout />} />
     </Routes>
   );
@@ -223,6 +238,7 @@ function App() {
   return (
     <BrowserRouter>
       <I18nProvider>
+        <SeoMeta />
         <AuthProvider>
           <AppRoutes />
         </AuthProvider>

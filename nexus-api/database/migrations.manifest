@@ -96,3 +96,23 @@
 2026_08_16_kyb_company_risk.sql
 # 0.33 — Journal des webhooks providers (idempotence, §13)
 2026_08_17_provider_webhook_events.sql
+# 0.34 — Exécution pawaPay
+2026_08_17_pawapay_execution.sql
+# 0.35 — Modèle comptable cible / GL
+2026_08_17_financial_gl_model.sql
+# 0.36 — États financiers cibles
+2026_08_17_financial_states.sql
+# 0.37 — Rotation atomique des credentials providers
+2026_08_18_credential_rotation.sql
+# 0.38 — Gaps du modèle financier
+2026_08_18_financial_model_gaps.sql
+# 0.39 — Chat interne du personnel
+2026_08_18_internal_chat.sql
+# 0.40 — Invalidation JWT après changement / reset mot de passe
+2026_08_20_password_changed_at.sql
+# 0.41 — Funding webhook attribué par intent, jamais par payload user_id
+2026_08_20_funding_intents.sql
+# 0.42 — Demandes de cartes virtuelles (émission provider ultérieure)
+2026_08_20_virtual_cards.sql
+# 0.43 — Cardholder id Stripe Issuing sur virtual_cards
+2026_08_20_virtual_cards_cardholder.sql

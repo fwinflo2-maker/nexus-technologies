@@ -445,17 +445,21 @@ final class WalletService
                 throw new RuntimeException("Hold balance insuffisante pour la capture.");
             }
 
-            // 3. Modèle cible (buckets) : la capture transforme la RÉSERVATION en
-            // TRANSIT — hold_balance -> in_transit_balance. AUCUN posting n'est
-            // écrit ici : le débit de position n'a lieu qu'au RÈGLEMENT provider
-            // (LedgerService::postOutboundDebit, appelé par ExecutionEngine ou
-            // ExecutionSettlementService). L'invariant
-            // balance = available + hold + pending + in_transit + settlement
-            // reste vérifié : balance inchangé, available inchangé.
+            // 3. La capture est le débit définitif. La réservation n'avait
+            // produit aucune écriture ; on débite maintenant USER_POSITION et
+            // crédite OUTBOUND_TRANSIT dans la même transaction. Le règlement
+            // provider ne redébitera jamais le wallet.
+            LedgerService::recordHoldCapture(
+                $walletId,
+                $amount,
+                $currency,
+                $operationId,
+                'Capture du hold',
+                ['kind' => 'hold_capture']
+            );
             $newHold = bcsub((string)$wallet['hold_balance'], $amount, 8);
-            $newInTransit = bcadd((string)$wallet['in_transit_balance'], $amount, 8);
-            $upd = $pdo->prepare('UPDATE wallets SET hold_balance = :hold, in_transit_balance = :in_transit WHERE id = :id');
-            $upd->execute(['hold' => $newHold, 'in_transit' => $newInTransit, 'id' => $walletId]);
+            $upd = $pdo->prepare('UPDATE wallets SET hold_balance = :hold WHERE id = :id');
+            $upd->execute(['hold' => $newHold, 'id' => $walletId]);
 
             // 5. Mise à jour opération
             $updOp = $pdo->prepare('UPDATE wallet_operations SET status = \'completed\', completed_at = NOW() WHERE id = :id');

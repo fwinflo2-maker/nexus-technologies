@@ -17,6 +17,7 @@ import { useDashT, localeFor } from '../../data/dashboard-i18n';
 import { isAccountVerified } from '../../lib/accountStatus';
 import AnimatedCounter from '../../components/AnimatedCounter';
 import Avatar from '../../components/Avatar';
+import { countries } from '../../data/countries';
 import { EASE } from '../../components/anim/Premium';
 
 type Mode = 'personal' | 'business' | 'admin';
@@ -171,8 +172,11 @@ export default function DashboardPage({ mode }: DashboardProps) {
       };
     }
     if (banner.type === 'limits') {
-      const pct = limits.monthly_limit_eur > 0
-        ? Math.min(100, (limits.monthly_used_eur / limits.monthly_limit_eur) * 100)
+      const monthlyLimit = limits?.monthly_limit_eur ?? 0;
+      const monthlyUsed = limits?.monthly_used_eur ?? 0;
+      const monthlyRemaining = limits?.monthly_remaining_eur ?? 0;
+      const pct = monthlyLimit > 0
+        ? Math.min(100, (monthlyUsed / monthlyLimit) * 100)
         : 0;
       return {
         title: t('dash.banner.limits.title'),
@@ -181,9 +185,9 @@ export default function DashboardPage({ mode }: DashboardProps) {
         tone: 'limits' as const,
         href: banner.href ?? '/kyc',
         pct,
-        used: limits.monthly_used_eur,
-        limit: limits.monthly_limit_eur,
-        remaining: limits.monthly_remaining_eur,
+        used: monthlyUsed,
+        limit: monthlyLimit,
+        remaining: monthlyRemaining,
       };
     }
     return {
@@ -200,6 +204,7 @@ export default function DashboardPage({ mode }: DashboardProps) {
     { icon: '↙', label: t('dash.quick.receive'), sub: t('dash.quick.receive.sub'), cls: 'ib-gr', href: '/receive' },
     { icon: '⇌', label: t('dash.quick.fund'), sub: t('dash.quick.fund.sub'), cls: 'ib-g', href: '/wallet?fund=1' },
     { icon: '⇄', label: t('dash.quick.convert'), sub: t('dash.quick.convert.sub'), cls: 'ib-v', href: '/convert' },
+    { icon: '💳', label: t('dash.quick.cards'), sub: t('dash.quick.cards.sub'), cls: 'ib-v', href: '/cards' },
     { icon: '👥', label: t('dash.quick.beneficiaries'), sub: t('dash.quick.beneficiaries.sub'), cls: 'ib-p', href: '/payments' },
   ];
 
@@ -209,25 +214,35 @@ export default function DashboardPage({ mode }: DashboardProps) {
 
   return (
     <div className="page" style={{ overflowX: 'hidden' }}>
-      {/* ═══ 1. En-tête : salutation + état de vérification réel ═════════ */}
+      {/* ═══ 1. Profil : photo synchronisée (Paramètres → sidebar / topbar) ═ */}
       <motion.div variants={fadeInUp} initial="hidden" animate="visible" custom={0} className="page-header" style={{ marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-          <Avatar avatar={authUser?.avatar} accountType={isBiz ? 'business' : 'personal'} size={58} />
+        <div className="card card-hi-c" style={{ padding: 18, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+          <Link to="/settings" title={t('dash.profile.editPhoto')} style={{ textDecoration: 'none', flexShrink: 0 }}>
+            <Avatar avatar={authUser?.avatar} accountType={isBiz ? 'business' : 'personal'} size={72} />
+          </Link>
           <div style={{ flex: 1, minWidth: 200 }}>
             <div className="page-label">{t(isBiz ? 'dash.business.title' : 'dash.personal.title')}</div>
-            <div className="page-title" style={{ fontSize: 'clamp(26px, 3vw, 38px)' }}>
+            <div className="page-title" style={{ fontSize: 'clamp(22px, 2.8vw, 32px)' }}>
               {t('dash.hello')} <span className={isBiz ? 'gg' : 'gc'}>{displayName}</span>
             </div>
+            <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-mid)' }}>
+              {authUser?.country_of_residence
+                ? `${t('dash.profile.country')}: ${countries.find((c) => c.code === authUser.country_of_residence)?.name ?? authUser.country_of_residence}`
+                : t('dash.profile.countryUnset')}
+            </div>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
             <span className={`pill ${kycPending ? 'p-g' : verified ? 'p-gr' : 'p-g'}`} style={{ fontSize: 9 }}>
               {kycPending ? t('dash.verification.required') : verified ? t('dash.verification.ok') : t('common.verificationRequired')}
             </span>
-            {!verified && !kycPending && (
-              <Link to="/kyc" className="btn btn-ghost" style={{ fontSize: 10, padding: '5px 12px' }}>
-                {t('dash.verification.view')} →
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <Link to="/settings" className="btn btn-ghost" style={{ fontSize: 10, padding: '5px 12px' }}>
+                {t('dash.profile.editPhoto')}
               </Link>
-            )}
+              <Link to="/kyc" className="btn btn-ghost" style={{ fontSize: 10, padding: '5px 12px' }}>
+                {t('dash.profile.countrySumsub')} →
+              </Link>
+            </div>
           </div>
         </div>
       </motion.div>

@@ -114,7 +114,9 @@ final class QuotePricing
             return [
                 'status'     => self::RESOLVED,
                 'rate'       => 1.0,
+                'rate_decimal' => '1.00000000',
                 'spread_pct' => 0.0,
+                'spread_decimal' => '0.00000000',
                 'source'     => 'identity',
                 'fetched_at' => null,
                 'expires_at' => null,
@@ -162,21 +164,24 @@ final class QuotePricing
      */
     private static function fromFxRate(FXRate $rate): array
     {
-        $value = (float) $rate->getRate();
+        $valueDecimal = bcadd($rate->getRate(), '0', 8);
 
         // Un taux nul ou négatif n'est pas exploitable : le traiter comme
         // résolu produirait un montant reçu nul ou absurde.
-        if ($value <= 0.0) {
+        if (bccomp($valueDecimal, '0', 8) <= 0) {
             return self::unavailable('Le taux de change obtenu est invalide.');
         }
 
         // Le spread du cache est exprimé en pourcentage (ex. 0.5000 = 0,5 %).
-        $spread = max(0.0, (float) $rate->getSpreadPct()) / 100.0;
+        $spreadSource = bccomp($rate->getSpreadPct(), '0', 8) < 0 ? '0' : $rate->getSpreadPct();
+        $spreadDecimal = bcdiv($spreadSource, '100', 8);
 
         return [
             'status'     => self::RESOLVED,
-            'rate'       => $value,
-            'spread_pct' => $spread,
+            'rate'       => (float) $valueDecimal,
+            'rate_decimal' => $valueDecimal,
+            'spread_pct' => (float) $spreadDecimal,
+            'spread_decimal' => $spreadDecimal,
             'source'     => $rate->getSource(),
             'fetched_at' => $rate->getFetchedAt()->format(DATE_ATOM),
             'expires_at' => $rate->getExpiresAt()->format(DATE_ATOM),
@@ -194,7 +199,9 @@ final class QuotePricing
         return [
             'status'     => self::UNAVAILABLE,
             'rate'       => null,
+            'rate_decimal' => null,
             'spread_pct' => 0.0,
+            'spread_decimal' => '0.00000000',
             'source'     => null,
             'fetched_at' => null,
             'expires_at' => null,
