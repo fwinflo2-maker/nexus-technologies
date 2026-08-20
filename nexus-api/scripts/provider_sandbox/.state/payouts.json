@@ -1,0 +1,244 @@
+{
+    "ae9a3085-1cf4-642b-3b2a-aad6b8d3b8f0": {
+        "payoutId": "ae9a3085-1cf4-642b-3b2a-aad6b8d3b8f0",
+        "status": "COMPLETED",
+        "amount": "63693",
+        "currency": "XAF",
+        "country": "CMR",
+        "correspondent": "MTN_MOMO_CMR",
+        "recipient": {
+            "type": "MSISDN",
+            "address": {
+                "value": "237691234567"
+            }
+        },
+        "customerTimestamp": "2026-08-17T20:41:00Z",
+        "statementDescription": "Nexus payout",
+        "scenario": "accepted",
+        "created": "2026-08-17T20:41:00Z",
+        "receivedByRecipient": "2026-08-17T20:41:00Z",
+        "correspondentIds": {
+            "HARNESS_INIT": "HXc69993b59c74"
+        }
+    },
+    "6e33f814-5544-f661-d580-41d73f207077": {
+        "payoutId": "6e33f814-5544-f661-d580-41d73f207077",
+        "status": "FAILED",
+        "amount": "30896",
+        "currency": "XAF",
+        "country": "CMR",
+        "correspondent": "MTN_MOMO_CMR",
+        "recipient": {
+            "type": "MSISDN",
+            "address": {
+                "value": "237691234567"
+            }
+        },
+        "customerTimestamp": "2026-08-17T20:41:13Z",
+        "statementDescription": "Nexus payout",
+        "scenario": "accepted",
+        "created": "2026-08-17T20:41:13Z",
+        "failureReason": {
+            "code": "PAYOUT_FAILED_HARNESS",
+            "description": "Sc\u00e9nario de test sandbox"
+        }
+    },
+    "b0ccdf27-75bc-46d6-90cb-627399998a8b": {
+        "payoutId": "b0ccdf27-75bc-46d6-90cb-627399998a8b",
+        "status": "FAILED",
+        "amount": "1000",
+        "currency": "XAF",
+        "country": "CMR",
+        "correspondent": "MTN_MOMO_CMR",
+        "recipient": {
+            "type": "MSISDN",
+            "address": {
+                "value": "237691234567"
+            }
+        },
+        "customerTimestamp": "2026-08-17T20:42:23+00:00",
+        "statementDescription": "",
+        "scenario": "accepted",
+        "created": "2026-08-17T20:42:23Z",
+        "failureReason": {
+            "code": "PAYOUT_FAILED_HARNESS",
+            "description": "Sc\u00e9nario de test sandbox"
+        }
+    },
+    "307fb37f-6e85-2d86-2558-1461e35933e5": {
+        "payoutId": "307fb37f-6e85-2d86-2558-1461e35933e5",
+        "status": "COMPLETED",
+        "amount": "63693",
+        "currency": "XAF",
+        "country": "CMR",
+        "correspondent": "MTN_MOMO_CMR",
+        "recipient": {
+            "type": "MSISDN",
+            "address": {
+                "value": "237691234567"
+            }
+        },
+        "customerTimestamp": "2026-08-17T20:43:49Z",
+        "statementDescription": "Nexus payout",
+        "scenario": "accepted",
+        "created": "2026-08-17T20:43:49Z",
+        "receivedByRecipient": "2026-08-17T20:43:51Z",
+        "correspondentIds": {
+            "HARNESS_INIT": "HX97f0fc42422b"
+        }
+    },
+    "6ceeab21-8df0-a015-4f30-7212f766d9c2": {
+        "payoutId": "6ceeab21-8df0-a015-4f30-7212f766d9c2",
+        "status": "FAILED",
+        "amount": "30896",
+        "currency": "XAF",
+        "country": "CMR",
+        "correspondent": "MTN_MOMO_CMR",
+        "recipient": {
+            "type": "MSISDN",
+            "address": {
+                "value": "237691234567"
+            }
+        },
+        "customerTimestamp": "2026-08-17T20:44:04Z",
+        "statementDescription": "Nexus payout",
+        "scenario": "accepted",
+        "created": "2026-08-17T20:44:04Z",
+        "failureReason": {
+            "code": "PAYOUT_FAILED_HARNESS",
+            "description": "Sc\u00e9nario de test sandbox"
+        }
+    },
+    "6bc95cbd-3ff1-4f0a-7708-c238c4aa7cc6": {
+        "payoutId": "6bc95cbd-3ff1-4f0a-7708-c238c4aa7cc6",
+        "status": "COMPLETED",
+        "amount": "63693",
+        "currency": "XAF",
+        "country": "CMR",
+        "correspondent": "MTN_MOMO_CMR",
+        "recipient": {
+            "type": "MSISDN",
+            "address": {
+                "value": "237691234567"
+            }
+        },
+        "customerTimestamp": "2026-08-17T20:45:36Z",
+        "statementDescription": "Nexus payout",
+        "scenario": "accepted",
+        "created": "2026-08-17T20:45:36Z",
+        "receivedByRecipient": "2026-08-17T20:45:37Z",
+        "correspondentIds": {
+            "HARNESS_INIT": "HXc837648c95cf"
+        }
+    },
+    "a9fffd04-2d51-a175-2612-f88b08b3d64d": {
+        "payoutId": "a9fffd04-2d51-a175-2612-f88b08b3d64d",
+        "status": "FAILED",
+        "amount": "30896",
+        "currency": "XAF",
+        "country": "CMR",
+        "correspondent": "MTN_MOMO_CMR",
+        "recipient": {
+            "type": "MSISDN",
+            "address": {
+                "value": "237691234567"
+            }
+        },
+        "customerTimestamp": "2026-08-17T20:45:50Z",
+        "statementDescription": "Nexus payout",
+        "scenario": "accepted",
+        "created": "2026-08-17T20:45:50Z",
+        "failureReason": {
+            "code": "PAYOUT_FAILED_HARNESS",
+            "description": "Sc\u00e9nario de test sandbox"
+        }
+    },
+    "e5e382be-d234-2834-7818-0a18ae136a3a": {
+        "payoutId": "e5e382be-d234-2834-7818-0a18ae136a3a",
+        "status": "COMPLETED",
+        "amount": "63693",
+        "currency": "XAF",
+        "country": "CMR",
+        "correspondent": "MTN_MOMO_CMR",
+        "recipient": {
+            "type": "MSISDN",
+            "address": {
+                "value": "237691234567"
+            }
+        },
+        "customerTimestamp": "2026-08-17T20:47:19Z",
+        "statementDescription": "Nexus payout",
+        "scenario": "accepted",
+        "created": "2026-08-17T20:47:19Z",
+        "receivedByRecipient": "2026-08-17T20:47:22Z",
+        "correspondentIds": {
+            "HARNESS_INIT": "HX2ce89e755c98"
+        }
+    },
+    "a4e1001a-b832-b06b-3b3f-d9e6d133ed99": {
+        "payoutId": "a4e1001a-b832-b06b-3b3f-d9e6d133ed99",
+        "status": "FAILED",
+        "amount": "30896",
+        "currency": "XAF",
+        "country": "CMR",
+        "correspondent": "MTN_MOMO_CMR",
+        "recipient": {
+            "type": "MSISDN",
+            "address": {
+                "value": "237691234567"
+            }
+        },
+        "customerTimestamp": "2026-08-17T20:47:34Z",
+        "statementDescription": "Nexus payout",
+        "scenario": "accepted",
+        "created": "2026-08-17T20:47:34Z",
+        "failureReason": {
+            "code": "PAYOUT_FAILED_HARNESS",
+            "description": "Sc\u00e9nario de test sandbox"
+        }
+    },
+    "d0ca8fa8-ccb7-a3cf-1214-ac6f8442c3e4": {
+        "payoutId": "d0ca8fa8-ccb7-a3cf-1214-ac6f8442c3e4",
+        "status": "COMPLETED",
+        "amount": "63693",
+        "currency": "XAF",
+        "country": "CMR",
+        "correspondent": "MTN_MOMO_CMR",
+        "recipient": {
+            "type": "MSISDN",
+            "address": {
+                "value": "237691234567"
+            }
+        },
+        "customerTimestamp": "2026-08-17T20:48:34Z",
+        "statementDescription": "Nexus payout",
+        "scenario": "accepted",
+        "created": "2026-08-17T20:48:34Z",
+        "receivedByRecipient": "2026-08-17T20:48:36Z",
+        "correspondentIds": {
+            "HARNESS_INIT": "HXbf56059f6555"
+        }
+    },
+    "4a9d320c-78e7-be94-0df3-1f9d998de294": {
+        "payoutId": "4a9d320c-78e7-be94-0df3-1f9d998de294",
+        "status": "FAILED",
+        "amount": "30896",
+        "currency": "XAF",
+        "country": "CMR",
+        "correspondent": "MTN_MOMO_CMR",
+        "recipient": {
+            "type": "MSISDN",
+            "address": {
+                "value": "237691234567"
+            }
+        },
+        "customerTimestamp": "2026-08-17T20:48:48Z",
+        "statementDescription": "Nexus payout",
+        "scenario": "accepted",
+        "created": "2026-08-17T20:48:48Z",
+        "failureReason": {
+            "code": "PAYOUT_FAILED_HARNESS",
+            "description": "Sc\u00e9nario de test sandbox"
+        }
+    }
+}
