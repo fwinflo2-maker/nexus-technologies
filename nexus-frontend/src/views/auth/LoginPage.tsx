@@ -5,7 +5,7 @@ import { countries } from '../../data/countries';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import './AuthPages.css';
 import { useI18n } from '../../context/I18nContext';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth, homePathForRole } from '../../context/AuthContext';
 import { apiLogin } from '../../api/client';
 import { ParticlesBackground } from '../../components/ParticlesBackground';
 import { EASE } from '../../components/anim/Premium';
@@ -72,7 +72,7 @@ export function LoginPage({ onSwitchToRegister, onBackHome }: LoginPageProps) {
       // Super Admin → son centre de contrôle ; les autres comptes → dashboard
       // client (personal/business). Le user vient de la réponse de login, donc
       // aucune course de timing (fiable sur tous les navigateurs).
-      const target = resp.data?.user?.platform_role === 'superadmin' ? '/admin' : '/dashboard';
+      const target = homePathForRole(resp.data?.user?.platform_role);
       navigate(target, { replace: true });
     } catch {
       // Filet de sécurité : ne jamais laisser le formulaire bloqué en « envoi ».

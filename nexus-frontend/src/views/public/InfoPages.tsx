@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth, homePathForRole } from '../../context/AuthContext';
 import { ParticlesBackground } from '../../components/ParticlesBackground';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import './PublicShell.css';
@@ -22,6 +23,9 @@ function DocLayout({ kicker, title, updated, toc, children }: {
   kicker: string; title: string; updated: string; toc: TocItem[]; children: ReactNode;
 }) {
   const [active, setActive] = useState(toc[0]?.id ?? '');
+  const { user } = useAuth();
+  const backTo = user ? homePathForRole(user.platform_role) : '/';
+  const backLabel = user ? '← Retour à l\'app' : '← Retour';
 
   // Scroll-spy : met en surbrillance la section visible.
   useEffect(() => {
@@ -48,7 +52,7 @@ function DocLayout({ kicker, title, updated, toc, children }: {
             <span className="brand-text">NEXUS</span>
           </div>
           <div className="nav-links">
-            <Link to="/" className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }}>← Retour</Link>
+            <Link to={backTo} className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }}>{backLabel}</Link>
             <LanguageSwitcher />
           </div>
         </div>

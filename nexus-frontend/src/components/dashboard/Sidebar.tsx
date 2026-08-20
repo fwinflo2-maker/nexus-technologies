@@ -19,6 +19,7 @@ const navPersonal = [
   { to: '/receive', icon: '↙', label: 'nav.receive' },
   { to: '/convert', icon: '⇄', label: 'nav.convert' },
   { to: '/history', icon: '≡', label: 'nav.history' },
+  { to: '/kyc', icon: '✓', label: 'nav.kyc' },
 ];
 
 const navBusiness = [

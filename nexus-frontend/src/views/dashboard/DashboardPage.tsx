@@ -195,7 +195,7 @@ export default function DashboardPage({ mode }: DashboardProps) {
       message: t('dash.banner.corridor.message'),
       action: t('dash.banner.corridor.action'),
       tone: 'corridor' as const,
-      href: banner.href ?? '/wallet',
+      href: banner.href ?? '/wallet?fund=1',
     };
   })();
 
@@ -420,7 +420,7 @@ export default function DashboardPage({ mode }: DashboardProps) {
                 ? t('dash.rates.one', { base: rates.base, rate: rates.fx_rate_xaf.toLocaleString(locale, { maximumFractionDigits: 3 }) })
                 : t('dash.rates.unavailable')}
             </div>
-            <Link to="/wallet" className="btn btn-ghost" style={{ marginTop: 10, fontSize: 10 }}>{t('wallet.convert')}</Link>
+            <Link to="/convert" className="btn btn-ghost" style={{ marginTop: 10, fontSize: 10 }}>{t('wallet.convert')}</Link>
           </div>
         )}
 

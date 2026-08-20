@@ -226,6 +226,10 @@ function AppRoutes() {
       {isInternalStaff && (
         <Route path="/staff" element={<StaffHome />} />
       )}
+      <Route path="/privacy" element={<PrivacyPage />} />
+      <Route path="/terms" element={<TermsPage />} />
+      <Route path="/docs" element={<DocumentationPage />} />
+      <Route path="/support" element={<SupportPage />} />
       <Route path="*" element={<DashboardLayout />} />
     </Routes>
   );

@@ -78,7 +78,7 @@ export default function AdminLayout({
 
         <div style={{ marginTop: 'auto', padding: 16 }}>
           <Link to="/wallet" style={{ fontSize: 12, color: 'var(--text-dim)', textDecoration: 'none', display: 'block', padding: '6px 12px' }}>
-            ← Portefeuille
+            ← Espace client
           </Link>
         </div>
       </aside>
