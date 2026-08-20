@@ -203,7 +203,7 @@ export default function SuperAdminDashboard() {
           {/* ═══ COMPLIANCE / KYC ═══ */}
           {section === 'compliance' && (
             <>
-              <Header title="Compliance / KYC" desc="Dossiers de vérification d'identité (KYC/KYB) issus du provider SumSub." />
+              <Header title="Compliance / KYC" desc="Dossiers SumSub + override manuel exclusif Super Admin si le provider KYC est HS." />
               <AdminCompliance />
             </>
           )}

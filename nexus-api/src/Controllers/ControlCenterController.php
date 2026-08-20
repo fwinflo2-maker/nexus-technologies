@@ -23,6 +23,7 @@ use Nexus\Services\ProviderCredentialService;
  *   GET /api/control/providers/{slug}→ fiche détaillée
  *   GET /api/control/public-keys     → registre des clés (frontend vs backend)
  *   GET /api/control/kyc             → tableau de bord KYC/KYB
+ *   POST /api/control/kyc/override   → override manuel exclusif Super Admin
  *   GET /api/control/webhooks        → journal des webhooks
  *   GET /api/control/audit           → journal d'audit
  *
@@ -197,7 +198,76 @@ final class ControlCenterController
         Response::success([
             'counters'   => ControlCenterService::kycCounters($pdo),
             'applicants' => $stmt->fetchAll(),
+            // Le frontend Super Admin affiche les actions d'override uniquement
+            // si le backend confirme le privilège (l'UI n'est pas une autorité).
+            'can_manual_override' => PlatformRole::isSuperadmin($user),
         ]);
+    }
+
+    /**
+     * POST /api/control/kyc/override — override KYC/KYB exclusif Super Admin.
+     *
+     * Secours opérationnel quand Sumsub est indisponible ou incohérent.
+     * Réservé au SUPERADMIN : ni compliance_officer ni aucun autre rôle
+     * d'exploitation ne peut forcer une vérification par ce chemin.
+     * Motif obligatoire, audit `kyc.approve` / `kyc.reject` / `kyc.resubmission`.
+     */
+    public static function kycOverride(Request $request): void
+    {
+        $actor = self::authorize($request, 'superadmin');
+        $pdo = Database::getConnection();
+
+        $decision = strtolower(trim((string) $request->input('decision', '')));
+        $reason = trim((string) $request->input('reason', ''));
+        $verificationId = (int) $request->input('verification_id', 0);
+        $userId = (int) $request->input('user_id', 0);
+        $subjectType = $request->input('subject_type');
+        $subjectType = is_string($subjectType) && $subjectType !== '' ? $subjectType : null;
+
+        $environment = 'sandbox';
+        try {
+            $environment = (new \Nexus\Kyc\SumsubAdapter())->environment();
+        } catch (\Throwable) {
+            // Provider HS : on reste en sandbox (ou dérivé d'APP_ENV ci-dessous).
+        }
+        if (defined('APP_ENV') && APP_ENV === 'production') {
+            $environment = 'production';
+        }
+
+        $pdo->beginTransaction();
+        try {
+            $result = \Nexus\Services\KycService::applyManualOverride(
+                $pdo,
+                (int) $actor['id'],
+                $decision,
+                $reason,
+                $verificationId > 0 ? $verificationId : null,
+                $userId > 0 ? $userId : null,
+                $subjectType,
+                $environment
+            );
+            $pdo->commit();
+        } catch (\InvalidArgumentException $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            Response::badRequest($e->getMessage());
+        } catch (\RuntimeException $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            if (str_contains($e->getMessage(), 'introuvable')) {
+                Response::notFound($e->getMessage());
+            }
+            throw $e;
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+
+        Response::success($result);
     }
 
     /** GET /api/control/webhooks — journal des webhooks (§19). */

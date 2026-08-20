@@ -1574,9 +1574,29 @@ export async function apiControlCredentials(): Promise<ApiResponse<{
 }
 
 export async function apiControlKyc(): Promise<ApiResponse<{
-  counters: ControlOverview['kyc']; applicants: Array<Record<string, unknown>>;
+  counters: ControlOverview['kyc'];
+  applicants: Array<Record<string, unknown>>;
+  can_manual_override?: boolean;
 }>> {
   return request('GET', '/control/kyc');
+}
+
+/** Override KYC/KYB exclusif Super Admin (secours Sumsub). */
+export async function apiControlKycOverride(payload: {
+  decision: 'approve' | 'reject' | 'resubmission';
+  reason: string;
+  verification_id?: number;
+  user_id?: number;
+  subject_type?: 'individual' | 'company';
+}): Promise<ApiResponse<{
+  verification_id: number;
+  user_id: number;
+  status: string;
+  subject_type: string;
+  provider: string;
+  created: boolean;
+}>> {
+  return request('POST', '/control/kyc/override', payload);
 }
 
 export async function apiControlWebhooks(): Promise<ApiResponse<{
