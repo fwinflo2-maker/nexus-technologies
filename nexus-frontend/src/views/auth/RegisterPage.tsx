@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { countries } from '../../data/countries';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import './AuthPages.css';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useI18n } from '../../context/I18nContext';
 import { useAuth } from '../../context/AuthContext';
 import { apiRegister } from '../../api/client';
@@ -195,7 +195,9 @@ function legalFormsForCountry(countryName: string): string[] {
 const emailValid = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
 export function RegisterPage({ onSwitchToLogin, onBackHome }: RegisterPageProps) {
-  const [accountType, setAccountType] = useState<'personal' | 'business'>('personal');
+  const [searchParams] = useSearchParams();
+  const initialType = searchParams.get('type') === 'business' ? 'business' : 'personal';
+  const [accountType, setAccountType] = useState<'personal' | 'business'>(initialType);
   const [step, setStep] = useState(1);
   const [personal, setPersonal] = useState<PersonalData>(emptyPersonal);
   const [business, setBusiness] = useState<BusinessData>(emptyBusiness);
@@ -205,6 +207,14 @@ export function RegisterPage({ onSwitchToLogin, onBackHome }: RegisterPageProps)
   const navigate = useNavigate();
   const { t } = useI18n();
   const { refreshSession } = useAuth();
+
+  useEffect(() => {
+    const type = searchParams.get('type');
+    if (type === 'business' || type === 'personal') {
+      setAccountType(type);
+      setStep(1);
+    }
+  }, [searchParams]);
 
   const isBusiness = accountType === 'business';
   const steps = isBusiness

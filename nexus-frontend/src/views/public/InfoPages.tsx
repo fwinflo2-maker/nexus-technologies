@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ParticlesBackground } from '../../components/ParticlesBackground';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
-import './LandingPage.css';
+import './PublicShell.css';
 import './InfoPages.css';
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -38,13 +38,13 @@ function DocLayout({ kicker, title, updated, toc, children }: {
   }, [toc]);
 
   return (
-    <div className="landing-page">
+    <div className="public-shell">
       <ParticlesBackground />
       {/* Navbar */}
       <nav className="site-nav">
         <div className="site-nav-inner">
           <div className="nav-brand">
-            <svg width="28" height="28" viewBox="0 0 32 32" fill="none"><path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="url(#lg-nav)" strokeWidth="2" fill="none"/><path d="M16 10L22 14V22L16 26L10 22V14L16 10Z" fill="url(#lg-nav)"/><defs><linearGradient id="lg-nav" x1="4" y1="2" x2="28" y2="30"><stop stopColor="#7C3AED"/><stop offset="1" stopColor="#a855f7"/></linearGradient></defs></svg>
+            <svg width="28" height="28" viewBox="0 0 32 32" fill="none"><path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="url(#lg-nav)" strokeWidth="2" fill="none"/><path d="M16 10L22 14V22L16 26L10 22V14L16 10Z" fill="url(#lg-nav)"/><defs><linearGradient id="lg-nav" x1="4" y1="2" x2="28" y2="30"><stop stopColor="#4F6EF7"/><stop offset="1" stopColor="#3B82F6"/></linearGradient></defs></svg>
             <span className="brand-text">NEXUS</span>
           </div>
           <div className="nav-links">

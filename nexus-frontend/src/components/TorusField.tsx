@@ -26,9 +26,11 @@ import { useEffect, useRef } from 'react';
 interface TorusFieldProps {
   /** Résolution interne du canevas ; l'affichage se met à l'échelle en CSS. */
   size?: number;
+  /** Teinte HSL de base (défaut 263 = violet produit ; 222 = bleu acier landing). */
+  hue?: number;
 }
 
-export function TorusField({ size = 760 }: TorusFieldProps) {
+export function TorusField({ size = 760, hue = 263 }: TorusFieldProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -145,12 +147,10 @@ export function TorusField({ size = 760 }: TorusFieldProps) {
           continue;
         }
 
-        // 0 = face arrière, 1 = face avant. La teinte parcourt l'intervalle
-        // entre --primary et --primary-light ; sortir de cet intervalle ferait
-        // apparaître une couleur qui n'existe nulle part ailleurs dans le produit.
+        // 0 = face arrière, 1 = face avant. Teinte dérivée de `hue`.
         const nearness = band / (BANDS - 1);
 
-        ctx.strokeStyle = `hsl(${263 + nearness * 9}, ${70 + nearness * 21}%, ${25 + nearness * 43}%)`;
+        ctx.strokeStyle = `hsl(${hue + nearness * 9}, ${62 + nearness * 18}%, ${28 + nearness * 40}%)`;
         ctx.globalAlpha = 0.14 + nearness * 0.66;
         ctx.lineWidth = 0.45 + nearness * 0.8;
         ctx.lineCap = 'butt';
@@ -214,7 +214,7 @@ export function TorusField({ size = 760 }: TorusFieldProps) {
       cancelAnimationFrame(frameId);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, [size]);
+  }, [size, hue]);
 
   return <canvas ref={canvasRef} />;
 }

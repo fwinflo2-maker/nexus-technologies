@@ -1,46 +1,36 @@
-import { type ReactNode, useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { useI18n } from '../../context/I18nContext';
-import { TorusField } from '../../components/TorusField';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
+import { TorusField } from '../../components/TorusField';
 import { ParticlesBackground } from '../../components/ParticlesBackground';
-import { EASE, AnimatedNumber } from '../../components/anim/Premium';
-import { GsapReveal, GsapParallax } from '../../components/anim/GsapReveal';
+import { TechOrbits } from '../../components/TechOrbits';
+import { DigitalBrushes } from '../../components/DigitalBrushes';
+import { EASE } from '../../components/anim/Premium';
+import { GsapReveal } from '../../components/anim/GsapReveal';
 import './LandingPage.css';
 
-const stagger = { hidden: {}, visible: { transition: { staggerChildren: 0.12 } } };
-const cardVariant = {
-  hidden: { opacity: 0, y: 26, scale: 0.98 },
-  visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.55, ease: EASE } },
+const stagger = { hidden: {}, visible: { transition: { staggerChildren: 0.11 } } };
+const rise = {
+  hidden: { opacity: 0, y: 22 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: EASE } },
 };
 
 interface LandingPageProps {
   onLogin: () => void;
   onAdminLogin: () => void;
-  onRegister: () => void;
+  onRegister: (type?: 'personal' | 'business') => void;
 }
-
-const svgIcons: Record<string, ReactNode> = {
-  send: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/></svg>,
-  search: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>,
-  check: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>,
-  layers: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>,
-  shield: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
-  zap: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>,
-};
 
 export function LandingPage({ onLogin, onAdminLogin, onRegister }: LandingPageProps) {
   const { t } = useI18n();
-
-  // Accès admin protégé : il faut 3 clics (rapides) sur le logo NEXUS pour
-  // éviter toute redirection accidentelle vers la page de connexion.
+  const reduceMotion = useReducedMotion();
   const [adminClicks, setAdminClicks] = useState(0);
   const clickResetRef = useRef<number>(0);
 
   useEffect(() => {
     if (adminClicks === 0) return;
-    // Réinitialise le compteur si l'utilisateur attend trop entre deux clics.
     clickResetRef.current = window.setTimeout(() => setAdminClicks(0), 1500);
     return () => window.clearTimeout(clickResetRef.current);
   }, [adminClicks]);
@@ -56,314 +46,252 @@ export function LandingPage({ onLogin, onAdminLogin, onRegister }: LandingPagePr
   }
 
   const steps = [
-    { num: '01', icon: 'send', title: t('landing_step1_title'), text: t('landing_step1_text') },
-    { num: '02', icon: 'search', title: t('landing_step2_title'), text: t('landing_step2_text') },
-    { num: '03', icon: 'check', title: t('landing_step3_title'), text: t('landing_step3_text') },
+    { num: '01', title: t('landing_step1_title'), text: t('landing_step1_text') },
+    { num: '02', title: t('landing_step2_title'), text: t('landing_step2_text') },
+    { num: '03', title: t('landing_step3_title'), text: t('landing_step3_text') },
   ];
 
-  const benefits = [
-    { icon: 'layers', title: t('landing_feat1_title'), text: t('landing_feat1_text') },
-    { icon: 'shield', title: t('landing_feat2_title'), text: t('landing_feat2_text') },
-    { icon: 'zap', title: t('landing_feat3_title'), text: t('landing_feat3_text') },
+  const pains = [
+    { title: t('landing_pain1_title'), text: t('landing_pain1_text') },
+    { title: t('landing_pain2_title'), text: t('landing_pain2_text') },
+    { title: t('landing_pain3_title'), text: t('landing_pain3_text') },
   ];
+
+  const trust = [
+    { title: t('landing_trust_1_title'), text: t('landing_trust_1_text') },
+    { title: t('landing_trust_2_title'), text: t('landing_trust_2_text') },
+    { title: t('landing_trust_3_title'), text: t('landing_trust_3_text') },
+  ];
+
+  const btnMotion = reduceMotion
+    ? {}
+    : {
+        whileHover: { y: -2, scale: 1.02 },
+        whileTap: { scale: 0.97 },
+        transition: { type: 'spring' as const, stiffness: 320, damping: 20 },
+      };
 
   return (
     <div className="landing-page">
-      <ParticlesBackground />
-      <nav className="site-nav">
-        <div className="site-nav-inner">
-          <div className="nav-brand" role="button" aria-label="Connexion (3 clics)" onClick={handleLogoClick} style={{ cursor: 'pointer', userSelect: 'none' }} title="Connexion admin">
-            <svg width="28" height="28" viewBox="0 0 32 32" fill="none"><path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="url(#lg-nav)" strokeWidth="2" fill="none"/><path d="M16 10L22 14V22L16 26L10 22V14L16 10Z" fill="url(#lg-nav)"/><defs><linearGradient id="lg-nav" x1="4" y1="2" x2="28" y2="30"><stop stopColor="#7C3AED"/><stop offset="1" stopColor="#a855f7"/></linearGradient></defs></svg>
-            <span className="brand-text">NEXUS</span>
+      <ParticlesBackground density={48} color="#4F6EF7" opacity={0.35} className="lp-particles" />
+      <div className="lp-scanline" aria-hidden="true" />
+      <nav className="lp-nav">
+        <div className="lp-nav-inner">
+          <div
+            className="lp-brand"
+            role="button"
+            tabIndex={0}
+            aria-label="Nexus"
+            onClick={handleLogoClick}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleLogoClick(); }}
+          >
+            <svg width="26" height="26" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+              <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="#4F6EF7" strokeWidth="2" fill="none" />
+              <path d="M16 10L22 14V22L16 26L10 22V14L16 10Z" fill="#4F6EF7" />
+            </svg>
+            <span className="lp-brand-text">NEXUS</span>
             {adminClicks > 0 && (
-              <span style={{ fontSize: 9, color: 'var(--cyan)', marginLeft: 6, fontWeight: 600 }}>
-                {3 - adminClicks} clic{3 - adminClicks > 1 ? 's' : ''}
-              </span>
+              <span className="lp-admin-hint">{3 - adminClicks} clic{3 - adminClicks > 1 ? 's' : ''}</span>
             )}
           </div>
-          <div className="nav-links">
-            <a href="#comment-ca-marche" className="nav-link-text">{t('nav_how')}</a>
-            <a href="#fonctionnalites" className="nav-link-text">{t('nav_features')}</a>
+          <div className="lp-nav-links">
+            <a href="#problemes" className="lp-nav-link">{t('landing_pains_label')}</a>
+            <a href="#comment-ca-marche" className="lp-nav-link">{t('nav_how')}</a>
+            <a href="#personal" className="lp-nav-link">{t('landing_cta_personal')}</a>
+            <a href="#business" className="lp-nav-link">{t('landing_cta_business')}</a>
+            <a href="#confiance" className="lp-nav-link">{t('landing_trust_label')}</a>
             <LanguageSwitcher />
-            <button className="btn btn-ghost btn-sm" onClick={onLogin}>{t('nav_login')}</button>
-            <button className="btn btn-primary btn-sm" onClick={onRegister}>{t('nav_start')}</button>
+            <button type="button" className="lp-btn lp-btn-primary lp-btn-nav" onClick={onLogin}>{t('nav_login')}</button>
           </div>
         </div>
       </nav>
 
-      {/* ── Hero ──────────────────────────────────────────────── */}
-      <section className="hero-section">
-        <div className="hero-grid" aria-hidden="true" />
-        <GsapParallax speed={0.12}><div className="hero-orb hero-orb-main" aria-hidden="true" /></GsapParallax>
-        <GsapParallax speed={0.22}><div className="hero-orb hero-orb-side" aria-hidden="true" /></GsapParallax>
-        <div className="hero-torus" aria-hidden="true"><TorusField /></div>
-
+      <section className="lp-hero">
+        <div className="lp-hero-torus" aria-hidden="true">
+          <TorusField size={820} hue={222} />
+        </div>
+        {!reduceMotion && <TechOrbits />}
+        <div className="lp-hero-grid" aria-hidden="true" />
         <motion.div
-          className="container hero-content"
-          initial="hidden"
+          className="lp-container lp-hero-content"
+          initial={reduceMotion ? false : 'hidden'}
           animate="visible"
           variants={stagger}
         >
-          <motion.div variants={cardVariant} className="eyebrow"><span className="pulse-dot success" /> {t('landing_badge')}</motion.div>
-          <motion.h1 variants={cardVariant} className="hero-title">
-            {t('landing_hero_title')}
-          </motion.h1>
-          <motion.p variants={cardVariant} className="hero-lead">
-            {t('landing_hero_subtitle')}
-          </motion.p>
-          <motion.div variants={cardVariant} className="hero-actions">
-            <motion.button
-              className="btn btn-glow btn-lg" onClick={onRegister}
-              whileHover={{ scale: 1.05, y: -2 }}
-              whileTap={{ scale: 0.97 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 17 }}
-            >
-              {t('landing_cta_main')}
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          <motion.p variants={rise} className="lp-brand-hero">NEXUS</motion.p>
+          <motion.h1 variants={rise} className="lp-hero-title">{t('landing_hero_title')}</motion.h1>
+          <motion.p variants={rise} className="lp-hero-lead">{t('landing_hero_subtitle')}</motion.p>
+          <motion.div variants={rise} className="lp-hero-actions">
+            <motion.button type="button" className="lp-btn lp-btn-primary" onClick={() => onRegister('personal')} {...btnMotion}>
+              {t('landing_cta_personal')}
             </motion.button>
-            <motion.a
-              href="#comment-ca-marche" className="btn btn-ghost btn-lg"
-              whileHover={{ scale: 1.04 }}
-              whileTap={{ scale: 0.97 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 17 }}
-            >{t('landing_cta_link')} <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: 4 }}><path d="M6 9l6 6 6-6"/></svg></motion.a>
+            <motion.button type="button" className="lp-btn lp-btn-secondary" onClick={() => onRegister('business')} {...btnMotion}>
+              {t('landing_cta_business')}
+            </motion.button>
           </motion.div>
-          <motion.div variants={cardVariant} className="trust-row">
-            <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg> {t('landing_trust_1')}</span>
-            <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> {t('landing_trust_2')}</span>
-            <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> {t('landing_trust_3')}</span>
-          </motion.div>
+          <motion.a variants={rise} href="#problemes" className="lp-hero-scroll">
+            {t('landing_cta_link')}
+          </motion.a>
         </motion.div>
       </section>
 
-      {/* ── Stats ─────────────────────────────────────────────── */}
-      <motion.section
-        className="container stats-section" aria-label="Chiffres clés"
-        initial="hidden" whileInView="visible" viewport={{ once: true, margin: '-60px' }} variants={stagger}
-      >
-        <motion.div className="stats-card glass-card" variants={cardVariant}>
-          <div className="stat-item"><strong><AnimatedNumber value={180} suffix="+" /></strong><span>{t('landing_stat_1')}</span></div>
-          <div className="stat-item"><strong><AnimatedNumber value={50} suffix="+" /></strong><span>{t('landing_stat_2')}</span></div>
-          <div className="stat-item"><strong><AnimatedNumber value={99.2} decimals={1} suffix="%" /></strong><span>{t('landing_stat_3')}</span></div>
-        </motion.div>
-      </motion.section>
+      <div className="lp-below-hero">
+        <DigitalBrushes className="lp-plexus" reducedMotion={!!reduceMotion} />
 
-      {/* ── Comment ça marche ─────────────────────────────────── */}
-      <section id="comment-ca-marche" className="section-block container">
-        <GsapReveal effect="blurIn"><div className="section-heading">
-          <span className="section-kicker">{t('landing_steps_label')}</span>
-          <h2>{t('landing_steps_title')}</h2>
-          <p>{t('landing_steps_subtitle')}</p>
-        </div></GsapReveal>
+      <section id="problemes" className="lp-section lp-container">
+        <GsapReveal effect="blurIn">
+          <div className="lp-section-head">
+            <p className="lp-kicker">{t('landing_pains_label')}</p>
+            <h2>{t('landing_pains_title')}</h2>
+            <p className="lp-section-lead">{t('landing_pains_subtitle')}</p>
+          </div>
+        </GsapReveal>
         <motion.div
-          className="steps-grid stagger"
-          initial="hidden" whileInView="visible" viewport={{ once: true, margin: '-60px' }} variants={stagger}
+          className="lp-trust-grid"
+          initial={reduceMotion ? false : 'hidden'}
+          whileInView="visible"
+          viewport={{ once: true, margin: '-60px' }}
+          variants={stagger}
         >
-          {steps.map((step, index) => (
-            <motion.div className="step-card glass-card" key={step.num} variants={cardVariant}
-              whileHover={{ y: -6, scale: 1.02, transition: { type: 'spring', stiffness: 250, damping: 18 } }}>
-              <div className="step-top">
-                <span className="step-number">{step.num}</span>
-                <div className="step-icon">{svgIcons[step.icon]}</div>
-              </div>
-              {index < steps.length - 1 && <span className="step-connector" aria-hidden="true">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-              </span>}
-              <h3>{step.title}</h3>
-              <p>{step.text}</p>
-            </motion.div>
-          ))}
-        </motion.div>
-      </section>
-
-      {/* ── Fonctionnalités ───────────────────────────────────── */}
-      <section id="fonctionnalites" className="section-block container benefits-section">
-        <GsapReveal effect="blurIn"><div className="section-heading">
-          <span className="section-kicker">{t('landing_features_label')}</span>
-          <h2>{t('landing_features_title')}</h2>
-        </div></GsapReveal>
-        <motion.div
-          className="benefits-grid stagger"
-          initial="hidden" whileInView="visible" viewport={{ once: true, margin: '-60px' }} variants={stagger}
-        >
-          {benefits.map((b) => (
-            <motion.article className="benefit-card" key={b.title} variants={cardVariant}
-              whileHover={{ y: -6, scale: 1.02, transition: { type: 'spring', stiffness: 250, damping: 18 } }}>
-              <motion.div className="benefit-icon"
-                whileHover={{ rotate: 8, scale: 1.1 }}
-                transition={{ type: 'spring', stiffness: 300, damping: 15 }}>
-                {svgIcons[b.icon]}
-              </motion.div>
-              <h3>{b.title}</h3>
-              <p>{b.text}</p>
+          {pains.map((item) => (
+            <motion.article
+              key={item.title}
+              className="lp-trust-item lp-pain-item"
+              variants={rise}
+              whileHover={reduceMotion ? undefined : { y: -4, borderColor: 'rgba(79,110,247,0.45)' }}
+            >
+              <h3>{item.title}</h3>
+              <p>{item.text}</p>
             </motion.article>
           ))}
         </motion.div>
       </section>
 
-      {/* ── Architecture ──────────────────────────────────────── */}
-      <section id="architecture" className="arch-section">
-        <div className="container">
-          <GsapReveal effect="blurIn"><div className="arch-heading">
-            <span className="section-kicker">{t('landing_arch_label')}</span>
-            <h2>{t('landing_arch_title')}</h2>
-            <p>{t('landing_arch_subtitle')}</p>
-          </div></GsapReveal>
-
-          <motion.div
-            className="arch-grid"
-            initial="hidden" whileInView="visible" viewport={{ once: true, margin: '-60px' }} variants={stagger}
-          >
-            {/* Card centrale — Pipeline */}
-            <motion.div className="arch-card arch-card-center" variants={cardVariant}
-              whileHover={{ y: -5, transition: { type: 'spring', stiffness: 250, damping: 18 } }}>
-              <div>
-                <h3>{t('landing_arch1_title')}</h3>
-                <p>{t('landing_arch1_text')}</p>
-              </div>
-              <motion.div className="arch-flow"
-                animate={{ opacity: [0.4, 1, 0.4] }}
-                transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}>
-                <div className="arch-flow-node">Intent</div>
-                <span className="arch-flow-arrow">→</span>
-                <div className="arch-flow-node">Routing</div>
-                <span className="arch-flow-arrow">→</span>
-                <div className="arch-flow-node">Execution</div>
-                <span className="arch-flow-arrow">→</span>
-                <div className="arch-flow-node">Ledger</div>
-              </motion.div>
-            </motion.div>
-
-            {/* Card 1 — Routing */}
-            <motion.div className="arch-card" variants={cardVariant}
-              whileHover={{ y: -5, transition: { type: 'spring', stiffness: 250, damping: 18 } }}>
-              <div className="arch-card-icon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="6" cy="19" r="3"/><circle cx="18" cy="5" r="3"/><path d="M12 19h4.5a3.5 3.5 0 0 0 0-7h-9a3.5 3.5 0 0 1 0-7H12"/></svg>
-              </div>
-              <h3>{t('landing_arch2_title')}</h3>
-              <p>{t('landing_arch2_text')}</p>
-              <div className="arch-card-tags">
-                <span className="arch-tag">Multi-provider</span>
-                <span className="arch-tag">Scoring</span>
-                <span className="arch-tag">Optimisé</span>
-              </div>
-            </motion.div>
-
-            {/* Card 2 — Conformité */}
-            <motion.div className="arch-card" variants={cardVariant}
-              whileHover={{ y: -5, transition: { type: 'spring', stiffness: 250, damping: 18 } }}>
-              <div className="arch-card-icon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-              </div>
-              <h3>{t('landing_arch3_title')}</h3>
-              <p>{t('landing_arch3_text')}</p>
-              <div className="arch-card-tags">
-                <span className="arch-tag">KYC/KYB</span>
-                <span className="arch-tag">AML</span>
-                <span className="arch-tag">Sanctions</span>
-              </div>
-            </motion.div>
-
-            {/* Card 3 — Providers */}
-            <motion.div className="arch-card" variants={cardVariant}
-              whileHover={{ y: -5, transition: { type: 'spring', stiffness: 250, damping: 18 } }}>
-              <div className="arch-card-icon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/></svg>
-              </div>
-              <h3>{t('landing_arch4_title')}</h3>
-              <p>{t('landing_arch4_text')}</p>
-              <div className="arch-card-tags">
-                <span className="arch-tag">Banking</span>
-                <span className="arch-tag">PSP</span>
-                <span className="arch-tag">FX</span>
-                <span className="arch-tag">MoMo</span>
-              </div>
-            </motion.div>
-
-            {/* Card 4 — Exécution */}
-            <motion.div className="arch-card" variants={cardVariant}
-              whileHover={{ y: -5, transition: { type: 'spring', stiffness: 250, damping: 18 } }}>
-              <div className="arch-card-icon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
-              </div>
-              <h3>{t('landing_arch5_title')}</h3>
-              <p>{t('landing_arch5_text')}</p>
-              <div className="arch-card-tags">
-                <span className="arch-tag">Idempotent</span>
-                <span className="arch-tag">Ledger</span>
-                <span className="arch-tag">Settlement</span>
-              </div>
-            </motion.div>
-
-            {/* Card 5 — Intelligence */}
-            <motion.div className="arch-card" variants={cardVariant}
-              whileHover={{ y: -5, transition: { type: 'spring', stiffness: 250, damping: 18 } }}>
-              <div className="arch-card-icon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2a10 10 0 1 0 10 10H12V2z"/><path d="M20.66 8A10 10 0 0 0 14 2v6h6.66z"/></svg>
-              </div>
-              <h3>{t('landing_arch6_title')}</h3>
-              <p>{t('landing_arch6_text')}</p>
-              <div className="arch-card-tags">
-                <span className="arch-tag">IA agents</span>
-                <span className="arch-tag">Deterministe</span>
-                <span className="arch-tag">Audit</span>
-              </div>
-            </motion.div>
-
-            {/* Card 6 — Ledger */}
-            <motion.div className="arch-card" variants={cardVariant}
-              whileHover={{ y: -5, transition: { type: 'spring', stiffness: 250, damping: 18 } }}>
-              <div className="arch-card-icon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
-              </div>
-              <h3>{t('landing_arch7_title')}</h3>
-              <p>{t('landing_arch7_text')}</p>
-              <div className="arch-card-tags">
-                <span className="arch-tag">Automatique</span>
-                <span className="arch-tag">Escalade</span>
-                <span className="arch-tag">Preuves</span>
-              </div>
-            </motion.div>
-          </motion.div>
-        </div>
+      <section id="comment-ca-marche" className="lp-section lp-container">
+        <GsapReveal effect="blurIn">
+          <div className="lp-section-head">
+            <p className="lp-kicker">{t('landing_steps_label')}</p>
+            <h2>{t('landing_steps_title')}</h2>
+            <p className="lp-section-lead">{t('landing_steps_subtitle')}</p>
+          </div>
+        </GsapReveal>
+        <motion.ol
+          className="lp-steps"
+          initial={reduceMotion ? false : 'hidden'}
+          whileInView="visible"
+          viewport={{ once: true, margin: '-80px' }}
+          variants={stagger}
+        >
+          {steps.map((step) => (
+            <motion.li
+              key={step.num}
+              className="lp-step"
+              variants={rise}
+              whileHover={reduceMotion ? undefined : { y: -4, transition: { type: 'spring', stiffness: 280, damping: 18 } }}
+            >
+              <span className="lp-step-num">{step.num}</span>
+              <h3>{step.title}</h3>
+              <p>{step.text}</p>
+            </motion.li>
+          ))}
+        </motion.ol>
       </section>
 
-      {/* ── CTA final ────────────────────────────────────────── */}
-      <GsapReveal effect="clipReveal" as="section" className="container final-cta">
-        <div className="glass-card final-cta-card">
-          <div>
-            <span className="section-kicker">{t('landing_cta_section_title')}</span>
-            <h2>{t('landing_cta_section_heading')}</h2>
-            <p>{t('landing_cta_section_text')}</p>
+      <section id="personal" className="lp-band">
+        <GsapReveal effect="blurIn">
+          <div className="lp-container lp-split">
+            <div>
+              <p className="lp-kicker">{t('landing_personal_label')}</p>
+              <h2>{t('landing_personal_title')}</h2>
+              <p className="lp-section-lead">{t('landing_personal_text')}</p>
+              <motion.button type="button" className="lp-btn lp-btn-primary" onClick={() => onRegister('personal')} {...btnMotion}>
+                {t('landing_personal_cta')}
+              </motion.button>
+            </div>
+            <p className="lp-mono-aside" aria-hidden="true">EUR → XAF · send · receive · convert</p>
           </div>
-          <motion.button
-            className="btn btn-glow btn-lg" onClick={onRegister}
-            whileHover={{ scale: 1.05, y: -2 }}
-            whileTap={{ scale: 0.97 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 17 }}
-          >
-            {t('landing_cta_button')}
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-          </motion.button>
+        </GsapReveal>
+      </section>
+
+      <section id="business" className="lp-band lp-band-alt">
+        <GsapReveal effect="blurIn">
+          <div className="lp-container lp-split">
+            <div>
+              <p className="lp-kicker">{t('landing_business_label')}</p>
+              <h2>{t('landing_business_title')}</h2>
+              <p className="lp-section-lead">{t('landing_business_text')}</p>
+              <motion.button type="button" className="lp-btn lp-btn-primary" onClick={() => onRegister('business')} {...btnMotion}>
+                {t('landing_business_cta')}
+              </motion.button>
+            </div>
+            <p className="lp-mono-aside" aria-hidden="true">payments · treasury · multi-provider</p>
+          </div>
+        </GsapReveal>
+      </section>
+
+      <section id="confiance" className="lp-section lp-container">
+        <GsapReveal effect="blurIn">
+          <div className="lp-section-head">
+            <p className="lp-kicker">{t('landing_trust_label')}</p>
+            <h2>{t('landing_trust_title')}</h2>
+          </div>
+        </GsapReveal>
+        <motion.div
+          className="lp-trust-grid"
+          initial={reduceMotion ? false : 'hidden'}
+          whileInView="visible"
+          viewport={{ once: true, margin: '-60px' }}
+          variants={stagger}
+        >
+          {trust.map((item) => (
+            <motion.article
+              key={item.title}
+              className="lp-trust-item"
+              variants={rise}
+              whileHover={reduceMotion ? undefined : { y: -4, borderColor: 'rgba(79,110,247,0.45)' }}
+            >
+              <h3>{item.title}</h3>
+              <p>{item.text}</p>
+            </motion.article>
+          ))}
+        </motion.div>
+      </section>
+
+      <GsapReveal effect="clipReveal" as="section" className="lp-final">
+        <div className="lp-container lp-final-inner">
+          <h2>{t('landing_cta_section_heading')}</h2>
+          <p className="lp-section-lead">{t('landing_cta_section_text')}</p>
+          <div className="lp-hero-actions">
+            <motion.button type="button" className="lp-btn lp-btn-primary" onClick={() => onRegister('personal')} {...btnMotion}>
+              {t('landing_cta_personal')}
+            </motion.button>
+            <motion.button type="button" className="lp-btn lp-btn-secondary" onClick={() => onRegister('business')} {...btnMotion}>
+              {t('landing_cta_business')}
+            </motion.button>
+          </div>
+          <button type="button" className="lp-final-login" onClick={onLogin}>{t('nav_login')}</button>
         </div>
       </GsapReveal>
 
-      {/* ── Footer ────────────────────────────────────────────── */}
-      <footer className="site-footer">
-        <div className="footer-inner">
-          <div className="footer-brand">
-            <svg width="20" height="20" viewBox="0 0 32 32" fill="none"><path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="url(#lg-f)" strokeWidth="2" fill="none"/><path d="M16 10L22 14V22L16 26L10 22V14L16 10Z" fill="url(#lg-f)"/><defs><linearGradient id="lg-f" x1="4" y1="2" x2="28" y2="30"><stop stopColor="#7C3AED"/><stop offset="1" stopColor="#a855f7"/></linearGradient></defs></svg>
+      <footer className="lp-footer">
+        <div className="lp-footer-inner">
+          <div className="lp-footer-brand">
+            <svg width="18" height="18" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+              <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="#4F6EF7" strokeWidth="2" fill="none" />
+              <path d="M16 10L22 14V22L16 26L10 22V14L16 10Z" fill="#4F6EF7" />
+            </svg>
             <span>NEXUS CORP TECHNOLOGIES</span>
           </div>
-          <div className="footer-links">
-            <Link to="/docs" className="footer-link">Documentation</Link>
-            <Link to="/privacy" className="footer-link">{t('footer_privacy')}</Link>
-            <Link to="/terms" className="footer-link">{t('footer_terms')}</Link>
-            <Link to="/support" className="footer-link">Support</Link>
+          <div className="lp-footer-links">
+            <Link to="/docs" className="lp-footer-link">Documentation</Link>
+            <Link to="/privacy" className="lp-footer-link">{t('footer_privacy')}</Link>
+            <Link to="/terms" className="lp-footer-link">{t('footer_terms')}</Link>
+            <Link to="/support" className="lp-footer-link">Support</Link>
           </div>
-          <p className="footer-copy">{t('footer_copy')}</p>
+          <p className="lp-footer-copy">{t('footer_copy')}</p>
         </div>
       </footer>
+      </div>
     </div>
   );
 }

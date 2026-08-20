@@ -62,7 +62,7 @@ function PublicRouter() {
             <LandingPage
               onLogin={() => navigate('/login')}
               onAdminLogin={() => navigate('/admin-login')}
-              onRegister={() => navigate('/register')}
+              onRegister={(type) => navigate(type ? `/register?type=${type}` : '/register')}
             />
           }
         />

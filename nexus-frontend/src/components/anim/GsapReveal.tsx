@@ -35,7 +35,16 @@ export function GsapReveal({ children, effect = 'fadeUp', delay = 0, duration = 
     const tween = gsap.fromTo(el, from, { opacity: 1, x: 0, y: 0, scale: 1, skewY: 0, filter: 'blur(0px)', clipPath: 'inset(0 0% 0 0)' });
     ScrollTrigger.create({ trigger: el, start: 'top 88%', once: true, onEnter: () => tween.play() });
     tween.pause();
-    return () => { tween.kill(); ScrollTrigger.getAll().forEach((t) => t.trigger === el && t.kill()); };
+    // Filet de sécurité : si le trigger ne fire jamais (webview), révéler après un délai.
+    const fallback = window.setTimeout(() => {
+      if (tween.paused()) tween.play();
+    }, 1200);
+    return () => {
+      window.clearTimeout(fallback);
+      tween.kill();
+      ScrollTrigger.getAll().forEach((t) => t.trigger === el && t.kill());
+      gsap.set(el, { clearProps: 'all' });
+    };
   }, [effect, delay, duration]);
 
   const Tag = as as any;

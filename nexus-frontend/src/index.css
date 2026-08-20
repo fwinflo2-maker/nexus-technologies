@@ -6,7 +6,32 @@
   position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: 1;
+  z-index: 0;
+  overflow: hidden;
 }
-.auth-page > .particles-layer { z-index: 0; }
-.nexus-dash .particles-bg { z-index: 0; opacity: 0.4; }
+
+.particles-bg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.auth-page > .particles-layer {
+  z-index: 0;
+}
+
+.nexus-dash .particles-layer,
+.nexus-dash .dash-particles {
+  z-index: 0;
+}
+
+.nexus-dash .particles-layer {
+  opacity: 0.4;
+}
+
+.landing-page > .particles-layer,
+.landing-page > .lp-particles {
+  position: absolute;
+  z-index: 0;
+  opacity: 0.35;
+}

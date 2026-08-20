@@ -44,7 +44,8 @@
 .nexus-dash .dash-ambient-bg {
   background: linear-gradient(180deg, #0B0D10 0%, #0E1013 100%);
 }
-.nexus-dash .dash-particles { opacity: 0.12; }
+.nexus-dash .dash-particles,
+.nexus-dash .particles-layer.dash-particles { opacity: 0.12; }
 .nexus-dash .ambient, .nexus-dash .orb { display: none !important; }
 .nexus-dash .bg-grid { opacity: 0.35; }
 .nexus-dash .ambient-vignette { opacity: 0.3; }

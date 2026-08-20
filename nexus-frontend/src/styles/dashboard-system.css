@@ -477,6 +477,7 @@
   min-height: 100vh;
   position: relative;
   z-index: 2;
+  isolation: isolate;
 }
 
 /* ── Topbar ── */
@@ -903,7 +904,8 @@ html.light-mode .nexus-dash .status-dot {
 .nexus-dash .dash-particles {
   position: fixed; inset: 0; pointer-events: none; z-index: 0;
 }
-.nexus-dash .dash-particles canvas { width: 100%; height: 100%; display: block; }
+.nexus-dash .dash-particles canvas,
+.nexus-dash .particles-bg { width: 100%; height: 100%; display: block; }
 .nexus-dash .ambient-vignette {
   position: fixed; inset: 0; pointer-events: none; z-index: 0;
   background: radial-gradient(ellipse 70% 60% at 50% 40%, transparent 50%, rgba(3,5,8,0.55) 100%);

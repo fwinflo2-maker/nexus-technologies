@@ -7,6 +7,11 @@ interface ParticlesBackgroundProps {
   opacity?: number;
 }
 
+/**
+ * Fond particules. Toujours derrière le contenu (wrapper z-index: 0).
+ * Ne jamais mettre z-index/opacity en inline sur le canvas : ça peut
+ * remonter le stacking et faire clignoter dashboard / pages.
+ */
 export function ParticlesBackground({
   density = 60,
   color = '#8B5CF6',
@@ -24,6 +29,7 @@ export function ParticlesBackground({
     let raf = 0;
     let width = 0;
     let height = 0;
+    let resizeTimer = 0;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
     interface Particle {
@@ -38,13 +44,18 @@ export function ParticlesBackground({
     let particles: Particle[] = [];
 
     const init = () => {
-      width = canvas.offsetWidth;
-      height = canvas.offsetHeight;
-      canvas.width = width * dpr;
-      canvas.height = height * dpr;
+      const parent = canvas.parentElement;
+      width = parent?.clientWidth || window.innerWidth;
+      height = parent?.clientHeight || window.innerHeight;
+      if (width < 2 || height < 2) return;
+
+      canvas.width = Math.floor(width * dpr);
+      canvas.height = Math.floor(height * dpr);
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-      const count = Math.floor((width * height) / 18000) + density;
+      const count = Math.min(160, Math.floor((width * height) / 18000) + density);
       particles = Array.from({ length: count }, () => ({
         x: Math.random() * width,
         y: Math.random() * height,
@@ -56,6 +67,10 @@ export function ParticlesBackground({
     };
 
     const draw = () => {
+      if (width < 2 || height < 2) {
+        raf = requestAnimationFrame(draw);
+        return;
+      }
       ctx.clearRect(0, 0, width, height);
 
       for (const p of particles) {
@@ -74,7 +89,6 @@ export function ParticlesBackground({
         ctx.fill();
       }
 
-      // Connection lines between nearby particles
       for (let i = 0; i < particles.length; i++) {
         for (let j = i + 1; j < particles.length; j++) {
           const a = particles[i];
@@ -99,35 +113,28 @@ export function ParticlesBackground({
     };
 
     init();
-    draw();
+    raf = requestAnimationFrame(draw);
 
     const onResize = () => {
-      cancelAnimationFrame(raf);
-      init();
-      draw();
+      window.clearTimeout(resizeTimer);
+      resizeTimer = window.setTimeout(() => {
+        cancelAnimationFrame(raf);
+        init();
+        raf = requestAnimationFrame(draw);
+      }, 120);
     };
     window.addEventListener('resize', onResize);
 
     return () => {
       cancelAnimationFrame(raf);
+      window.clearTimeout(resizeTimer);
       window.removeEventListener('resize', onResize);
     };
   }, [density, color, opacity]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      className={`particles-bg ${className}`}
-      aria-hidden="true"
-      style={{
-        position: 'fixed',
-        inset: 0,
-        width: '100%',
-        height: '100%',
-        pointerEvents: 'none',
-        zIndex: 1,
-        opacity,
-      }}
-    />
+    <div className={`particles-layer ${className}`} aria-hidden="true">
+      <canvas ref={canvasRef} className="particles-bg" />
+    </div>
   );
 }
