@@ -340,8 +340,12 @@ final class SupportController
         if ($isInternal && !$isAgent) {
             Response::forbidden('Seul un agent peut laisser une note interne.');
         }
-        $attName = $isAgent ? (string) $request->input('attachment_name', '') : '';
-        $attUrl  = $isAgent ? (string) $request->input('attachment_url', '') : '';
+        // Client ET agent peuvent joindre fichiers / captures — uniquement via
+        // /uploads/support/ (upload authentifié). Les URL externes sont refusées.
+        [$attName, $attUrl] = self::resolveLocalAttachment(
+            (string) $request->input('attachment_name', ''),
+            (string) $request->input('attachment_url', '')
+        );
         $agentId = $isAgent ? (int) $user['id'] : null;
         $customerId = $isAgent ? null : (int) $user['id'];
 
@@ -512,6 +516,43 @@ final class SupportController
             'billing' => 'Facturation',
             'other' => 'Autre',
         ][$category] ?? 'Autre';
+    }
+
+    /**
+     * Valide une pièce jointe locale (fichier ou capture d'écran uploadée).
+     *
+     * @return array{0: ?string, 1: ?string} [name, url]
+     */
+    private static function resolveLocalAttachment(string $name, string $url): array
+    {
+        $name = trim($name);
+        $url = trim($url);
+        if ($url === '') {
+            return [null, null];
+        }
+
+        if (!preg_match('#^/uploads/support/([a-f0-9]{24}\.(jpg|png|gif|webp|pdf|txt))$#', $url, $m)) {
+            Response::badRequest('Pièce jointe invalide : seul un fichier uploadé via le chat est accepté.');
+        }
+
+        $basename = $m[1];
+        $path = dirname(__DIR__, 2) . '/public/uploads/support/' . $basename;
+        if (!is_file($path)) {
+            Response::badRequest('Pièce jointe introuvable. Réessayez l\'envoi du fichier.');
+        }
+
+        $safeName = preg_replace('/[\r\n\0]+/', '', $name) ?? '';
+        $safeName = trim($safeName);
+        if ($safeName === '') {
+            $safeName = $basename;
+        }
+        if (function_exists('mb_substr')) {
+            $safeName = mb_substr($safeName, 0, 180);
+        } else {
+            $safeName = substr($safeName, 0, 180);
+        }
+
+        return [$safeName, '/uploads/support/' . $basename];
     }
 
     /**
