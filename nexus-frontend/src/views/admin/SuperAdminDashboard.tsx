@@ -161,7 +161,7 @@ export default function SuperAdminDashboard() {
           {/* ═══ COMPTES ═══ */}
           {section === 'accounts' && (
             <>
-              <Header title="Comptes" desc="Tous les clients Nexus classés par secteur (Personnel / Business). Cliquez sur un compte pour le détail complet." />
+              <Header title="Comptes" desc="Registre clients — détail, signaux multi-comptes, suspension / ban / réactivation (motif audité)." />
               <div className="g4" style={{ marginBottom: 20 }}>
                 <Card title="Total" icon="👥"><Num v={ov.accounts.total} /></Card>
                 <Card title="Personnel" icon="👤"><Num v={ov.accounts.personal} /></Card>
