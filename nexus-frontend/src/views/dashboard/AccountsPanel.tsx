@@ -6,6 +6,7 @@ import {
   apiAccountsDelete,
   apiAccountsSetDefault,
   apiCryptoNetworks,
+  apiCashPickupNetworks,
   apiFundingPaymentMethods,
   type PaymentAccount,
   type AccountKind,
@@ -65,6 +66,7 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [networks, setNetworks] = useState<string[]>([]);
+  const [cashPickupNetworks, setCashPickupNetworks] = useState<string[]>(['Western Union', 'MoneyGram']);
   const [allowedKinds, setAllowedKinds] = useState<AccountKind[]>(() =>
     kindsForCountry(registrationCountry || '', role).kinds
   );
@@ -96,6 +98,11 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
   useEffect(() => {
     apiCryptoNetworks().then(res => {
       if (res.success && res.data) setNetworks(res.data.networks);
+    });
+    apiCashPickupNetworks().then(res => {
+      if (res.success && res.data?.networks?.length) {
+        setCashPickupNetworks(res.data.networks.map(n => n.name));
+      }
     });
   }, []);
 
@@ -141,6 +148,13 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
       setFormKind(allowedKinds[0]);
     }
   }, [allowedKinds, formKind, modalOpen, editTarget]);
+
+  useEffect(() => {
+    if (!modalOpen || formKind !== 'cash_pickup') return;
+    if (!formData.operator) {
+      setFormData(d => ({ ...d, operator: 'Western Union' }));
+    }
+  }, [formKind, modalOpen, formData.operator]);
 
   const kindChoices = allowedKinds;
 
@@ -224,6 +238,7 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
       if (expiry && !/^(0[1-9]|1[0-2])\/?([0-9]{2})$/.test(expiry)) return t('accounts.validation.expiryFormat');
     }
     if (formKind === 'cash_pickup') {
+      if (!formData.operator && !editTarget) return t('accounts.validation.cashNetwork');
       if (!formData.city && !editTarget) return t('accounts.validation.city');
     }
     return null;
@@ -669,12 +684,26 @@ export default function AccountsPanel({ role }: AccountsPanelProps) {
               )}
 
               {formKind === 'cash_pickup' && (
-                <FormInput
-                  label={t('accounts.cityPickup')}
-                  value={formData.city ?? ''}
-                  onChange={v => setFormData(d => ({ ...d, city: v }))}
-                  placeholder={t('accounts.cityPlaceholder')}
-                />
+                <>
+                  <div>
+                    <FormLabel>{t('accounts.cashNetwork')}</FormLabel>
+                    <select
+                      value={formData.operator ?? 'Western Union'}
+                      onChange={e => setFormData(d => ({ ...d, operator: e.target.value }))}
+                      style={selectStyle}
+                    >
+                      {cashPickupNetworks.map(n => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <FormInput
+                    label={t('accounts.cityPickup')}
+                    value={formData.city ?? ''}
+                    onChange={v => setFormData(d => ({ ...d, city: v }))}
+                    placeholder={t('accounts.cityPlaceholder')}
+                  />
+                </>
               )}
             </div>
 

@@ -31,6 +31,17 @@ final class ProviderOperationalAuditTest extends TestCase
         self::assertSame('P1', $row['priority']);
     }
 
+    public function test_moneygram_et_western_union_utilisent_adapters_dedies(): void
+    {
+        self::assertSame('MoneyGramAdapter', ProviderOperationalAudit::adapterClass('moneygram'));
+        self::assertSame('WesternUnionAdapter', ProviderOperationalAudit::adapterClass('western_union'));
+        self::assertTrue(ProviderCatalog::exists('moneygram'));
+        self::assertSame(
+            ProviderCapabilityMatrix::IMPLEMENTED,
+            ProviderCapabilityMatrix::for('moneygram')['test_connection']
+        );
+    }
+
     public function test_config_driven_avec_sonde_reste_bloque_sans_credentials(): void
     {
         $row = ProviderOperationalAudit::audit('thunes', 'sandbox', true);

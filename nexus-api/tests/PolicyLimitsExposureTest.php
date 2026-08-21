@@ -16,11 +16,11 @@ use Throwable;
  * Le frontend (dashboard, /send) affiche le plafond réel, la consommation
  * et le restant depuis l'API — jamais une valeur codée en dur côté client.
  *
- * Alignement normes internationales (UE) :
- *   - none    → 250 EUR/mois   (5e directive AML 2018/843, e-money sans CDD)
- *   - basic   → 1 000 EUR/mois (règlement UE 2015/847, seuil du transfert)
- *   - standard → 2 000 EUR/mois (KYC documentaire)
- *   - advanced → 10 000 EUR/mois (due diligence renforcée / FATF)
+ * Alignement plafonds (PolicyEngine) :
+ *   - personnel non vérifié (none/basic) → 1 000 EUR/mois
+ *   - entreprise non vérifiée (KYB ≠ verified) → 2 000 EUR/mois
+ *   - standard vérifié → 2 000 EUR/mois
+ *   - advanced vérifié → 10 000 EUR/mois
  *
  * Base utilisée : nexus_test (isolée, JAMAIS nexus).
  */
@@ -80,7 +80,7 @@ final class PolicyLimitsExposureTest extends TestCase
     public function test_plafonds_mensuels_alignes_normes_eu(): void
     {
         $expected = [
-            'none'     => 250.0,
+            'none'     => 1000.0,
             'basic'    => 1000.0,
             'standard' => 2000.0,
             'advanced' => 10000.0,
@@ -93,6 +93,22 @@ final class PolicyLimitsExposureTest extends TestCase
             self::assertSame($kyc, $limits['kyc_level']);
             self::assertSame(1000.0, $limits['kyc_required_threshold_eur']);
         }
+    }
+
+    public function test_entreprise_non_verifiee_plafond_2000(): void
+    {
+        $uid = $this->createUser('none', 'business', 'none');
+        $limits = PolicyEngine::limitsFor($this->userRow($uid, 'none', 'business', 'none'));
+        self::assertSame(2000.0, $limits['monthly_limit_eur']);
+        self::assertFalse($limits['verified']);
+    }
+
+    public function test_entreprise_verifiee_advanced_plafond_10000(): void
+    {
+        $uid = $this->createUser('advanced', 'business', 'verified');
+        $limits = PolicyEngine::limitsFor($this->userRow($uid, 'advanced', 'business', 'verified'));
+        self::assertSame(10000.0, $limits['monthly_limit_eur']);
+        self::assertTrue($limits['verified']);
     }
 
     public function test_verifie_seulement_standard_et_advanced_pour_particulier(): void

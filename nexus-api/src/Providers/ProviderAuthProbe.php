@@ -89,6 +89,16 @@ final class ProviderAuthProbe
             'pass_key' => 'client_secret',
             'ok_codes' => [200],
         ],
+        // MoneyGram OAuth2 client credentials (GET + Basic) — doc o-auth-api
+        'moneygram' => [
+            'mode' => 'oauth_basic',
+            'path' => '/oauth/accesstoken?grant_type=client_credentials',
+            'method' => 'GET',
+            'content_type' => 'application/json',
+            'user_key' => 'client_id',
+            'pass_key' => 'client_secret',
+            'ok_codes' => [200],
+        ],
         // Marqeta Basic application_token:admin_access_token
         'marqeta' => [
             'mode' => 'basic',

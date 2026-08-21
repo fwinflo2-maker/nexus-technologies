@@ -16,6 +16,12 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
+      // Fichiers publics PHP (avatars profil + pièces jointes support).
+      '/uploads': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+        secure: false,
+      },
     },
   },
 })

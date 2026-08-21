@@ -95,7 +95,20 @@ final class ProviderCapabilityMatrix
             'account'         => self::NOT_SUPPORTED,
         ],
         'western_union' => [
-            'test_connection' => self::NOT_IMPLEMENTED,
+            // Mass Payments : Ping mTLS réel ; quote/payout E2E partenaire requis.
+            'test_connection' => self::IMPLEMENTED,     // GET /Ping (mTLS)
+            'balance'         => self::NOT_IMPLEMENTED,
+            'quote'           => self::NOT_IMPLEMENTED, // getQuote() existe mais hors CapabilityEngine E2E
+            'payout'          => self::NOT_IMPLEMENTED,
+            'refund'          => self::NOT_IMPLEMENTED,
+            'webhook'         => self::CONFIG_REQUIRED,
+            'reconciliation'  => self::NOT_IMPLEMENTED,
+            'account'         => self::NOT_IMPLEMENTED,
+        ],
+        'moneygram' => [
+            // OAuth client credentials réel ; disbursement/transfer payout NOT_IMPLEMENTED
+            // jusqu'à E2E partenaire (agentPartnerId + modules).
+            'test_connection' => self::IMPLEMENTED,     // GET /oauth/accesstoken
             'balance'         => self::NOT_IMPLEMENTED,
             'quote'           => self::NOT_IMPLEMENTED,
             'payout'          => self::NOT_IMPLEMENTED,

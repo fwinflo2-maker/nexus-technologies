@@ -38,7 +38,10 @@ final class UserController
         $fullName = trim((string) $request->input('full_name', ''));
         $phone = trim((string) $request->input('phone', ''));
         $countryOfResidence = trim((string) $request->input('country_of_residence', ''));
-        // Avatar : soit une URL http(s), soit une data URI image. NULL/'' efface l'avatar.
+        // Avatar : URL http(s), data URI image, ou '' pour effacer.
+        // Les data URI sont persistées en fichier sous /uploads/avatars/ (la
+        // colonne users.avatar est TEXT ≤ 65 Ko — trop petite pour une photo
+        // base64) ; on stocke uniquement le chemin public court.
         $avatar = $request->input('avatar', null);
 
         // Validation
@@ -50,14 +53,21 @@ final class UserController
             Response::badRequest('Le numéro de téléphone ne peut pas dépasser 20 caractères.');
         }
 
+        $storedAvatar = null;
         if ($avatar !== null && $avatar !== '') {
-            $isDataUri = str_starts_with($avatar, 'data:image/') && str_contains($avatar, ';base64,');
-            $isUrl = str_starts_with($avatar, 'https://') || str_starts_with($avatar, 'http://');
-            if (!$isDataUri && !$isUrl) {
+            if (!is_string($avatar)) {
                 Response::badRequest('Avatar invalide : attendu une URL http(s) ou une image data URI.');
             }
-            if (strlen($avatar) > 500000) { // ~500 Ko max
-                Response::badRequest("L'avatar ne peut pas dépasser 500 Ko.");
+            try {
+                $storedAvatar = self::normalizeAvatarForStorage(
+                    $userId,
+                    $avatar,
+                    isset($user['avatar']) && is_string($user['avatar']) ? $user['avatar'] : null
+                );
+            } catch (\InvalidArgumentException $e) {
+                Response::badRequest($e->getMessage());
+            } catch (\RuntimeException $e) {
+                Response::serverError($e->getMessage());
             }
         }
 
@@ -95,8 +105,15 @@ final class UserController
 
             // Avatar : présent dans le payload (même '' pour effacer) → mise à jour.
             if ($avatar !== null) {
+                $previous = isset($user['avatar']) && is_string($user['avatar']) ? $user['avatar'] : null;
+                if ($avatar === '') {
+                    self::deleteLocalAvatarFile($previous);
+                    $params[':avatar'] = null;
+                    $storedAvatar = null;
+                } else {
+                    $params[':avatar'] = $storedAvatar;
+                }
                 $updates[] = 'avatar = :avatar';
-                $params[':avatar'] = $avatar === '' ? null : $avatar;
                 $changedFields[] = 'avatar';
             }
 
@@ -134,6 +151,9 @@ final class UserController
             ], $request);
 
             $payload = ['updated' => true];
+            if (in_array('avatar', $changedFields, true)) {
+                $payload['avatar'] = $storedAvatar;
+            }
             if (is_array($sumsubSync)) {
                 $payload['sumsub'] = $sumsubSync;
             }
@@ -144,6 +164,81 @@ final class UserController
                 $pdo->rollBack();
             }
             Response::serverError('Erreur lors de la mise à jour du profil.');
+        }
+    }
+
+    /**
+     * Convertit une data URI image en fichier public, ou valide une URL http(s).
+     *
+     * @throws \InvalidArgumentException message prêt pour Response::badRequest
+     */
+    private static function normalizeAvatarForStorage(int $userId, string $avatar, ?string $previous): string
+    {
+        $isDataUri = str_starts_with($avatar, 'data:image/') && str_contains($avatar, ';base64,');
+        $isUrl = str_starts_with($avatar, 'https://') || str_starts_with($avatar, 'http://');
+
+        if ($isUrl) {
+            if (strlen($avatar) > 2048) {
+                throw new \InvalidArgumentException('URL d\'avatar trop longue.');
+            }
+            if ($previous !== null && $previous !== $avatar) {
+                self::deleteLocalAvatarFile($previous);
+            }
+            return $avatar;
+        }
+
+        if (!$isDataUri) {
+            throw new \InvalidArgumentException('Avatar invalide : attendu une URL http(s) ou une image data URI.');
+        }
+
+        // Plafond transit (~500 Ko binaires → ~670 Ko base64 + en-tête).
+        if (strlen($avatar) > 720000) {
+            throw new \InvalidArgumentException("L'avatar ne peut pas dépasser 500 Ko.");
+        }
+
+        if (!preg_match('#^data:image/(jpeg|jpg|png|gif|webp);base64,#i', $avatar, $m)) {
+            throw new \InvalidArgumentException('Format d\'image non supporté (JPEG, PNG, GIF ou WebP).');
+        }
+
+        $extMap = ['jpeg' => 'jpg', 'jpg' => 'jpg', 'png' => 'png', 'gif' => 'gif', 'webp' => 'webp'];
+        $ext = $extMap[strtolower($m[1])] ?? 'png';
+        $b64 = substr($avatar, (int) strpos($avatar, ',') + 1);
+        $binary = base64_decode($b64, true);
+        if ($binary === false || $binary === '') {
+            throw new \InvalidArgumentException('Avatar invalide : décodage base64 impossible.');
+        }
+        if (strlen($binary) > 500000) {
+            throw new \InvalidArgumentException("L'avatar ne peut pas dépasser 500 Ko.");
+        }
+
+        $dir = dirname(__DIR__, 2) . '/public/uploads/avatars';
+        if (!is_dir($dir) && !@mkdir($dir, 0775, true) && !is_dir($dir)) {
+            throw new \RuntimeException('Impossible d\'enregistrer l\'avatar.');
+        }
+
+        $name = 'u' . $userId . '-' . bin2hex(random_bytes(8)) . '.' . $ext;
+        $dest = $dir . '/' . $name;
+        if (@file_put_contents($dest, $binary) === false) {
+            throw new \RuntimeException('Impossible d\'enregistrer l\'avatar.');
+        }
+
+        self::deleteLocalAvatarFile($previous);
+
+        return '/uploads/avatars/' . $name;
+    }
+
+    /** Supprime un fichier avatar local Nexus (ignore URLs externes / data URI). */
+    private static function deleteLocalAvatarFile(?string $avatar): void
+    {
+        if ($avatar === null || $avatar === '') {
+            return;
+        }
+        if (!preg_match('#^/uploads/avatars/([A-Za-z0-9._-]+)$#', $avatar, $m)) {
+            return;
+        }
+        $path = dirname(__DIR__, 2) . '/public/uploads/avatars/' . $m[1];
+        if (is_file($path)) {
+            @unlink($path);
         }
     }
 

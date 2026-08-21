@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 /**
  * Avatar utilisateur / entreprise.
  * Affiche l'image de profil si disponible (avatar), sinon un fallback emoji
@@ -14,11 +16,19 @@ export default function Avatar({
   size?: number;
   className?: string;
 }) {
+  const [failed, setFailed] = useState(false);
   const fallback = accountType === 'business' ? '🏢' : '👤';
 
-  if (avatar) {
+  // Nouvelle URL / data URI → réessayer l'affichage (évite un fallback figé
+  // après un upload réussi ou un changement de profil).
+  useEffect(() => {
+    setFailed(false);
+  }, [avatar]);
+
+  if (avatar && !failed) {
     return (
       <img
+        key={avatar}
         src={avatar}
         alt="Avatar"
         className={className}
@@ -31,15 +41,7 @@ export default function Avatar({
           border: '1px solid rgba(0,200,255,0.25)',
           flexShrink: 0,
         }}
-        onError={(e) => {
-          // Si l'image ne charge pas, repli sur l'emoji
-          e.currentTarget.style.display = 'none';
-          const parent = e.currentTarget.parentElement;
-          if (parent) {
-            const sib = parent.querySelector('[data-avatar-fallback]');
-            if (sib) (sib as HTMLElement).style.display = 'flex';
-          }
-        }}
+        onError={() => setFailed(true)}
       />
     );
   }

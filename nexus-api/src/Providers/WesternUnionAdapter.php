@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace Nexus\Providers;
 
+use Nexus\Core\Database;
+use Nexus\Services\ProviderCredentialService;
+use RuntimeException;
+
 /**
  * WesternUnionAdapter — adaptateur Western Union Mass Payments API.
  *
@@ -20,21 +24,94 @@ namespace Nexus\Providers;
  *       POST /customers/{clientId}/batches/{batchId}/payments
  *       GET  /customers/{clientId}/batches/{batchId}/payments/{paymentId}
  *
- * Credentials résolus depuis l'environnement (PROVIDER_WESTERN_UNION_*),
- * jamais en dur ni exposés. L'accès réel nécessite l'onboarding partenaire
- * (pas de self-service) ; les opérations réseau ne sont donc exécutées que
- * si des credentials mTLS sont configurés.
+ * Credentials (schéma vérifié) : chemins serveur `client_cert_path` /
+ * `client_key_path` + `client_id` — curl CURLOPT_SSLCERT / CURLOPT_SSLKEY.
+ * Pas de PEM inline en Credential Manager (alignement explicite path-based).
+ *
+ * L'accès réel nécessite l'onboarding partenaire (pas de self-service).
  */
 final class WesternUnionAdapter extends AbstractProviderAdapter
 {
-    public function __construct()
+    /** @var null|callable(string,string,array,string,?string,?string):array{status:int,body:string} */
+    private $transport;
+
+    /**
+     * @param null|callable(string,string,array,string,?string,?string):array{status:int,body:string} $transport
+     *        method, url, headers, body, certPath|null, keyPath|null
+     */
+    public function __construct(?callable $transport = null)
     {
         parent::__construct('western_union');
+        $this->transport = $transport;
     }
 
     protected function declaredMethods(): array
     {
-        return ['bank'];
+        return ['cash_pickup', 'bank'];
+    }
+
+    /**
+     * Sonde auth réelle : GET /Ping avec mTLS.
+     * Statuts normalisés comme PawaPay / MoneyGram.
+     */
+    public function testConnection(string $environment, ?array $credentials = null): array
+    {
+        $env = $environment === 'production' ? 'production' : 'sandbox';
+        $creds = $this->credentials($env, $credentials);
+        $cert = trim((string) ($creds['client_cert_path'] ?? ''));
+        $key = trim((string) ($creds['client_key_path'] ?? ''));
+        $clientId = trim((string) ($creds['client_id'] ?? ''));
+
+        if ($cert === '' || $key === '' || $clientId === '') {
+            return [
+                'status' => 'PROVIDER_NOT_CONFIGURED',
+                'message' => 'Credentials mTLS Western Union absentes (client_id / client_cert_path / client_key_path).',
+                'tested_at' => gmdate(DATE_ATOM),
+            ];
+        }
+
+        // Transport injecté (tests) : ne pas exiger des fichiers réels.
+        if ($this->transport === null && (!is_file($cert) || !is_file($key))) {
+            return [
+                'status' => 'PROVIDER_NOT_CONFIGURED',
+                'message' => 'Chemin de certificat mTLS Western Union non configuré ou introuvable.',
+                'tested_at' => gmdate(DATE_ATOM),
+            ];
+        }
+
+        try {
+            $res = $this->request('GET', '/Ping', [], '', $cert, $key, $env);
+        } catch (RuntimeException $e) {
+            $msg = strtolower($e->getMessage());
+            return [
+                'status' => str_contains($msg, 'timeout') ? 'TIMEOUT' : 'PROVIDER_UNAVAILABLE',
+                'message' => 'API Western Union injoignable.',
+                'tested_at' => gmdate(DATE_ATOM),
+            ];
+        }
+
+        return match (true) {
+            $res['status'] === 200 => [
+                'status' => 'CONNECTION_SUCCESS',
+                'message' => 'mTLS Western Union authentifié (Ping OK).',
+                'tested_at' => gmdate(DATE_ATOM),
+            ],
+            $res['status'] === 401 => [
+                'status' => 'INVALID_CREDENTIALS',
+                'message' => 'Certificat mTLS Western Union rejeté (401).',
+                'tested_at' => gmdate(DATE_ATOM),
+            ],
+            $res['status'] === 403 => [
+                'status' => 'UNAUTHORIZED',
+                'message' => 'Certificat mTLS Western Union sans permission (403).',
+                'tested_at' => gmdate(DATE_ATOM),
+            ],
+            default => [
+                'status' => 'CONFIGURATION_ERROR',
+                'message' => 'Réponse inattendue de Western Union (HTTP ' . $res['status'] . ').',
+                'tested_at' => gmdate(DATE_ATOM),
+            ],
+        };
     }
 
     /**
@@ -44,59 +121,31 @@ final class WesternUnionAdapter extends AbstractProviderAdapter
     public function healthCheck(): array
     {
         $environment = ProviderConfig::activeEnvironment($this->slug);
-        $config      = $this->validateConfiguration();
+        $config = $this->validateConfiguration();
 
         if ($config['status'] !== ProviderStatus::CONFIGURED) {
             return [
-                'slug'        => $this->slug,
+                'slug' => $this->slug,
                 'environment' => $environment,
-                'status'      => $config['status']->value,
-                'healthy'     => false,
-                'latency_ms'  => null,
-                'detail'      => 'Configuration mTLS incomplète — onboarding Western Union requis.',
+                'status' => $config['status']->value,
+                'healthy' => false,
+                'latency_ms' => null,
+                'detail' => 'Configuration mTLS incomplète — onboarding Western Union requis.',
             ];
         }
 
         $start = microtime(true);
-        $cert  = ProviderConfig::get($this->slug, $environment, 'client_cert_path');
-        $key   = ProviderConfig::get($this->slug, $environment, 'client_key_path');
-        $base  = ProviderConfig::baseUrl($this->slug, $environment);
-
-        // Sonde TCP (aucun secret échangé) si les chemins ne sont pas lisibles.
-        if ($cert === null || $key === null || !is_file($cert) || !is_file($key)) {
-            return [
-                'slug'        => $this->slug,
-                'environment' => $environment,
-                'status'      => 'not_configured',
-                'healthy'     => false,
-                'latency_ms'  => null,
-                'detail'      => 'Chemin de certificat mTLS non configuré ou introuvable.',
-            ];
-        }
-
-        // Appel mTLS réel vers /Ping (ne part qu'avec un cert valide).
-        $ch = curl_init($base . '/Ping');
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_SSLCERT        => $cert,
-            CURLOPT_SSLKEY         => $key,
-            CURLOPT_TIMEOUT        => 8,
-        ]);
-        $body = curl_exec($ch);
-        $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
+        $probe = $this->testConnection($environment);
         $latencyMs = (int) round((microtime(true) - $start) * 1000);
+        $ok = ($probe['status'] ?? '') === 'CONNECTION_SUCCESS';
 
         return [
-            'slug'        => $this->slug,
+            'slug' => $this->slug,
             'environment' => $environment,
-            'status'      => $code === 200 ? 'active' : 'error',
-            'healthy'     => $code === 200,
-            'latency_ms'  => $latencyMs,
-            'detail'      => $code === 200 ? 'API opérationnelle (pong).' : 'Réponse inattendue (HTTP ' . $code . ').',
-            'raw'         => mb_substr((string) $body, 0, 200),
+            'status' => $ok ? 'active' : 'error',
+            'healthy' => $ok,
+            'latency_ms' => $latencyMs,
+            'detail' => (string) ($probe['message'] ?? ''),
         ];
     }
 
@@ -107,40 +156,121 @@ final class WesternUnionAdapter extends AbstractProviderAdapter
     public function getQuote(array $intent): array
     {
         $environment = ProviderConfig::activeEnvironment($this->slug);
-        $clientId    = ProviderConfig::get($this->slug, $environment, 'client_id');
-        $cert        = ProviderConfig::get($this->slug, $environment, 'client_cert_path');
-        $key         = ProviderConfig::get($this->slug, $environment, 'client_key_path');
+        $creds = $this->credentials($environment);
+        $clientId = trim((string) ($creds['client_id'] ?? ''));
+        $cert = trim((string) ($creds['client_cert_path'] ?? ''));
+        $key = trim((string) ($creds['client_key_path'] ?? ''));
 
-        if ($clientId === null || $cert === null || $key === null) {
-            throw new ProviderOperationNotImplemented('western_union', 'getQuote', 'Credentials mTLS Western Union manquantes.');
+        if ($clientId === '' || $cert === '' || $key === '') {
+            throw new ProviderOperationNotImplemented(
+                'western_union',
+                'getQuote',
+                'Credentials mTLS Western Union manquantes.'
+            );
         }
 
         $payload = json_encode([
-            'sendCurrency'    => $intent['from'] ?? null,
+            'sendCurrency' => $intent['from'] ?? null,
             'receiveCurrency' => $intent['to'] ?? null,
-            'sendAmount'      => $intent['amount'] ?? null,
-        ]);
+            'sendAmount' => $intent['amount'] ?? null,
+        ], JSON_THROW_ON_ERROR);
 
-        $base = ProviderConfig::baseUrl($this->slug, $environment);
-        $ch = curl_init($base . '/customers/' . rawurlencode($clientId) . '/quotes');
-        curl_setopt_array($ch, [
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => $payload,
-            CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_SSLCERT        => $cert,
-            CURLOPT_SSLKEY         => $key,
-            CURLOPT_TIMEOUT        => 10,
-        ]);
-        $body = curl_exec($ch);
-        $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+        $res = $this->request(
+            'POST',
+            '/customers/' . rawurlencode($clientId) . '/quotes',
+            ['Content-Type: application/json'],
+            $payload,
+            $cert,
+            $key,
+            $environment
+        );
 
-        $decoded = json_decode((string) $body, true);
-        if ($code === 201 && is_array($decoded)) {
+        $decoded = json_decode($res['body'], true);
+        if ($res['status'] === 201 && is_array($decoded)) {
             return $decoded;
         }
-        throw new ProviderOperationNotImplemented('western_union', 'getQuote', 'Quote échouée (HTTP ' . $code . ').');
+        throw new ProviderOperationNotImplemented(
+            'western_union',
+            'getQuote',
+            'Quote échouée (HTTP ' . $res['status'] . ').'
+        );
+    }
+
+    /** @return array<string,string> */
+    private function credentials(string $environment, ?array $provided = null): array
+    {
+        if (is_array($provided) && $provided !== []) {
+            return $provided;
+        }
+        try {
+            $managed = ProviderCredentialService::resolvePlatform(
+                Database::getConnection(),
+                $this->slug,
+                $environment
+            );
+            if (is_array($managed) && $managed !== []) {
+                return $managed;
+            }
+        } catch (\Throwable) {
+        }
+
+        $out = [];
+        foreach (['client_id', 'client_cert_path', 'client_key_path', 'partner_id'] as $field) {
+            $v = ProviderConfig::credential($this->slug, $field, $environment);
+            if ($v !== null) {
+                $out[$field] = $v;
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * @param list<string> $headers
+     * @return array{status:int,body:string}
+     */
+    private function request(
+        string $method,
+        string $path,
+        array $headers,
+        string $body,
+        string $cert,
+        string $key,
+        string $environment
+    ): array {
+        $url = rtrim(ProviderConfig::baseUrl($this->slug, $environment), '/') . $path;
+
+        if ($this->transport !== null) {
+            return ($this->transport)($method, $url, $headers, $body, $cert, $key);
+        }
+
+        $ch = curl_init($url);
+        if ($ch === false) {
+            throw new RuntimeException('Initialisation HTTP Western Union impossible.');
+        }
+        $opts = [
+            CURLOPT_CUSTOMREQUEST => $method,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSLCERT => $cert,
+            CURLOPT_SSLKEY => $key,
+            CURLOPT_CONNECTTIMEOUT => 5,
+            CURLOPT_TIMEOUT => 15,
+            CURLOPT_MAXREDIRS => 0,
+        ];
+        if ($body !== '') {
+            $opts[CURLOPT_POSTFIELDS] = $body;
+        }
+        curl_setopt_array($ch, $opts);
+        $response = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $errno = curl_errno($ch);
+        curl_close($ch);
+        if ($response === false || $errno !== CURLE_OK) {
+            throw new RuntimeException(
+                $errno === CURLE_OPERATION_TIMEOUTED ? 'Western Union timeout.' : 'Western Union réseau indisponible.'
+            );
+        }
+        return ['status' => $status, 'body' => (string) $response];
     }
 }

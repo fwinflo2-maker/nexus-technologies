@@ -144,6 +144,9 @@ export interface DashboardLimits {
   monthly_limit_eur: number;
   monthly_used_eur: number;
   monthly_remaining_eur: number;
+  verified?: boolean;
+  kyc_level?: string;
+  account_type?: string;
 }
 
 export interface DashboardSummaryData {
@@ -1176,6 +1179,13 @@ export async function apiCryptoNetworks(): Promise<ApiResponse<{ networks: strin
   return request<{ networks: string[] }>('GET', '/accounts/networks');
 }
 
+/** Réseaux cash pickup / cashout (Western Union, MoneyGram…). */
+export async function apiCashPickupNetworks(): Promise<ApiResponse<{
+  networks: Array<{ name: string; provider_slug: string | null }>;
+}>> {
+  return request('GET', '/accounts/cash-pickup-networks');
+}
+
 // --- Providers ---------------------------------------------------------------
 
 /** Catalogue complet des providers + catégories. */
@@ -1382,8 +1392,12 @@ export async function apiGetUserProfile(): Promise<ApiResponse<{ user: UserProfi
 /** Met à jour le profil utilisateur (PUT /api/users/me). */
 export async function apiUpdateProfile(
   payload: UpdateProfilePayload,
-): Promise<ApiResponse<{ updated: boolean }>> {
-  return request<{ updated: boolean }>('PUT', '/users/me', payload as unknown as Record<string, unknown>);
+): Promise<ApiResponse<{ updated: boolean; avatar?: string | null }>> {
+  return request<{ updated: boolean; avatar?: string | null }>(
+    'PUT',
+    '/users/me',
+    payload as unknown as Record<string, unknown>,
+  );
 }
 
 /** Change le mot de passe (PUT /api/users/me/password). */
@@ -1839,10 +1853,51 @@ export async function apiSupportUnread(): Promise<ApiResponse<{ total: number; c
   return request('GET', '/support/unread');
 }
 
+/** Upload d'une pièce jointe (multipart). Max 5 Mo ; images + PDF + docs courants. */
+export const SUPPORT_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
+
+/** accept= du file input + validation côté client (aligné backend). */
+export const SUPPORT_ATTACHMENT_ACCEPT =
+  'image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/csv,.pdf,.txt,.csv,.doc,.docx,.xls,.xlsx';
+
+const SUPPORT_ATTACHMENT_MIME = new Set([
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+  'application/pdf', 'text/plain', 'text/csv',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+]);
+
+const SUPPORT_ATTACHMENT_EXT = new Set([
+  'jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'txt', 'csv', 'doc', 'docx', 'xls', 'xlsx',
+]);
+
+export function isSupportImageUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  return /\.(jpe?g|png|gif|webp)(\?|$)/i.test(url);
+}
+
+export function validateSupportAttachment(file: File): 'ok' | 'too_large' | 'unsupported' {
+  if (file.size > SUPPORT_ATTACHMENT_MAX_BYTES) return 'too_large';
+  const mime = (file.type || '').toLowerCase();
+  if (mime === 'image/jpg') return 'ok';
+  if (mime && SUPPORT_ATTACHMENT_MIME.has(mime)) return 'ok';
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+  if (ext && SUPPORT_ATTACHMENT_EXT.has(ext)) return 'ok';
+  return 'unsupported';
+}
+
 /** Upload d'une pièce jointe (multipart). */
-export async function apiSupportUpload(file: File): Promise<ApiResponse<{ url: string; name: string }>> {
+export async function apiSupportUpload(
+  file: File,
+  opts?: { conversation_id?: number },
+): Promise<ApiResponse<{ url: string; name: string; mime?: string; size?: number }>> {
   const fd = new FormData();
   fd.append('file', file);
+  if (opts?.conversation_id && opts.conversation_id > 0) {
+    fd.append('conversation_id', String(opts.conversation_id));
+  }
   const token = getToken();
   try {
     const resp = await fetch(`${API_PREFIX}/support/attachments`, {
@@ -1850,7 +1905,7 @@ export async function apiSupportUpload(file: File): Promise<ApiResponse<{ url: s
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: fd,
     });
-    return (await resp.json()) as ApiResponse<{ url: string; name: string }>;
+    return (await resp.json()) as ApiResponse<{ url: string; name: string; mime?: string; size?: number }>;
   } catch {
     return { success: false, error: 'Service temporairement indisponible.' };
   }

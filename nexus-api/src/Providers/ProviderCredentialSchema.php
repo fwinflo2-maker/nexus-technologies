@@ -45,6 +45,7 @@ final class ProviderCredentialSchema
             'wise'    => self::wise(),
             'nium'    => self::nium(),
             'western_union' => self::westernUnion(),
+            'moneygram' => self::moneygram(),
             'sumsub'  => self::sumsub(),
             'thunes'  => self::thunes(),
             'mtn_momo' => self::mtnMomo(),
@@ -309,6 +310,48 @@ final class ProviderCredentialSchema
                 required: false,
                 justification: 'Identifiant du partenaire Western Union. Non secret mais backend-only.',
                 placeholder: 'ID partenaire WU'
+            ),
+        ];
+    }
+
+    /**
+     * MoneyGram — https://developer.moneygram.com/moneygram-developer/docs/o-auth-api
+     *
+     * OAuth 2.0 client credentials : Basic base64(client_id:client_secret) puis
+     * Bearer access_token. agentPartnerId requis sur les appels métier
+     * (disbursement / transfer), pas pour la sonde OAuth.
+     */
+    private static function moneygram(): array
+    {
+        return [
+            CredentialDefinition::secret(
+                name: 'client_id',
+                label: 'Client ID (OAuth 2.0)',
+                required: true,
+                usage: CredentialDefinition::USAGE_API_AUTH,
+                justification: 'developer.moneygram.com/moneygram-developer/docs/o-auth-api : « After '
+                    . 'partnering with MoneyGram, we will send you OAuth 2.0 client credentials… unique '
+                    . 'client ID and secret ». « Storing credentials securely: The client ID & secret '
+                    . 'are sensitive… handle and store this data with the utmost security » — backend-only.',
+                placeholder: 'Client ID MoneyGram'
+            ),
+            CredentialDefinition::secret(
+                name: 'client_secret',
+                label: 'Client Secret',
+                required: true,
+                usage: CredentialDefinition::USAGE_API_AUTH,
+                justification: 'developer.moneygram.com OAuth API : client_secret avec client_id en Basic '
+                    . 'Auth pour GET /oauth/accesstoken?grant_type=client_credentials. Secret strict.',
+                placeholder: 'Client Secret MoneyGram'
+            ),
+            CredentialDefinition::identifier(
+                name: 'agent_partner_id',
+                label: 'Agent Partner ID',
+                required: false,
+                justification: 'developer.moneygram.com : agentPartnerId — « Unique agent or partner '
+                    . 'identifier » requis sur les appels disbursement/transfer (query). Non secret ; '
+                    . 'délivré à l\'adhésion partenaire. Optionnel pour testConnection OAuth.',
+                placeholder: 'agentPartnerId'
             ),
         ];
     }

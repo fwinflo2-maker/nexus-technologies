@@ -101,7 +101,6 @@ export function paymentModesForCountry(country: string): LocalPaymentModes | nul
 
   const momo = hasMobileMoney(cc);
   const isEu = EU.has(cc);
-  const isAnglo = cc === 'GB' || cc === 'US' || cc === 'CA';
 
   const methods: string[] = ['crypto'];
   const source: AccountKind[] = ['crypto_wallet'];
@@ -121,10 +120,10 @@ export function paymentModesForCountry(country: string): LocalPaymentModes | nul
     source.push('card');
   }
 
-  if (!isEu && !isAnglo) {
-    methods.push('cash_pickup');
-    destination.push('cash_pickup');
-  }
+  // Cash pickup / cashout — Western Union (et MoneyGram) disponibles mondialement.
+  methods.push('cash_pickup');
+  destination.push('cash_pickup');
+  source.push('cash_pickup');
 
   return {
     country: cc,

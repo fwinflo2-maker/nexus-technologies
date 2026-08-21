@@ -159,6 +159,7 @@ $router->delete('/accounts/{id}', [AccountController::class, 'delete']);
 $router->post('/accounts/{id}/default', [AccountController::class, 'setDefault']);
 $router->get('/accounts/operators', [AccountController::class, 'listOperators']);
 $router->get('/accounts/networks', [AccountController::class, 'listNetworks']);
+$router->get('/accounts/cash-pickup-networks', [AccountController::class, 'listCashPickupNetworks']);
 $router->get('/accounts/authorized-origins', [AccountController::class, 'authorizedOrigins']);
 
 // --- Providers : catalogue + credentials chiffrées (protégé) ---------------

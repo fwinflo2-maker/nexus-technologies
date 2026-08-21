@@ -14,9 +14,11 @@ use Nexus\Providers\ProviderConfig;
  *
  * Étape 5 du pipeline. Contrôles :
  *   1. Statut du compte (PENDING → refus transfert)
- *   2. Plafonds par niveau KYC (LIMITED : 200 EUR/mois, STANDARD : 2000, etc.)
+ *   2. Plafonds mensuels selon vérification + type de compte
+ *      (non vérifié personnel : 1 000 EUR ; non vérifié entreprise : 2 000 EUR ;
+ *       vérifié : barème KYC standard / advanced)
  *   3. Sanctions (déléguées à SanctionsScreening — jamais simulées)
- *   4. Seuils réglementaires (KYC requis au-delà de 1000 EUR)
+ *   4. Seuils réglementaires (KYC documentaire recommandé au-delà de 1000 EUR)
  *   5. Disponibilité du wallet (fonds suffisants)
  *
  * Retourne un verdict : APPROVED | DECLINED | REVIEW_REQUIRED.
@@ -32,15 +34,21 @@ use Nexus\Providers\ProviderConfig;
  */
 final class PolicyEngine
 {
-    /** Plafonds mensuels par niveau KYC (EUR) — alignés normes UE (PolicyLimitsExposureTest). */
+    /** Plafond mensuel (EUR) — compte personnel non vérifié (KYC none/basic). */
+    private const UNVERIFIED_PERSONAL_LIMIT = '1000.00';
+
+    /** Plafond mensuel (EUR) — compte entreprise non vérifié (KYB ≠ verified). */
+    private const UNVERIFIED_BUSINESS_LIMIT = '2000.00';
+
+    /** Plafonds mensuels par niveau KYC une fois le compte vérifié (EUR). */
     private const KYC_LIMITS = [
-        'none'     => '250.00',    // 5e directive AML / e-money sans CDD
+        'none'     => '1000.00',   // aligné plafond non vérifié personnel
         'basic'    => '1000.00',   // règlement UE 2015/847
         'standard' => '2000.00',   // KYC documentaire
         'advanced' => '10000.00',  // due diligence renforcée
     ];
 
-    /** Seuil KYC requis pour le transfert (montant EUR au-delà duquel KYC obligatoire). */
+    /** Seuil KYC documentaire recommandé (montant EUR). */
     private const KYC_REQUIRED_THRESHOLD = '1000.00';
 
     /** Statuts qui bloquent les transferts. */
@@ -54,6 +62,47 @@ final class PolicyEngine
     ];
 
     private function __construct() {}
+
+    /**
+     * Compte considéré vérifié pour les plafonds.
+     * Personnel : KYC standard/advanced. Entreprise : KYB verified.
+     */
+    public static function isVerified(array $user): bool
+    {
+        $accountType = (string) ($user['account_type'] ?? 'personal');
+        if ($accountType === 'business') {
+            return (($user['kyb_status'] ?? 'none') === 'verified');
+        }
+        $kyc = (string) ($user['kyc_level'] ?? 'none');
+        return in_array($kyc, ['standard', 'advanced'], true);
+    }
+
+    /**
+     * Plafond mensuel EUR selon type de compte et état de vérification.
+     */
+    public static function resolveMonthlyLimit(array $user): string
+    {
+        $accountType = (string) ($user['account_type'] ?? 'personal');
+        $kyc = (string) ($user['kyc_level'] ?? 'none');
+
+        if ($accountType === 'business') {
+            if (!self::isVerified($user)) {
+                return self::UNVERIFIED_BUSINESS_LIMIT;
+            }
+            // Entreprise vérifiée : barème KYC, plancher 2 000 EUR.
+            $limit = self::KYC_LIMITS[$kyc] ?? self::KYC_LIMITS['standard'];
+            if (bccomp($limit, self::UNVERIFIED_BUSINESS_LIMIT, 8) < 0) {
+                return self::UNVERIFIED_BUSINESS_LIMIT;
+            }
+            return $limit;
+        }
+
+        if (!self::isVerified($user)) {
+            return self::UNVERIFIED_PERSONAL_LIMIT;
+        }
+
+        return self::KYC_LIMITS[$kyc] ?? self::KYC_LIMITS['standard'];
+    }
 
     /**
      * Vérifie toutes les politiques pour une intention donnée.
@@ -124,24 +173,11 @@ final class PolicyEngine
             ];
         }
 
-        // ── 1ter. KYB obligatoire pour les comptes Business ────
-        // Une entreprise doit être vérifiée (Sumsub subject_type=company)
-        // avant d'effectuer des paiements. Seul `kyb_status=verified` autorise
-        // les opérations ; aucun autre statut n'est toléré (§37).
-        if (($user['account_type'] ?? 'personal') === 'business'
-            && ($user['kyb_status'] ?? 'none') !== 'verified') {
-            return self::declined(
-                'Votre entreprise doit être vérifiée (KYB) avant d\'effectuer des paiements. '
-                . 'Complétez la vérification d\'entreprise (Sumsub) dans votre espace.',
-                [
-                    'kyb_required' => true,
-                    'kyb_status'   => $user['kyb_status'] ?? 'none',
-                ]
-            );
-        }
-
-        // ── 2. Plafonds KYC ─────────────────────────────────────
-        $monthlyLimit = self::KYC_LIMITS[$kycLevel] ?? self::KYC_LIMITS['basic'];
+        // ── 2. Plafonds (vérification + type de compte) ─────────
+        // Les entreprises non vérifiées (KYB) restent autorisées dans la
+        // limite UNVERIFIED_BUSINESS_LIMIT — plus de blocage total.
+        $monthlyLimit = self::resolveMonthlyLimit($user);
+        $verified = self::isVerified($user);
         $monthlyTotal = self::getMonthlyTotal($userId, $intent['sourceCurrency']);
 
         $newTotal = bcadd($monthlyTotal, $amountRefDecimal, 8);
@@ -152,12 +188,19 @@ final class PolicyEngine
         $details['monthly_limit']     = (float) $monthlyLimit;
         $details['monthly_used']      = (float) bcadd($monthlyTotal, '0.005', 2);
         $details['monthly_remaining'] = (float) bcadd($remainingDecimal, '0.005', 2);
+        $details['verified']          = $verified;
+        $details['account_type']      = (string) ($user['account_type'] ?? 'personal');
 
         if (bccomp($newTotal, $monthlyLimit, 8) > 0) {
             $remaining = $remainingDecimal;
-            $reason = "Plafond mensuel de {$monthlyLimit} EUR (niveau KYC : {$kycLevel}) " .
+            $tierLabel = $verified ? "niveau KYC : {$kycLevel}" : (
+                (($user['account_type'] ?? 'personal') === 'business')
+                    ? 'entreprise non vérifiée'
+                    : 'compte non vérifié'
+            );
+            $reason = "Plafond mensuel de {$monthlyLimit} EUR ({$tierLabel}) " .
                       "presque atteint. Il vous reste {$remaining} EUR ce mois-ci. " .
-                      "Relevez votre niveau KYC pour augmenter vos limites.";
+                      'Complétez la vérification pour augmenter vos limites.';
             return self::declined($reason, $details);
         }
 
@@ -196,9 +239,12 @@ final class PolicyEngine
                       . 'n\'a pas été effectué (sandbox).';
         }
 
-        // ── 4. KYC requis au-delà du seuil ──────────────────────
+        // ── 4. KYC documentaire recommandé au-delà du seuil ─────
         if (bccomp($amountRefDecimal, self::KYC_REQUIRED_THRESHOLD, 8) > 0
-            && in_array($kycLevel, ['none', 'basic'], true)) {
+            && !$verified
+            && ($user['account_type'] ?? 'personal') !== 'business') {
+            // Personnel non vérifié : au-delà de 1000 EUR → REVIEW (le plafond
+            // mensuel 1000 bloque déjà le dépassement dur).
             $decision = 'REVIEW_REQUIRED';
             $reason   = "Montant de {$amountRef} EUR nécessite un niveau KYC standard ou supérieur.";
             $details['kyc_required'] = 'standard';
@@ -241,19 +287,11 @@ final class PolicyEngine
     public static function limitsFor(array $user): array
     {
         $kyc = (string) ($user['kyc_level'] ?? 'none');
-        $limit = self::KYC_LIMITS[$kyc] ?? self::KYC_LIMITS['none'];
+        $limit = self::resolveMonthlyLimit($user);
         $used = self::getMonthlyTotal((int) $user['id'], 'EUR');
         $remaining = bcsub($limit, $used, 8);
         if (bccomp($remaining, '0', 8) < 0) {
             $remaining = '0';
-        }
-
-        $accountType = (string) ($user['account_type'] ?? 'personal');
-        $kyb = (string) ($user['kyb_status'] ?? 'none');
-        if ($accountType === 'business') {
-            $verified = ($kyb === 'verified');
-        } else {
-            $verified = in_array($kyc, ['standard', 'advanced'], true);
         }
 
         return [
@@ -262,18 +300,34 @@ final class PolicyEngine
             'monthly_used_eur'            => (float) bcadd($used, '0.005', 2),
             'monthly_remaining_eur'       => (float) bcadd($remaining, '0.005', 2),
             'kyc_required_threshold_eur'  => (float) self::KYC_REQUIRED_THRESHOLD,
-            'verified'                    => $verified,
+            'verified'                    => self::isVerified($user),
+            'account_type'                => (string) ($user['account_type'] ?? 'personal'),
         ];
     }
 
     /**
      * Calcule le total des transferts mensuels de l'utilisateur (en EUR).
+     *
+     * Ne fait confiance à `amount_ref` que lorsqu'il est une conversion plausible :
+     * le seed historique a parfois recopié `amount` (XAF) dans `amount_ref` (EUR),
+     * ce qui gonflait le plafond (ex. 50 000 « EUR » pour un envoi XAF).
      */
     private static function getMonthlyTotal(int $userId, string $currency): string
     {
         $pdo = Database::getConnection();
+        // Devises à forte nominalité : amount_ref EUR doit être << amount.
         $stmt = $pdo->prepare(
-            "SELECT COALESCE(SUM(amount_ref), 0)
+            "SELECT COALESCE(SUM(
+                CASE
+                  WHEN UPPER(currency) = 'EUR' THEN amount
+                  WHEN UPPER(currency) IN ('XAF','XOF','GNF','UGX','RWF','TZS','NGN','CDF','ZMW','KES','GHS')
+                       AND amount_ref > 0 AND amount_ref < amount THEN amount_ref
+                  WHEN UPPER(currency) NOT IN ('XAF','XOF','GNF','UGX','RWF','TZS','NGN','CDF','ZMW','KES','GHS')
+                       AND amount_ref > 0
+                       AND UPPER(COALESCE(ref_currency, 'EUR')) = 'EUR' THEN amount_ref
+                  ELSE 0
+                END
+             ), 0)
              FROM transactions
              WHERE user_id = :uid
                AND type = 'send'

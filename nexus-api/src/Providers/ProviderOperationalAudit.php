@@ -182,6 +182,7 @@ final class ProviderOperationalAudit
             'stripe_issuing' => 'StripeIssuingAdapter',
             'pawapay' => 'PawaPayAdapter',
             'western_union' => 'WesternUnionAdapter',
+            'moneygram' => 'MoneyGramAdapter',
             default => 'ConfigDrivenProviderAdapter',
         };
     }

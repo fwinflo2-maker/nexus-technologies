@@ -48,6 +48,18 @@ final class AccountController
         'AU','NZ',
     ];
 
+    /** Réseaux / agents cash pickup & cashout (Western Union prioritaire). */
+    private const CASH_PICKUP_NETWORKS = [
+        'Western Union',
+        'MoneyGram',
+    ];
+
+    /** Mapping réseau cash pickup → provider_slug catalogue. */
+    private const CASH_PICKUP_PROVIDER_SLUG = [
+        'Western Union' => 'western_union',
+        'MoneyGram'     => 'moneygram',
+    ];
+
     /** Suffixes JSON / table de référence des opérateurs Mobile Money par pays. */
     private const MOBILE_MONEY_OPERATORS = [
         'CG' => ['Airtel Money', 'MTN Mobile Money', 'Moov Africa'],
@@ -473,6 +485,22 @@ final class AccountController
                 break;
 
             case 'cash_pickup':
+                if ($has('operator')) {
+                    $operator = trim((string) $body['operator']);
+                    if ($operator === '' || !in_array($operator, self::CASH_PICKUP_NETWORKS, true)) {
+                        Response::badRequest('Réseau cash pickup invalide. Choisissez Western Union ou MoneyGram.');
+                    }
+                    $data['operator'] = $operator;
+                    $data['provider_slug'] = self::CASH_PICKUP_PROVIDER_SLUG[$operator] ?? null;
+                } elseif ($isUpdate) {
+                    $data['operator'] = $existing['operator'] ?? null;
+                    $data['provider_slug'] = $existing['provider_slug'] ?? null;
+                } else {
+                    // Défaut : Western Union (moyen de paiement cash pickup / cashout).
+                    $data['operator'] = 'Western Union';
+                    $data['provider_slug'] = 'western_union';
+                }
+
                 $cityValue = $has('city') ? trim((string) $body['city']) : '';
                 if ($cityValue === '') {
                     if ($isUpdate) {
@@ -774,6 +802,23 @@ final class AccountController
         Response::success([
             'networks' => self::ALLOWED_NETWORKS,
         ]);
+    }
+
+    /**
+     * GET /api/accounts/cash-pickup-networks
+     * Réseaux agents pour cash pickup / cashout (Western Union prioritaire).
+     */
+    public static function listCashPickupNetworks(Request $request): void
+    {
+        AuthMiddleware::handle($request);
+        $items = [];
+        foreach (self::CASH_PICKUP_NETWORKS as $name) {
+            $items[] = [
+                'name'          => $name,
+                'provider_slug' => self::CASH_PICKUP_PROVIDER_SLUG[$name] ?? null,
+            ];
+        }
+        Response::success(['networks' => $items]);
     }
 
     /**

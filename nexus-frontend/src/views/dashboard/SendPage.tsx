@@ -83,12 +83,20 @@ const STEPS: Array<{ num: Step; i18nLabel: string; i18nSub: string }> = [
 function beneficiaryFieldsForMethod(methodType: string, t: (key: string, params?: Record<string, string | number>) => string): {
   nameLabel: string; refLabel: string; refPlaceholder: string;
   secondaryLabel?: string; secondaryPlaceholder?: string;
+  networkLabel?: string;
 } {
   switch (methodType) {
     case 'mobile_money': return { nameLabel: t('send.beneficiary.name'), refLabel: t('send.beneficiary.phone'), refPlaceholder: t('send.beneficiary.phonePlaceholder'), secondaryLabel: t('send.beneficiary.operator') };
     case 'bank':         return { nameLabel: t('send.beneficiary.name'), refLabel: t('send.beneficiary.iban'), refPlaceholder: t('send.beneficiary.ibanPlaceholder') };
     case 'crypto':       return { nameLabel: t('send.beneficiary.pseudo'), refLabel: t('send.beneficiary.wallet'), refPlaceholder: t('send.beneficiary.walletPlaceholder'), secondaryLabel: t('send.beneficiary.network') };
-    case 'cash_pickup':  return { nameLabel: t('send.beneficiary.name'), refLabel: t('send.beneficiary.withdrawInfo'), refPlaceholder: t('send.beneficiary.withdrawPlaceholder'), secondaryLabel: t('send.beneficiary.city'), secondaryPlaceholder: t('send.beneficiary.cityPlaceholder') };
+    case 'cash_pickup':  return {
+      nameLabel: t('send.beneficiary.name'),
+      refLabel: t('send.beneficiary.withdrawInfo'),
+      refPlaceholder: t('send.beneficiary.withdrawPlaceholder'),
+      secondaryLabel: t('send.beneficiary.city'),
+      secondaryPlaceholder: t('send.beneficiary.cityPlaceholder'),
+      networkLabel: t('send.beneficiary.cashNetwork'),
+    };
     default:             return { nameLabel: t('send.beneficiary.name'), refLabel: t('send.beneficiary.ref'), refPlaceholder: '' };
   }
 }
@@ -1131,10 +1139,31 @@ export default function SendPage() {
                             </div>
                           )}
                           {fields.secondaryLabel && receivingMethod === 'cash_pickup' && (
-                            <div>
-                              <div className="se-field-label" style={{ marginBottom: 4 }}>{fields.secondaryLabel}</div>
-                              <input className="se-input" value={beneficiary.secondaryRef} onChange={e => setBeneficiary(b => ({ ...b, secondaryRef: e.target.value }))} placeholder={fields.secondaryPlaceholder} />
-                            </div>
+                            <>
+                              <div>
+                                <div className="se-field-label" style={{ marginBottom: 4 }}>{fields.networkLabel ?? t('send.beneficiary.cashNetwork')}</div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                                  {(['Western Union', 'MoneyGram'] as const).map(net => {
+                                    const selected = beneficiary.operator === net
+                                      || (!beneficiary.operator && net === 'Western Union');
+                                    return (
+                                      <button
+                                        key={net}
+                                        type="button"
+                                        className={`se-chip ${selected ? 'se-chip-selected' : ''}`}
+                                        onClick={() => setBeneficiary(b => ({ ...b, operator: net }))}
+                                      >
+                                        {net}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="se-field-label" style={{ marginBottom: 4 }}>{fields.secondaryLabel}</div>
+                                <input className="se-input" value={beneficiary.secondaryRef} onChange={e => setBeneficiary(b => ({ ...b, secondaryRef: e.target.value }))} placeholder={fields.secondaryPlaceholder} />
+                              </div>
+                            </>
                           )}
                         </motion.div>
                       );

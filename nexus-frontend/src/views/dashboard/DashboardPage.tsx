@@ -173,14 +173,27 @@ export default function DashboardPage({ mode }: DashboardProps) {
     }
     if (banner.type === 'limits') {
       const monthlyLimit = limits?.monthly_limit_eur ?? 0;
-      const monthlyUsed = limits?.monthly_used_eur ?? 0;
-      const monthlyRemaining = limits?.monthly_remaining_eur ?? 0;
+      const monthlyUsedRaw = limits?.monthly_used_eur ?? 0;
+      const monthlyRemaining = limits?.monthly_remaining_eur
+        ?? Math.max(0, monthlyLimit - monthlyUsedRaw);
+      // Affichage : ne jamais montrer « utiliséisé > plafond » (données historiques
+      // incohérentes) — on plafonne la barre, le restant reste la vérité policy.
+      const monthlyUsed = monthlyLimit > 0
+        ? Math.min(monthlyUsedRaw, monthlyLimit)
+        : monthlyUsedRaw;
       const pct = monthlyLimit > 0
         ? Math.min(100, (monthlyUsed / monthlyLimit) * 100)
         : 0;
+      const limitLabel = formatCurrency(monthlyLimit, 'EUR', locale);
+      const exceeded = monthlyUsedRaw > monthlyLimit && monthlyLimit > 0;
       return {
         title: t('dash.banner.limits.title'),
-        message: t('dash.banner.limits.message'),
+        message: exceeded
+          ? t('dash.banner.limits.message.exceeded', { limit: limitLabel })
+          : t(
+            isBiz ? 'dash.banner.limits.message.business' : 'dash.banner.limits.message.personal',
+            { limit: limitLabel },
+          ),
         action: t('dash.banner.limits.action'),
         tone: 'limits' as const,
         href: banner.href ?? '/kyc',

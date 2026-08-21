@@ -119,11 +119,13 @@ export default function SettingsPage({ hideHeader = false }: { hideHeader?: bool
     try {
       const resp = await apiUpdateProfile({ avatar: dataUri });
       if (resp.success) {
-        setSuccess(t('settings.success.avatar'));
+        // Mise à jour locale immédiate (navbar/sidebar via refreshSession).
+        const nextAvatar = resp.data?.avatar ?? (dataUri === '' ? null : dataUri);
+        setProfile((prev) => (prev ? { ...prev, avatar: nextAvatar } : prev));
         setAvatarPreview(null);
         setAvatarToSave(null);
+        setSuccess(t('settings.success.avatar'));
         await refreshSession();
-        await loadProfile();
       } else {
         setError(resp.error || t('settings.error.avatar'));
       }

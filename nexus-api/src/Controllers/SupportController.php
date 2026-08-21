@@ -340,8 +340,23 @@ final class SupportController
         if ($isInternal && !$isAgent) {
             Response::forbidden('Seul un agent peut laisser une note interne.');
         }
-        $attName = $isAgent ? (string) $request->input('attachment_name', '') : '';
-        $attUrl  = $isAgent ? (string) $request->input('attachment_url', '') : '';
+        // Pièces jointes : client et agent (après upload authentifié via /support/attachments).
+        $attName = trim((string) $request->input('attachment_name', ''));
+        $attUrl  = trim((string) $request->input('attachment_url', ''));
+        if ($attUrl !== '') {
+            if (!self::isValidSupportAttachmentUrl($attUrl)) {
+                Response::badRequest('Pièce jointe invalide ou non autorisée.');
+            }
+            if ($attName === '') {
+                $attName = basename($attUrl);
+            }
+            // Limite raisonnable du nom affiché.
+            if (mb_strlen($attName) > 180) {
+                $attName = mb_substr($attName, 0, 180);
+            }
+        } else {
+            $attName = '';
+        }
         $agentId = $isAgent ? (int) $user['id'] : null;
         $customerId = $isAgent ? null : (int) $user['id'];
 
@@ -366,7 +381,7 @@ final class SupportController
             // qu'il ne s'agit pas d'une note interne ET que le ticket est "open"
             // (un ticket escaladé est pris en charge par un humain).
             $botReply = null;
-            if (!$isAgent && !$isInternal) {
+            if (!$isAgent && !$isInternal && $body !== '') {
                 $statusRow = $pdo->prepare('SELECT status FROM support_conversations WHERE id = ?');
                 $statusRow->execute([$convId]);
                 $status = $statusRow->fetchColumn();
@@ -422,68 +437,162 @@ final class SupportController
     }
 
     /**
-     * PATCH /api/support/conversations/{id}/status — (agent) change le statut.
+     * PATCH /api/support/conversations/{id}/status
+     *   - Agent : peut passer à open|waiting|resolved|closed (s’assigne).
+     *   - Client (propriétaire) : peut uniquement clôturer (resolved|closed)
+     *     pour terminer le fil et en démarrer un nouveau proprement.
      */
     public static function setStatus(Request $request): void
     {
         $user = self::currentUser($request);
         $pdo = Database::getConnection();
         $convId = (int) ($request->param('id') ?? 0);
-
-        if (!self::isAgent($user)) {
-            Response::forbidden('Seul un agent peut modifier le statut.');
-        }
         $status = (string) $request->input('status', '');
-        if (!in_array($status, ['open', 'waiting', 'resolved', 'closed'], true)) {
-            Response::badRequest('Statut invalide.');
+        $isAgent = self::isAgent($user);
+
+        if ($isAgent) {
+            if (!in_array($status, ['open', 'waiting', 'resolved', 'closed'], true)) {
+                Response::badRequest('Statut invalide.');
+            }
+            $pdo->prepare('UPDATE support_conversations SET status = :s, assigned_to = :agent WHERE id = :id')
+                ->execute(['s' => $status, 'agent' => (int) $user['id'], 'id' => $convId]);
+        } else {
+            if (!in_array($status, ['resolved', 'closed'], true)) {
+                Response::forbidden('Vous pouvez uniquement terminer cette conversation.');
+            }
+            if (!self::canAccess($pdo, $user, $convId)) {
+                Response::forbidden('Accès refusé à cette conversation.');
+            }
+            $pdo->prepare('UPDATE support_conversations SET status = :s WHERE id = :id AND user_id = :uid')
+                ->execute(['s' => $status, 'id' => $convId, 'uid' => (int) $user['id']]);
         }
 
-        $pdo->prepare('UPDATE support_conversations SET status = :s, assigned_to = :agent WHERE id = :id')
-            ->execute(['s' => $status, 'agent' => (int) $user['id'], 'id' => $convId]);
-
-        self::audit($pdo, (int) $user['id'], 'support.conversation_status', 'support_conversation', $convId, ['status' => $status]);
+        self::audit($pdo, (int) $user['id'], 'support.conversation_status', 'support_conversation', $convId, [
+            'status' => $status,
+            'by' => $isAgent ? 'agent' : 'customer',
+        ]);
         Response::success(['status' => $status]);
+    }
+
+    /** Taille max pièce jointe support (octets). */
+    private const ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
+
+    /**
+     * MIME → extension (détecté via finfo, pas via le client).
+     * Images + PDF + docs courants.
+     *
+     * @return array<string, string>
+     */
+    private static function attachmentAllowedMimes(): array
+    {
+        return [
+            'image/jpeg' => 'jpg',
+            'image/png' => 'png',
+            'image/gif' => 'gif',
+            'image/webp' => 'webp',
+            'application/pdf' => 'pdf',
+            'text/plain' => 'txt',
+            'text/csv' => 'csv',
+            'application/msword' => 'doc',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => 'docx',
+            'application/vnd.ms-excel' => 'xls',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' => 'xlsx',
+        ];
+    }
+
+    /** URL stockée après upload : chemin public relatif, nom opaque. */
+    private static function isValidSupportAttachmentUrl(string $url): bool
+    {
+        return (bool) preg_match(
+            '#^/uploads/support/[a-f0-9]{24}\.(jpe?g|png|gif|webp|pdf|txt|csv|docx?|xlsx?)$#i',
+            $url
+        );
     }
 
     /**
      * POST /api/support/attachments — upload d'une pièce jointe (client ou agent).
-     * Renvoie { url, name }. Fichiers : images, PDF, texte, < 5 Mo.
+     * Auth JWT requise. Renvoie { url, name }. Max 5 Mo ; MIME allowlist serveur.
+     *
+     * Optionnel : conversation_id — si fourni, l'uploader doit pouvoir y accéder
+     * (participant / agent). Sans ID, tout utilisateur authentifié peut uploader
+     * (le fichier n'est associé qu'à l'envoi du message).
      */
     public static function uploadAttachment(Request $request): void
     {
-        self::currentUser($request); // authentification requise
+        $user = self::currentUser($request);
+        $pdo = Database::getConnection();
+
+        $convId = (int) ($request->input('conversation_id') ?? $request->query('conversation_id') ?? 0);
+        if ($convId > 0 && !self::canAccess($pdo, $user, $convId)) {
+            Response::forbidden('Accès refusé à cette conversation.');
+        }
 
         $file = $_FILES['file'] ?? null;
         if (!$file || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
             Response::badRequest('Aucun fichier reçu.');
         }
-        if (($file['size'] ?? 0) > 5 * 1024 * 1024) {
+        if (($file['size'] ?? 0) > self::ATTACHMENT_MAX_BYTES) {
             Response::badRequest('Fichier trop volumineux (5 Mo max).');
         }
 
-        $allowed = [
-            'image/jpeg' => 'jpg', 'image/png' => 'png', 'image/gif' => 'gif', 'image/webp' => 'webp',
-            'application/pdf' => 'pdf', 'text/plain' => 'txt',
-        ];
-        $mime = (string) ($file['type'] ?? '');
+        $tmp = (string) ($file['tmp_name'] ?? '');
+        if ($tmp === '' || !is_uploaded_file($tmp)) {
+            Response::badRequest('Fichier upload invalide.');
+        }
+
+        $allowed = self::attachmentAllowedMimes();
+        $mime = '';
+        if (class_exists(\finfo::class)) {
+            $finfo = new \finfo(FILEINFO_MIME_TYPE);
+            $detected = $finfo->file($tmp);
+            $mime = is_string($detected) ? $detected : '';
+        }
+        if ($mime === '' || $mime === 'application/octet-stream') {
+            // Repli prudent : type client uniquement s'il est déjà dans l'allowlist.
+            $clientMime = strtolower(trim((string) ($file['type'] ?? '')));
+            if (isset($allowed[$clientMime])) {
+                $mime = $clientMime;
+            }
+        }
+        // Alias courant (certains navigateurs / OS).
+        if ($mime === 'image/jpg') {
+            $mime = 'image/jpeg';
+        }
         if (!isset($allowed[$mime])) {
-            Response::badRequest('Type de fichier non autorisé (images, PDF ou texte).');
+            Response::badRequest('Type de fichier non autorisé (images, PDF ou documents courants).');
         }
 
         $dir = dirname(__DIR__, 2) . '/public/uploads/support';
-        if (!is_dir($dir)) {
-            @mkdir($dir, 0775, true);
+        if (!is_dir($dir) && !@mkdir($dir, 0775, true) && !is_dir($dir)) {
+            Response::error('Impossible de préparer le stockage des pièces jointes.', 500, 'INTERNAL_ERROR');
         }
 
         $name = bin2hex(random_bytes(12)) . '.' . $allowed[$mime];
-        $dest = $dir . '/' . $name;
-        if (!move_uploaded_file($file['tmp_name'], $dest)) {
+        $dest = $dir . DIRECTORY_SEPARATOR . $name;
+        if (!move_uploaded_file($tmp, $dest)) {
             Response::error('Impossible d\'enregistrer le fichier.', 500, 'INTERNAL_ERROR');
         }
 
+        $original = basename((string) ($file['name'] ?? 'fichier'));
+        $original = preg_replace('/[\x00-\x1F\x7F<>:"\\\\|?*]/u', '_', $original) ?? 'fichier';
+        if ($original === '' || $original === '.' || $original === '..') {
+            $original = 'fichier.' . $allowed[$mime];
+        }
+        if (mb_strlen($original) > 180) {
+            $original = mb_substr($original, 0, 180);
+        }
+
+        self::audit($pdo, (int) $user['id'], 'support.attachment_upload', 'support_conversation', $convId > 0 ? $convId : null, [
+            'name' => $original,
+            'mime' => $mime,
+            'bytes' => (int) ($file['size'] ?? 0),
+        ]);
+
         Response::success([
             'url' => '/uploads/support/' . $name,
-            'name' => basename((string) ($file['name'] ?? 'fichier')),
+            'name' => $original,
+            'mime' => $mime,
+            'size' => (int) ($file['size'] ?? 0),
         ], 201);
     }
 
