@@ -11,6 +11,7 @@ use Nexus\Core\Request;
 use Nexus\Execution\ExecutionContext;
 use Nexus\Core\Response;
 use Nexus\Services\FXService;
+use Nexus\Services\PolicyEngine;
 use Nexus\Services\WalletService;
 
 /**
@@ -155,6 +156,7 @@ final class DashboardController
             'kpis'              => $kpis,
             'recent'            => $recent,
             'banner'            => self::banner($user, $totalAvailableRef),
+            'limits'            => PolicyEngine::limitsFor($user),
         ]);
     }
 
@@ -351,7 +353,6 @@ final class DashboardController
     private static function banner(array $user, float $totalAvailableRef): array
     {
         $status   = (string) $user['status'];
-        $kycLevel = (string) $user['kyc_level'];
         $isBiz    = ($user['account_type'] ?? '') === 'business';
 
         // 1. Vérification d'identité requise.
@@ -366,17 +367,31 @@ final class DashboardController
             ];
         }
 
-        // 2. Compte restreint : KYC faible ou statut bloqué.
+        // 2. Compte restreint ou non vérifié → plafonds actifs.
         $restricted = in_array($status, ['SUSPENDED', 'CLOSED'], true);
-        $lowKyc     = in_array($kycLevel, ['none', 'basic'], true);
-        if ($restricted || $lowKyc) {
+        $unverified = !PolicyEngine::isVerified($user);
+        if ($restricted) {
             return [
                 'type'    => 'limits',
+                'reason'  => 'restricted',
+                'title'   => 'Compte restreint',
+                'message' => 'Votre compte est actuellement restreint. Contactez le support NEXUS pour clarifier votre situation avant tout nouvel envoi.',
+                'action'  => 'Contacter le support',
+                'href'    => '/support',
+            ];
+        }
+        if ($unverified) {
+            $limits = PolicyEngine::limitsFor($user);
+            $cap = (int) $limits['monthly_limit_eur'];
+            return [
+                'type'    => 'limits',
+                'reason'  => 'unverified',
                 'title'   => 'Limites de compte actives',
-                'message' => $restricted
-                    ? 'Votre compte est actuellement restreint. Contactez le support NEXUS pour clarifier votre situation avant tout nouvel envoi.'
-                    : 'Votre compte dispose de plafonds limités (montants et volume mensuels) tant que votre vérification n\'est pas finalisée. Relevez vos limites dès maintenant.',
+                'message' => $isBiz
+                    ? "Plafond mensuel de {$cap} EUR tant que la vérification d'entreprise (KYB) n'est pas finalisée."
+                    : "Plafond mensuel de {$cap} EUR tant que votre vérification d'identité (KYC) n'est pas finalisée.",
                 'action'  => 'Relever mes limites',
+                'href'    => '/kyc',
             ];
         }
 

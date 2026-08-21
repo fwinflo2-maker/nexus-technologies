@@ -24,7 +24,8 @@
 | pawapay          | mobile_money   | IMPLEMENTED   | —       | —     | IMPLEMENTED   | N/S    | CONFIG  | IMPLEMENTED   | IMPLEMENTED       |
 | stripe           | cards          | IMPLEMENTED   | —       | —     | —             | —      | CONFIG  | —             | IMPLEMENTED       |
 | sumsub           | compliance     | CONFIG        | N/S     | N/S   | N/S           | N/S    | IMPLEMENTED | N/S       | IMPLEMENTED       |
-| western_union    | fx             | —             | —       | —     | —             | —      | CONFIG  | —             | NOT_IMPLEMENTED   |
+| western_union    | payout_network | IMPLEMENTED   | —       | —     | —             | —      | CONFIG  | —             | IMPLEMENTED       |
+| moneygram        | payout_network | IMPLEMENTED   | —       | —     | —             | —      | CONFIG  | —             | IMPLEMENTED       |
 | thunes           | payout_network | —             | —       | —     | —             | —      | CONFIG  | —             | NOT_IMPLEMENTED   |
 | onfriq (Onafriq) | payout_network | —             | —       | —     | —             | —      | CONFIG  | —             | NOT_IMPLEMENTED   |
 | bridge           | crypto         | —             | —       | —     | —             | —      | CONFIG  | —             | NOT_IMPLEMENTED   |
@@ -54,8 +55,9 @@
 |---|---|---|
 | `pawapay` | `PawaPayAdapter` | Oui — `GET /v2/public-key/http` |
 | `stripe` | `StripeAdapter` | Oui — `GET /v1/balance` |
-| `western_union` | `WesternUnionAdapter` | Non (health mTLS partiel ; matrice = NOT_IMPLEMENTED) |
-| autres | `ConfigDrivenProviderAdapter` | Non — retourne `CONFIGURATION_ERROR` honnête |
+| `western_union` | `WesternUnionAdapter` | Oui — `GET /Ping` (mTLS) |
+| `moneygram` | `MoneyGramAdapter` | Oui — `GET /oauth/accesstoken` (Basic) |
+| autres | `ConfigDrivenProviderAdapter` | Via `ProviderAuthProbe` si profil défini ; sinon `CONFIGURATION_ERROR` |
 
 ## Statut opérationnel (credentials / connexion)
 

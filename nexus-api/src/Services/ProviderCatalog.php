@@ -184,7 +184,7 @@ final class ProviderCatalog
         ],
         'western_union' => [
             'name'        => 'Western Union',
-            'category'    => 'fx',
+            'category'    => 'payout_network',
             'icon'        => '🔵',
             'auth_type'   => 'mutual_tls',
             'base_url'    => 'https://api.westernunion.com',
@@ -196,7 +196,22 @@ final class ProviderCatalog
                 ['key' => 'partner_id',       'label' => 'Partner ID',            'placeholder' => 'Votre ID partenaire WU',       'required' => false, 'type' => 'text'],
             ],
             'doc_url'    => 'https://developer.westernunion.com/getting-started.html',
-            'countries'  => ['US','GB','FR','DE','ES','IT','NG','KE','IN','MX','PH','CA','AU','ZA','BR','AR','EG','TR','PK','BD','CM','SN','CI','GH','MA','TN','DZ'],
+            'countries'  => ['US','GB','FR','DE','ES','IT','NG','KE','IN','MX','PH','CA','AU','ZA','BR','AR','EG','TR','PK','BD','CM','SN','CI','GH','MA','TN','DZ','CG','GA','CD','BF','BJ','ML','NE','TG','UG','RW','TZ','ZM','AE','SA','JP','KR','SG','TH','VN','ID','PL','NL','BE','PT','IE','AT','CH','SE','NO','DK','FI','GR','RO','HU','CZ','EU'],
+        ],
+        'moneygram' => [
+            'name'        => 'MoneyGram',
+            'category'    => 'payout_network',
+            'icon'        => '🟢',
+            'auth_type'   => 'oauth2',
+            'base_url'    => 'https://api.moneygram.com',
+            'sandbox_url' => 'https://sandboxapi.moneygram.com',
+            'credentials' => [
+                ['key' => 'client_id',         'label' => 'Client ID (OAuth)',     'placeholder' => 'Client ID MoneyGram',        'required' => true,  'type' => 'text'],
+                ['key' => 'client_secret',     'label' => 'Client Secret',        'placeholder' => 'Client Secret MoneyGram',    'required' => true,  'type' => 'password'],
+                ['key' => 'agent_partner_id',  'label' => 'Agent Partner ID',     'placeholder' => 'agentPartnerId (partenariat)', 'required' => false, 'type' => 'text'],
+            ],
+            'doc_url'    => 'https://developer.moneygram.com/moneygram-developer/docs/o-auth-api',
+            'countries'  => ['US','GB','FR','DE','ES','IT','NG','KE','IN','MX','PH','CA','AU','ZA','BR','AR','EG','TR','PK','BD','CM','SN','CI','GH','MA','TN','DZ','CG','GA','CD','BF','BJ','ML','NE','TG','UG','RW','TZ','ZM','AE','SA','JP','KR','SG','TH','VN','ID','PL','NL','BE','PT','IE','AT','CH','SE','NO','DK','FI','GR','RO','HU','CZ','EU'],
         ],
 
         // ── Cartes / Issuing ──────────────────────────────────────────────

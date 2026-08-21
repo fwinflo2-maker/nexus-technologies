@@ -507,4 +507,54 @@ final class UserControllerTest extends TestCase
         $putBody = null;
         }
     }
+
+    /**
+     * Avatar data URI → fichier public court (évite le plafond TEXT 65 Ko).
+     */
+    public function testUpdateProfileAvatarDataUriPersistedAsFile(): void
+    {
+        $_SERVER['REQUEST_METHOD'] = 'PUT';
+        $_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . self::$authToken;
+        $_SERVER['CONTENT_TYPE'] = 'application/json';
+
+        // PNG 1×1 pixel
+        $dataUri = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+        $request = new Request(['avatar' => $dataUri]);
+
+        $output = '';
+        try {
+            UserController::updateProfile($request);
+        } catch (ResponseSent $sent) {
+            $output = $sent->body();
+        }
+
+        $data = json_decode($output, true);
+        $this->assertTrue($data['success'] ?? false);
+        $this->assertTrue($data['data']['updated'] ?? false);
+        $avatarUrl = (string) ($data['data']['avatar'] ?? '');
+        $this->assertMatchesRegularExpression('#^/uploads/avatars/u' . self::$testUserId . '-[a-f0-9]+\.png$#', $avatarUrl);
+
+        $abs = dirname(__DIR__) . '/public' . $avatarUrl;
+        $this->assertFileExists($abs);
+
+        $pdo = Database::getConnection();
+        $stmt = $pdo->prepare('SELECT avatar FROM users WHERE id = :id');
+        $stmt->execute([':id' => self::$testUserId]);
+        $this->assertSame($avatarUrl, $stmt->fetchColumn());
+
+        // Effacement : fichier local supprimé + colonne NULL
+        $requestClear = new Request(['avatar' => '']);
+        try {
+            UserController::updateProfile($requestClear);
+        } catch (ResponseSent $sent) {
+            $clearBody = json_decode($sent->body(), true);
+            $this->assertTrue($clearBody['success'] ?? false);
+            $this->assertArrayHasKey('avatar', $clearBody['data'] ?? []);
+            $this->assertNull($clearBody['data']['avatar']);
+        }
+        $this->assertFileDoesNotExist($abs);
+        $stmt->execute([':id' => self::$testUserId]);
+        $this->assertNull($stmt->fetchColumn());
+    }
 }

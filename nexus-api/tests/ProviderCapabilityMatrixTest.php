@@ -113,5 +113,26 @@ final class ProviderCapabilityMatrixTest extends TestCase
             ProviderCapabilityMatrix::NOT_IMPLEMENTED,
             ProviderCapabilityMatrix::for('thunes')['payout']
         );
+        // Western Union / MoneyGram : test_connection réel ; payout NOT_IMPLEMENTED.
+        self::assertSame(
+            ProviderCapabilityMatrix::IMPLEMENTED,
+            ProviderCapabilityMatrix::for('western_union')['test_connection']
+        );
+        self::assertSame(
+            ProviderCapabilityMatrix::NOT_IMPLEMENTED,
+            ProviderCapabilityMatrix::for('western_union')['payout']
+        );
+        self::assertSame(
+            ProviderCapabilityMatrix::IMPLEMENTED,
+            ProviderCapabilityMatrix::for('moneygram')['test_connection']
+        );
+        self::assertSame(
+            ProviderCapabilityMatrix::NOT_IMPLEMENTED,
+            ProviderCapabilityMatrix::for('moneygram')['payout']
+        );
+        self::assertSame(
+            ProviderCapabilityMatrix::IMPLEMENTED,
+            ProviderCapabilityMatrix::integrationStatus('moneygram')
+        );
     }
 }

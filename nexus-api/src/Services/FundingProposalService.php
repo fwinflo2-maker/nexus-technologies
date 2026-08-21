@@ -26,13 +26,14 @@ final class FundingProposalService
      * Exclut compliance, card_issuing, payout_network (souvent sortant).
      */
     private const DEPOSIT_CATEGORIES = [
-        'mobile_money' => true,
-        'banking'      => true,
-        'fx'           => true,
-        'cards'        => true,
-        'crypto'       => true,
-        'onramp'       => true,
-        'wallet'       => true,
+        'mobile_money'   => true,
+        'banking'        => true,
+        'fx'             => true,
+        'payout_network' => true, // Western Union cash pickup / cashout
+        'cards'          => true,
+        'crypto'         => true,
+        'onramp'         => true,
+        'wallet'         => true,
     ];
 
     /**
@@ -328,15 +329,21 @@ final class FundingProposalService
         }
         $sourceKinds[] = 'crypto_wallet';
         $destKinds[] = 'crypto_wallet';
-        // Cash pickup : destinations Afrique / émergents, pas EU / anglo.
-        if (
-            !in_array($country, self::EU_COUNTRIES, true)
-            && $country !== 'GB'
-            && $country !== 'US'
-            && $country !== 'CA'
-        ) {
-            $destKinds[] = 'cash_pickup';
+
+        // Cash pickup / cashout : Western Union (et réseaux agents) — disponible
+        // dès qu'un provider payout_network/fx cash-pickup couvre le pays, ou
+        // en secours pour les corridors hors banque pure.
+        $hasCashPickup = isset($methods['cash_pickup']);
+        if (!$hasCashPickup) {
+            // Toujours proposer le rail cash_pickup en destination : WU couvre
+            // la plupart des marchés (catalogue western_union).
             $methods['cash_pickup'] = true;
+            $hasCashPickup = true;
+        }
+        if ($hasCashPickup) {
+            $destKinds[] = 'cash_pickup';
+            // Cashout wallet → agent : source cash_pickup pour retirer en espèces.
+            $sourceKinds[] = 'cash_pickup';
         }
 
         // Fallback minimal si aucun provider ne couvre le pays.
@@ -502,8 +509,12 @@ final class FundingProposalService
 
     private static function methodForCategory(string $category, string $slug): string
     {
+        if ($slug === 'western_union' || $slug === 'moneygram') {
+            return 'cash_pickup';
+        }
         return match ($category) {
             'mobile_money' => 'mobile_money',
+            'payout_network' => 'cash_pickup',
             'banking', 'fx' => 'bank',
             'cards' => 'card',
             'crypto', 'onramp' => 'crypto',
@@ -518,6 +529,9 @@ final class FundingProposalService
     private static function labelForProvider(string $slug, array $provider, string $method, string $country): string
     {
         $name = (string) ($provider['name'] ?? $slug);
+        if ($slug === 'western_union' || $slug === 'moneygram' || $method === 'cash_pickup') {
+            return 'Cash pickup / cashout · ' . $name;
+        }
         if ($method === 'bank' && (in_array($country, self::EU_COUNTRIES, true) || $country === 'GB')) {
             return match ($slug) {
                 'swan' => 'Virement SEPA · Swan',
@@ -541,6 +555,7 @@ final class FundingProposalService
     {
         return match ($method) {
             'mobile_money' => 1.5,
+            'cash_pickup' => 2.5,
             'card' => 1.8,
             'crypto' => 1.0,
             default => 0.3,

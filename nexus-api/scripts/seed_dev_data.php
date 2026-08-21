@@ -141,6 +141,13 @@ for ($day = 14; $day >= 0; $day--) {
         $rate   = $cur === 1.0 ? 1.0 : $cur;
         $amount = round(mt_rand(500, 250000) / 100 * (mt_rand(50, 2000) / 100), 2);
         $amount = $cur === 'XAF' ? round(mt_rand(10000, 5000000), 0) : round(mt_rand(10, 9000), 2);
+        // amount_ref = équivalent EUR (jamais recopier un montant XAF tel quel).
+        $amountRef = match ($cur) {
+            'EUR' => $amount,
+            'USD' => round($amount / 1.08, 2),
+            'XAF' => round($amount / 655.957, 2),
+            default => round($amount, 2),
+        };
         $status = $statusPool[mt_rand(0, count($statusPool) - 1)];
         $prov   = $providerPool[mt_rand(0, 4)];
         $dir    = $type === 'receive' ? 'in' : ($type === 'fx' ? 'fx' : 'out');
@@ -148,7 +155,7 @@ for ($day = 14; $day >= 0; $day--) {
         $tstmt->execute([
             $uid, $type, $dir, $labels[mt_rand(0, count($labels) - 1)],
             'TX-' . strtoupper(substr(md5((string)mt_rand()), 0, 10)), $amount, $cur,
-            $amount, 'EUR', round($amount * $rate, 2), $amount, $cur, $rate,
+            $amountRef, 'EUR', round($amount * ($cur === 'XAF' ? 1.0 : ($cur === 'EUR' ? 655.957 : 600.0)), 2), $amount, $cur, $rate,
             0.5, $cur, $status, $prov, 'production', 'N/A',
             $status === 'completed' ? mt_rand(1, 8) : null, $dt, $dt,
         ]);

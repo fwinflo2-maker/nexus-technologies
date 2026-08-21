@@ -1,6 +1,10 @@
 # Fichier d'environnement local (secrets) — jamais versionné.
 .env
 
+# Uploads runtime (avatars, support) — conserver les .gitkeep
+/public/uploads/**
+!/public/uploads/**/.gitkeep
+
 # Journaux
 *.log
 

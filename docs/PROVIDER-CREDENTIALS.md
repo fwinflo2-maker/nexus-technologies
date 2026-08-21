@@ -176,6 +176,35 @@ Jamais de webhook générique acceptant n'importe quelle signature.
   (runtime), jamais stocké.
 - Docs : https://docs.wise.com/guides/developer/auth-and-security
 
+### Western Union (payout_network — Mass Payments)
+
+| champ | type | usage |
+|---|---|---|
+| `client_id` | identifiant, requis | WU `clientId` (path) |
+| `client_cert_path` | secret, requis | chemin serveur certificat mTLS |
+| `client_key_path` | secret, requis | chemin serveur clé privée mTLS |
+| `partner_id` | identifiant, optionnel | Partner ID |
+
+- Auth : **mTLS** (Partnership Program). Pas de PEM inline — chemins fichier.
+- Test : `GET /Ping` → `CONNECTION_SUCCESS` si HTTP 200.
+- Docs : https://developer.westernunion.com/getting-started.html —
+  `docs/providers/western_union.md`
+
+### MoneyGram (payout_network)
+
+| champ | type | usage |
+|---|---|---|
+| `client_id` | secret, requis | OAuth 2.0 client ID (Basic) |
+| `client_secret` | secret, requis | OAuth 2.0 client secret |
+| `agent_partner_id` | identifiant, optionnel | `agentPartnerId` (appels métier) |
+
+- Auth : `GET /oauth/accesstoken?grant_type=client_credentials` + Basic.
+- Hosts : `sandboxapi.moneygram.com` / `api.moneygram.com`.
+- Test : OAuth → `CONNECTION_SUCCESS` si `access_token` présent.
+- Payout / quote : **NOT_IMPLEMENTED** jusqu'à E2E partenaire.
+- Docs : https://developer.moneygram.com/moneygram-developer/docs/o-auth-api —
+  `docs/providers/moneygram.md`
+
 ### dLocal (cards)
 
 | champ | type | usage |
@@ -378,7 +407,7 @@ Un provider `BLOCKED` n'empêche pas d'en configurer / tester un autre.
 
 | Provider | Schema `ProviderCredentialSchema` | Notes |
 |---|---|---|
-| stripe, stripe_issuing, pawapay, wise, nium, western_union, sumsub | **vérifié** (doc officielle citée) | |
+| stripe, stripe_issuing, pawapay, wise, nium, western_union, moneygram, sumsub | **vérifié** (doc officielle citée) | |
 | thunes, bridge, bvnk, dlocal, ebanx, xendit, tazapay, 2c2p, onfriq, … | **UNKNOWN** | Champs catalogue présents pour saisie ; ne pas traiter comme confirmés champ-par-champ |
 
 Voir aussi : `docs/PROVIDER-CAPABILITY-MATRIX.md`, `docs/NEXUS-PROVIDER-AUDIT-2026-08-20.md`.

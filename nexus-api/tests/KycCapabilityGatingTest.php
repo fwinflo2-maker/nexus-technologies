@@ -18,9 +18,9 @@ use Throwable;
  * décision : il ne fait qu'afficher l'état.
  *
  * Matrice exigée :
- *   - KYC non vérifié (none/basic) + montant > seuil réglementaire → refus ;
+ *   - KYC non vérifié (none/basic) + montant > plafond 1000 → refus ;
  *   - KYC standard → opération autorisée (politique satisfaite) ;
- *   - compte Business sans KYB verified → refus total ;
+ *   - compte Business sans KYB verified → autorisé sous plafond 2000 EUR ;
  *   - compte PENDING / bloqué → refus total ;
  *   - plafond mensuel du niveau KYC atteint → refus.
  */
@@ -119,9 +119,9 @@ final class KycCapabilityGatingTest extends TestCase
         $uid = $this->createUser('none');
         $this->createWallet($uid, '5000.00');
 
-        // KYC none : plafond mensuel 250 EUR (5e directive AML, e-money sans
-        // due diligence). 1500 EUR dépasse largement → refus 403. Le backend
-        // bloque : le frontend n'est pas la décision.
+        // KYC none : plafond mensuel 1000 EUR (compte personnel non vérifié).
+        // 1500 EUR dépasse → refus 403. Le backend bloque : le frontend n'est
+        // pas la décision.
         $this->assertRefused(fn () => $this->evaluate($uid, [
             'id' => $uid, 'status' => 'ACTIVE', 'kyc_level' => 'none', 'account_type' => 'personal',
         ], 1500.0));
@@ -132,7 +132,7 @@ final class KycCapabilityGatingTest extends TestCase
         $uid = $this->createUser('basic');
         $this->createWallet($uid, '5000.00');
 
-        // KYC basic : plafond mensuel 1000 EUR (règlement UE 2015/847).
+        // KYC basic : plafond mensuel 1000 EUR (compte personnel non vérifié).
         // 1500 EUR dépasse → refus 403.
         $this->assertRefused(fn () => $this->evaluate($uid, [
             'id' => $uid, 'status' => 'ACTIVE', 'kyc_level' => 'basic', 'account_type' => 'personal',
@@ -153,9 +153,23 @@ final class KycCapabilityGatingTest extends TestCase
         self::assertSame('APPROVED', $result['decision'], 'KYC standard satisfait la politique.');
     }
 
-    // ── KYB obligatoire pour les comptes Business ──────────────────────────
+    // ── KYB : entreprise non vérifiée autorisée sous plafond 2000 ──────────
 
-    public function test_entreprise_sans_kyb_verified_est_refusee(): void
+    public function test_entreprise_sans_kyb_verified_autorisee_sous_plafond(): void
+    {
+        $uid = $this->createUser('advanced', 'ACTIVE', 'business', 'in_progress');
+        $this->createWallet($uid, '5000.00');
+
+        $result = $this->evaluate($uid, [
+            'id' => $uid, 'status' => 'ACTIVE', 'kyc_level' => 'advanced',
+            'account_type' => 'business', 'kyb_status' => 'in_progress',
+        ], 500.0);
+
+        self::assertSame('APPROVED', $result['decision']);
+        self::assertSame(2000.0, $result['details']['monthly_limit']);
+    }
+
+    public function test_entreprise_sans_kyb_verified_refusee_au_dela_du_plafond(): void
     {
         $uid = $this->createUser('advanced', 'ACTIVE', 'business', 'in_progress');
         $this->createWallet($uid, '5000.00');
@@ -163,7 +177,7 @@ final class KycCapabilityGatingTest extends TestCase
         $this->assertRefused(fn () => $this->evaluate($uid, [
             'id' => $uid, 'status' => 'ACTIVE', 'kyc_level' => 'advanced',
             'account_type' => 'business', 'kyb_status' => 'in_progress',
-        ], 500.0));
+        ], 2500.0));
     }
 
     public function test_entreprise_kyb_verified_est_autorisee(): void
@@ -198,9 +212,9 @@ final class KycCapabilityGatingTest extends TestCase
         $uid = $this->createUser('none');
         $this->createWallet($uid, '5000.00');
 
-        // Plafond none = 250 EUR (5e directive AML). 300 EUR dépasse → refus.
+        // Plafond none = 1000 EUR (personnel non vérifié). 1500 EUR dépasse → refus.
         $this->assertRefused(fn () => $this->evaluate($uid, [
             'id' => $uid, 'status' => 'ACTIVE', 'kyc_level' => 'none', 'account_type' => 'personal',
-        ], 300.0));
+        ], 1500.0));
     }
 }

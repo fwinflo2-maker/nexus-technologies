@@ -182,6 +182,7 @@ final class ProviderRegistry
             'stripe_issuing' => new StripeIssuingAdapter(),
             'pawapay' => new PawaPayAdapter(),
             'western_union' => new WesternUnionAdapter(),
+            'moneygram' => new MoneyGramAdapter(),
             default   => new ConfigDrivenProviderAdapter($slug),
         };
     }
