@@ -28,3 +28,13 @@ Session learnings not recoverable from code or docs. Terse, project-specific.
 - `register_preview` with `replace: true` STOPS the thread's previously registered dev server — replacing the preview killed the user's :5173 vite. If 5173 goes silent, restart it detached from the PRIMARY checkout's `nexus-frontend` (Start-Process `npm.cmd run dev`, logs in `.freebuff/preview-<thread>.log(.err)`, `-WorkingDirectory` required).
 - The Start-Process detach recipe (`-RedirectStandardOutput` + `-PassThru`) makes the terminal command TIME OUT but the server survives — verify via `netstat -ano | grep :<port>` / curl, and register the preview with the LISTENING node/php pid, not the cmd/npm wrapper pid. Launching the server via `powershell … &` inside a SYNC command gets it killed when the command ends; use the bare Start-Process command and let it time out.
 - Preview webview quirks: IntersectionObserver may never fire on scroll, leaving scroll-reveal content at `opacity:0` — always add a timed force-reveal fallback (+ `<noscript>` guard). `preview_screenshot` can fail with "produced no frames" until the webview composites — verify with `preview_snapshot` / `preview_evaluate` instead of retrying blindly.
+
+## gstack
+
+AI engineering workflow skills live in `.agents/skills/`. Invoke by name (e.g. `/office-hours`, `/review`, `/ship`).
+
+- Use `/browse` from gstack for all web browsing. Never use browser MCP tools.
+- If skills break after an upgrade: `cd .agents/skills/gstack && ./setup --host codex`
+- Start with `/office-hours` for new features, `/review` before landing, `/ship` to open a PR.
+
+Available skills: /office-hours, /plan-ceo-review, /plan-eng-review, /plan-design-review, /design-consultation, /design-shotgun, /design-html, /review, /ship, /land-and-deploy, /canary, /benchmark, /browse, /open-gstack-browser, /qa, /qa-only, /design-review, /setup-browser-cookies, /setup-deploy, /retro, /investigate, /document-release, /codex, /cso, /autoplan, /careful, /freeze, /guard, /unfreeze, /gstack-upgrade, /learn.
