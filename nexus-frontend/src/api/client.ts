@@ -1594,9 +1594,43 @@ export async function apiControlKyc(): Promise<ApiResponse<{
 }
 
 export async function apiControlWebhooks(): Promise<ApiResponse<{
-  items: Array<Record<string, unknown>>; counters: Record<string, unknown>;
+  environment: string;
+  items: ControlWebhookEvent[];
+  counters: { processed_total: number; provider_events: number; kyc_events: number };
 }>> {
   return request('GET', '/control/webhooks');
+}
+
+export interface ControlWebhookEvent {
+  id: number;
+  source_type: 'provider' | 'kyc';
+  provider: string;
+  environment: string;
+  event_id: string;
+  event_type: string | null;
+  status: string;
+  processed_at: string;
+}
+
+export interface SourceStatuses {
+  environment: string;
+  fx: {
+    status?: string;
+    market_vendor_configured: boolean;
+    fail_closed: boolean;
+    cache_entries: number;
+    valid_cache_entries: number;
+    [key: string]: unknown;
+  };
+  sanctions: {
+    status: 'CONFIGURED' | 'UNAVAILABLE' | string;
+    blocks_environment: boolean;
+    [key: string]: unknown;
+  };
+}
+
+export function apiControlSourceStatuses(): Promise<ApiResponse<SourceStatuses>> {
+  return request('GET', '/control/status/sources');
 }
 
 export async function apiControlAudit(): Promise<ApiResponse<{
@@ -1685,7 +1719,85 @@ export async function apiControlClient(id: number): Promise<ApiResponse<{ client
   return request<{ client: ControlClientDetail }>('GET', `/control/clients/${id}`);
 }
 
+export function apiControlClientStatus(
+  id: number,
+  status: 'ACTIVE' | 'SUSPENDED' | 'CLOSED',
+  reason?: string,
+): Promise<ApiResponse<{ id: number; status: string }>> {
+  return request('POST', `/control/clients/${id}/status`, { status, reason });
+}
+
+export interface LinkedClientGroup {
+  signal: 'email' | 'phone';
+  detail: string;
+  risk: 'high' | 'medium';
+  members: Array<{ id: number; full_name: string; status: string }>;
+}
+
+export function apiControlLinkedClients(): Promise<ApiResponse<{ groups: LinkedClientGroup[]; total: number }>> {
+  return request('GET', '/control/clients/linked');
+}
+
+export interface StuckPayment {
+  payment_id: number;
+  environment: string;
+  currency: string;
+  amount: string;
+  stuck_seconds: number;
+  saga_status: string;
+  recommendation: string;
+}
+
+export interface RecoveryReport {
+  examined: number;
+  completed: number;
+  failed: number;
+  reset: number;
+  skipped_in_progress: number;
+}
+
+export function apiControlStuckPayments(): Promise<ApiResponse<{
+  stuck_payments: StuckPayment[];
+  count: number;
+  environment: string;
+  note: string;
+}>> {
+  return request('GET', '/control/maintenance/stuck-payments');
+}
+
+export function apiControlRecoverPayments(staleSeconds = 3600): Promise<ApiResponse<{
+  report: RecoveryReport;
+  note: string;
+}>> {
+  return request('POST', '/control/maintenance/recover-payments', {
+    confirm: true,
+    stale_seconds: staleSeconds,
+  });
+}
+
 // --- Super Admin — cockpit (données réelles, RBAC superadmin côté serveur) ---
+
+export interface AdminOverviewData {
+  accounts: { total: number; personal: number; business: number; active: number; pending: number; suspended: number; connect: number };
+  wallets: number;
+  assets: { EUR: string; USD: string; XAF: string };
+  transactions: { total: number; completed: number; failed: number; pending: number; processing: number; volume_xaf: number };
+  kyc: { total: number; pending: number; approved: number; rejected: number };
+  providers: { total: number; configured: number };
+  recent_activity: Array<{ action: string; count: number }>;
+  series: {
+    transactions: Array<{ date: string; count: number }>;
+    volume_eur: Array<{ date: string; volume: number }>;
+    audit: Array<{ date: string; count: number }>;
+  };
+  status_breakdown: Array<{ status: string; count: number }>;
+  provider_top: Array<{ provider: string; count: number }>;
+  generated_at: string;
+}
+
+export function apiAdminOverview(): Promise<ApiResponse<AdminOverviewData>> {
+  return request('GET', '/admin/overview');
+}
 
 export interface AdminTransaction {
   id: number;
@@ -1964,26 +2076,88 @@ export function apiControlInviteEmployee(id: number): Promise<ApiResponse<Employ
   return request('POST', `/control/employees/${id}/invite`);
 }
 
+export interface StaffQueueItem {
+  id: number; type: string; label: string; amount: string | number; currency: string;
+  status: string; provider: string | null; environment: string; execution_time_seconds: number | null;
+  created_at: string; user_name: string | null; user_email: string | null;
+}
+export interface StaffCredential {
+  provider_slug: string; environment: 'sandbox' | 'production'; state: string; configured: boolean;
+  last_tested_at: string | null; last_error: string | null; updated_at: string | null;
+}
+export interface StaffKycItem {
+  id: number; user_id: number; full_name: string; email: string; subject_type: 'individual' | 'company';
+  status: string; reason: string | null; created_at: string; updated_at: string;
+}
+export interface StaffRiskUser {
+  id: number; full_name: string; email: string; status: string; risk_level: 'low' | 'medium' | 'high' | null;
+}
+export interface StaffTicket {
+  id: number; subject: string; category: string | null; status: 'open' | 'waiting' | 'resolved' | 'closed';
+  priority: string; assigned_to: number | null; created_at: string; updated_at: string;
+  full_name: string; email: string;
+}
+export interface StaffServiceStatus {
+  name: string; status: 'operational' | 'down' | 'configured' | 'unavailable' | 'unknown' | string;
+  latency_ms: number | null; pending?: number;
+}
+
 export interface StaffDashboardData {
   role: string;
+  dashboard: string;
+  environment: string;
   generated_at: string;
   sections: {
-    operations?: { queue: any[]; counters: any; avg_execution_seconds: number };
-    finance?: { assets: any; transactions: any; status_breakdown: any[] };
-    compliance?: {
-      pending: any[];
-      counters: {
-        total?: number;
-        individual?: Record<string, number>;
-        company?: Record<string, number>;
-      };
+    operations?: {
+      environment: string; queue: StaffQueueItem[];
+      counters: { pending: number; processing: number; completed: number; failed: number };
+      avg_execution_seconds: number; actions: string[];
     };
-    risk?: { risk: any; flagged: any[]; recent_failed: any[]; by_provider: any[] };
-    providers?: { providers: any; credentials: any[] };
-    support?: { counters: any; recent: any[]; specialists: any[] };
-    technical?: { services: any[]; webhooks: any; credentials: any[]; db_ok: boolean };
-    business?: { accounts: any; volume_xaf: number; top: any[] };
-    executive?: { note?: string };
+    finance?: {
+      environment: string; assets: Record<'EUR' | 'USD' | 'XAF', string | number>;
+      assets_basis: 'available_balance'; assets_scope: 'shared_wallet_projection';
+      transactions: { total: number; volume_xaf: number; fees: number };
+      status_breakdown: Array<{ status: string; n: number }>;
+      sources: SourceStatuses; actions: string[];
+    };
+    compliance?: {
+      environment: string; pending: StaffKycItem[];
+      counters: {
+        total: number;
+        individual: Record<string, number>;
+        company: Record<string, number>;
+      };
+      sanctions: SourceStatuses['sanctions']; actions: string[];
+    };
+    risk?: {
+      environment: string;
+      risk: { suspended_accounts: number; failed_transactions: number; kyc_rejected: number; kyc_resubmission: number; failed_rate: number };
+      flagged: StaffRiskUser[]; account_risk_scope: 'global';
+      recent_failed: Array<{ id: number; label: string; amount: string | number; currency: string; provider: string | null; created_at: string; user_email: string | null }>;
+      by_provider: Array<{ provider: string; n: number; fails: number; fail_rate: number }>; actions: string[];
+    };
+    providers?: {
+      environment: string; providers: { total: number; enabled: number; configured: number };
+      credentials: StaffCredential[]; actions: string[];
+    };
+    support?: {
+      environment_scope: 'global'; counters: Record<'open' | 'waiting' | 'resolved' | 'closed', number>;
+      recent: StaffTicket[];
+      specialists: Array<{ id: number; full_name: string; platform_role: string; department: string | null; dashboard: string | null }>;
+      actions: string[];
+    };
+    technical?: {
+      environment: string; services: StaffServiceStatus[];
+      webhooks: { processed_total: number; provider_events: number; kyc_events: number };
+      credentials: StaffCredential[]; db_ok: boolean; sources: SourceStatuses; actions: string[];
+    };
+    business?: {
+      environment: string; accounts: { total: number; verified: number; active: number; pending: number };
+      accounts_scope: 'global'; volume_xaf: number;
+      top: Array<{ id: number; full_name: string; email: string; status: string; kyb_status: string | null; volume: string | number }>;
+      actions: string[];
+    };
+    executive?: { note?: string; environment: string };
   };
 }
 

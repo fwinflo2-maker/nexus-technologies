@@ -33,16 +33,16 @@ export default function AdminCompliance() {
         <Table
           head={['ID', 'Client', 'Type', 'Niveau', 'Statut', 'Motif / remarque', 'Reçu le']}
           rows={applicants.map((a) => [
-            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>#{a.id}</span>,
-            <span>
+            <span key="id" style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>#{a.id}</span>,
+            <span key="client">
               <div style={{ color: 'var(--text-bright)', fontWeight: 600 }}>{a.full_name}</div>
               <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{a.email}</div>
             </span>,
-            <span style={{ textTransform: 'capitalize' }}>{a.subject_type}</span>,
-            <span style={{ textTransform: 'uppercase', fontSize: 11 }}>{a.level_name ?? '—'}</span>,
-            <Badge status={a.status} />,
-            <span style={{ fontSize: 12 }}>{a.reason ?? '—'}</span>,
-            <span style={{ fontSize: 11.5, color: 'var(--text-mid)' }}>{fmtDate(a.created_at)}</span>,
+            <span key="type" style={{ textTransform: 'capitalize' }}>{a.subject_type}</span>,
+            <span key="level" style={{ textTransform: 'uppercase', fontSize: 11 }}>{a.level_name ?? '—'}</span>,
+            <Badge key="status" status={a.status} />,
+            <span key="reason" style={{ fontSize: 12 }}>{a.reason ?? '—'}</span>,
+            <span key="date" style={{ fontSize: 11.5, color: 'var(--text-mid)' }}>{fmtDate(a.created_at)}</span>,
           ])}
         />
       </div>

@@ -43,9 +43,15 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
   // Au montage + polling : le badge reste à jour sans action utilisateur.
   useEffect(() => {
-    refreshUnread();
-    const interval = window.setInterval(refreshUnread, POLL_INTERVAL_MS);
-    return () => window.clearInterval(interval);
+    const tick = () => { if (!document.hidden) void refreshUnread(); };
+    tick();
+    const interval = window.setInterval(tick, POLL_INTERVAL_MS);
+    const onVisibility = () => { if (!document.hidden) void refreshUnread(); };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, [refreshUnread]);
 
   const markRead = useCallback(async (id: number) => {

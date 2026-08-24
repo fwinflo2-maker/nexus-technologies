@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  apiControlClients, apiControlClient,
+  apiControlClients, apiControlClient, apiControlClientStatus,
   type ControlClient, type ControlClientDetail,
 } from '../../api/client';
 
@@ -40,6 +40,7 @@ export default function AdminAccounts() {
   const [status, setStatus] = useState<'all' | 'ACTIVE' | 'PENDING' | 'SUSPENDED'>('all');
   const [detail, setDetail] = useState<ControlClientDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [actionError, setActionError] = useState('');
 
   const load = useCallback(async () => {
     setState('loading');
@@ -54,6 +55,22 @@ export default function AdminAccounts() {
     const res = await apiControlClient(id);
     if (res.success && res.data) setDetail(res.data.client);
     setDetailLoading(false);
+  };
+
+  const setClientStatus = async (client: ControlClientDetail, next: 'ACTIVE' | 'SUSPENDED') => {
+    const reason = next === 'SUSPENDED'
+      ? window.prompt(`Motif obligatoire pour suspendre ${client.full_name} :`)?.trim()
+      : '';
+    if (next === 'SUSPENDED' && !reason) return;
+    setActionError('');
+    const response = await apiControlClientStatus(client.id, next, reason);
+    if (!response.success) {
+      setActionError(response.error ?? 'Action impossible.');
+      return;
+    }
+    await load();
+    const refreshed = await apiControlClient(client.id);
+    if (refreshed.success && refreshed.data) setDetail(refreshed.data.client);
   };
 
   const q = query.trim().toLowerCase();
@@ -114,7 +131,8 @@ export default function AdminAccounts() {
 
       {/* ── Popup détail ── */}
       {detail && (
-        <DetailPopup client={detail} loading={detailLoading} onClose={() => setDetail(null)} />
+        <DetailPopup client={detail} loading={detailLoading} actionError={actionError}
+          onStatus={(next) => void setClientStatus(detail, next)} onClose={() => setDetail(null)} />
       )}
     </div>
   );
@@ -161,7 +179,13 @@ function ClientCard({ c, onClick }: { c: ControlClient; onClick: () => void }) {
   );
 }
 
-function DetailPopup({ client, loading, onClose }: { client: ControlClientDetail; loading: boolean; onClose: () => void }) {
+function DetailPopup({ client, loading, actionError, onStatus, onClose }: {
+  client: ControlClientDetail;
+  loading: boolean;
+  actionError: string;
+  onStatus: (status: 'ACTIVE' | 'SUSPENDED') => void;
+  onClose: () => void;
+}) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 300, display: 'flex', justifyContent: 'flex-end' }} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={{
@@ -183,6 +207,12 @@ function DetailPopup({ client, loading, onClose }: { client: ControlClientDetail
                 <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>{client.email} · {client.phone || '—'}</div>
                 <div style={{ fontSize: 12, color: statusColor(client.status), marginTop: 2 }}>{client.status} · KYC {client.kyc_level} · {client.account_type === 'business' ? 'Business' : 'Personnel'}</div>
               </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+              {client.status === 'SUSPENDED'
+                ? <button className="btn" onClick={() => onStatus('ACTIVE')}>Réactiver le client</button>
+                : <button className="btn btn-ghost" style={{ color: 'var(--red)' }} onClick={() => onStatus('SUSPENDED')}>Suspendre le client</button>}
+              {actionError && <span role="alert" style={{ color: 'var(--red)', fontSize: 12 }}>{actionError}</span>}
             </div>
 
             {/* Informations */}

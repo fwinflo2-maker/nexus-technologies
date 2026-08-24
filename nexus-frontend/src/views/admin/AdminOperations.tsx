@@ -25,14 +25,14 @@ export default function AdminOperations() {
         <Table
           head={['ID', 'Heure', 'Client', 'Type', 'Libellé', 'Montant', 'Provider', 'Statut']}
           rows={items.map((o) => [
-            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>#{o.id}</span>,
-            <span style={{ fontSize: 11.5, color: 'var(--text-mid)' }}>{fmtDate(o.created_at)}</span>,
-            <span style={{ color: 'var(--text-bright)' }}>{o.user_name ?? '—'}</span>,
-            <span style={{ textTransform: 'capitalize' }}>{o.type}</span>,
-            <span>{o.label}</span>,
-            <span style={{ fontFamily: 'var(--font-mono)' }}>{fmtMoney(Number(o.amount), o.currency)}</span>,
-            <span style={{ textTransform: 'capitalize' }}>{o.provider ?? '—'}</span>,
-            <Badge status={o.status} />,
+            <span key="id" style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>#{o.id}</span>,
+            <span key="date" style={{ fontSize: 11.5, color: 'var(--text-mid)' }}>{fmtDate(o.created_at)}</span>,
+            <span key="client" style={{ color: 'var(--text-bright)' }}>{o.user_name ?? '—'}</span>,
+            <span key="type" style={{ textTransform: 'capitalize' }}>{o.type}</span>,
+            <span key="label">{o.label}</span>,
+            <span key="amount" style={{ fontFamily: 'var(--font-mono)' }}>{fmtMoney(Number(o.amount), o.currency)}</span>,
+            <span key="provider" style={{ textTransform: 'capitalize' }}>{o.provider ?? '—'}</span>,
+            <Badge key="status" status={o.status} />,
           ])}
           empty="Aucune opération en file pour le moment."
         />

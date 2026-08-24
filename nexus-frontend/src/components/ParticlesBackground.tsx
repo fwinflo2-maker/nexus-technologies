@@ -38,6 +38,7 @@ export function ParticlesBackground({
     let paused = false;
     let frame = 0;
     const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     interface Particle {
       x: number;
@@ -134,7 +135,7 @@ export function ParticlesBackground({
       if (width < 2 || height < 2 || particles.length === 0) {
         measure();
         if (width >= 2 && height >= 2 && particles.length === 0) init();
-        raf = requestAnimationFrame(draw);
+        raf = reducedMotion ? 0 : requestAnimationFrame(draw);
         return;
       }
 
@@ -164,7 +165,7 @@ export function ParticlesBackground({
       }
 
       ctx.globalAlpha = 1;
-      raf = requestAnimationFrame(draw);
+      raf = reducedMotion ? 0 : requestAnimationFrame(draw);
     };
 
     const start = () => {
@@ -191,6 +192,7 @@ export function ParticlesBackground({
 
     // Free the main thread while the user is actively scrolling.
     const onScroll = () => {
+      if (reducedMotion) return;
       paused = true;
       stop();
       window.clearTimeout(scrollIdleTimer);

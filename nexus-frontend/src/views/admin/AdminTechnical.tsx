@@ -27,9 +27,9 @@ export default function AdminTechnical() {
         <Table
           head={['Service', 'État', 'Latence']}
           rows={services.map((s) => [
-            <span style={{ color: 'var(--text-bright)' }}>{s.name}</span>,
-            <Badge status={s.status} />,
-            <span style={{ fontFamily: 'var(--font-mono)' }}>{s.latency_ms} ms</span>,
+            <span key="name" style={{ color: 'var(--text-bright)' }}>{s.name}</span>,
+            <Badge key="status" status={s.status} />,
+            <span key="latency" style={{ fontFamily: 'var(--font-mono)' }}>{s.latency_ms} ms</span>,
           ])}
         />
       </div>
@@ -39,9 +39,9 @@ export default function AdminTechnical() {
         <Table
           head={['Provider', 'Environnement', 'État']}
           rows={providers.map((p) => [
-            <span style={{ textTransform: 'capitalize' }}>{p.provider_slug}</span>,
-            <span style={{ textTransform: 'uppercase', fontSize: 11, color: 'var(--text-mid)' }}>{p.environment}</span>,
-            <Badge status={p.state === 'configured' ? 'active' : 'not_configured'} label={p.state === 'configured' ? 'Configuré' : 'Non configuré'} />,
+            <span key="provider" style={{ textTransform: 'capitalize' }}>{p.provider_slug}</span>,
+            <span key="environment" style={{ textTransform: 'uppercase', fontSize: 11, color: 'var(--text-mid)' }}>{p.environment}</span>,
+            <Badge key="status" status={p.state === 'configured' ? 'active' : 'not_configured'} label={p.state === 'configured' ? 'Configuré' : 'Non configuré'} />,
           ])}
         />
       </div>

@@ -972,6 +972,15 @@ html.light-mode .nexus-dash .status-dot {
 .nexus-dash .gear-4 { animation: spin-ccw 12s linear infinite; }
 .nexus-dash .gear-5 { animation: spin-cw 35s linear infinite; }
 
+@media (prefers-reduced-motion: reduce) {
+  .nexus-dash .gear,
+  .nexus-dash .status-dot,
+  .nexus-dash .se-led,
+  .nexus-dash .se-kitt-scanner {
+    animation: none !important;
+  }
+}
+
 @keyframes spin-cw  { from { transform: rotate(0deg); }   to { transform: rotate(360deg); } }
 @keyframes spin-ccw { from { transform: rotate(0deg); }   to { transform: rotate(-360deg); } }
 

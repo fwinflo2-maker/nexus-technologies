@@ -220,7 +220,7 @@ export default function WalletPage() {
     }
     setTxs(resp.data.items);
     setTxsLoading(false);
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (!wallets) return;

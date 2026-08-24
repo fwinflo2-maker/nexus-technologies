@@ -90,10 +90,12 @@ export default function SupportChatWidget() {
 
   const agentConnected = Boolean(activeConv?.assigned_to || activeConv?.assigned_name);
   const agentLabel = activeConv?.assigned_name?.trim() || null;
+  const activeConvId = activeConv?.id ?? null;
 
   useEffect(() => {
     let alive = true;
     const tick = async () => {
+      if (document.hidden) return;
       const res = await apiSupportUnread();
       if (alive && res.success && res.data) setUnread(res.data.total);
     };
@@ -104,10 +106,11 @@ export default function SupportChatWidget() {
 
   // Polling messages + meta conversation (prise en charge agent).
   useEffect(() => {
-    if (!activeConv || !open || mode !== 'conv') return;
+    if (activeConvId === null || !open || mode !== 'conv') return;
     let alive = true;
     const tick = async () => {
-      const res = await apiSupportMessages(activeConv.id, lastMsgId.current);
+      if (document.hidden) return;
+      const res = await apiSupportMessages(activeConvId, lastMsgId.current);
       if (!alive || !res.success || !res.data) return;
       if (res.data.conversation) {
         setActiveConv((prev) => (prev ? { ...prev, ...res.data!.conversation! } : res.data!.conversation!));
@@ -121,7 +124,7 @@ export default function SupportChatWidget() {
     tick();
     const iv = setInterval(tick, 2500);
     return () => { alive = false; clearInterval(iv); };
-  }, [activeConv?.id, open, mode]);
+  }, [activeConvId, open, mode]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });

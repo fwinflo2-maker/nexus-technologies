@@ -8,6 +8,7 @@ use Nexus\Auth\AuthMiddleware;
 use Nexus\Core\Database;
 use Nexus\Core\Request;
 use Nexus\Core\Response;
+use Nexus\Execution\ExecutionContext;
 use Nexus\Execution\PlatformRole;
 
 /**
@@ -41,6 +42,13 @@ final class AdminController
         $user = $request->attribute('user');
         PlatformRole::require($user, 'superadmin');
         return $user;
+    }
+
+    /** @return array{0: array<string,mixed>, 1: \Nexus\Execution\ExecutionEnvironment} */
+    private static function authorizeEnvironment(Request $request): array
+    {
+        $user = self::authorize($request);
+        return [$user, ExecutionContext::fromRequest($request, $user)->environment];
     }
 
     private static function audit(\PDO $pdo, int $adminId, string $action, ?string $entityType, ?int $entityId, array $metadata): void
@@ -408,8 +416,9 @@ final class AdminController
      */
     public static function overview(Request $request): void
     {
-        self::authorize($request);
+        [, $environment] = self::authorizeEnvironment($request);
         $pdo = Database::getConnection();
+        $env = $environment->value;
 
         // Comptes par type et statut.
         $accounts = [
@@ -425,64 +434,100 @@ final class AdminController
         // Wallets & actifs.
         $wallets = (int) $pdo->query('SELECT COUNT(*) FROM wallets')->fetchColumn();
         $walletBal = $pdo->query(
-            "SELECT COALESCE(SUM(CASE WHEN currency='EUR' THEN balance ELSE 0 END),0) eur,
-                    COALESCE(SUM(CASE WHEN currency='USD' THEN balance ELSE 0 END),0) usd,
-                    COALESCE(SUM(CASE WHEN currency='XAF' THEN balance ELSE 0 END),0) xaf
+            "SELECT COALESCE(SUM(CASE WHEN currency='EUR' THEN available_balance ELSE 0 END),0) eur,
+                    COALESCE(SUM(CASE WHEN currency='USD' THEN available_balance ELSE 0 END),0) usd,
+                    COALESCE(SUM(CASE WHEN currency='XAF' THEN available_balance ELSE 0 END),0) xaf
              FROM wallets"
         )->fetch();
 
         // Transactions & volumes.
-        $tx = $pdo->query(
+        $txStmt = $pdo->prepare(
             "SELECT COUNT(*) total,
                     COALESCE(SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END),0) completed,
                     COALESCE(SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END),0) failed,
                     COALESCE(SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END),0) pending,
                     COALESCE(SUM(CASE WHEN status='processing' THEN 1 ELSE 0 END),0) processing,
                     COALESCE(SUM(amount),0) volume
-             FROM transactions"
-        )->fetch();
-        $volumeXaf = (int) $pdo->query(
-            "SELECT COALESCE(SUM(amount_xaf),0) FROM transactions WHERE status='completed'"
-        )->fetchColumn();
+             FROM transactions WHERE environment = :environment"
+        );
+        $txStmt->execute(['environment' => $env]);
+        $tx = $txStmt->fetch();
+        $volumeStmt = $pdo->prepare(
+            "SELECT COALESCE(SUM(amount_xaf),0) FROM transactions
+             WHERE status='completed' AND environment = :environment"
+        );
+        $volumeStmt->execute(['environment' => $env]);
+        $volumeXaf = (int) $volumeStmt->fetchColumn();
 
         // KYC.
+        $kycStmt = $pdo->prepare(
+            "SELECT COUNT(*) total,
+                    COALESCE(SUM(status IN ('pending','in_progress')),0) pending,
+                    COALESCE(SUM(status='verified'),0) approved,
+                    COALESCE(SUM(status='rejected'),0) rejected
+             FROM kyc_verifications WHERE environment = :environment"
+        );
+        $kycStmt->execute(['environment' => $env]);
+        $kycRow = $kycStmt->fetch() ?: [];
         $kyc = [
-            'total'    => (int) $pdo->query('SELECT COUNT(*) FROM kyc_verifications')->fetchColumn(),
-            'pending'  => (int) $pdo->query("SELECT COUNT(*) FROM kyc_verifications WHERE status='pending' OR status='in_progress'")->fetchColumn(),
-            'approved' => (int) $pdo->query("SELECT COUNT(*) FROM kyc_verifications WHERE status='verified'")->fetchColumn(),
-            'rejected' => (int) $pdo->query("SELECT COUNT(*) FROM kyc_verifications WHERE status='rejected'")->fetchColumn(),
+            'total'    => (int) ($kycRow['total'] ?? 0),
+            'pending'  => (int) ($kycRow['pending'] ?? 0),
+            'approved' => (int) ($kycRow['approved'] ?? 0),
+            'rejected' => (int) ($kycRow['rejected'] ?? 0),
         ];
 
         // Providers.
+        $providerStmt = $pdo->prepare(
+            "SELECT COUNT(*) total,
+                    COALESCE(SUM(credentials_enc IS NOT NULL AND credentials_enc <> ''),0) configured
+             FROM provider_credentials
+             WHERE user_id IS NULL AND environment = :environment"
+        );
+        $providerStmt->execute(['environment' => $env]);
+        $providerRow = $providerStmt->fetch() ?: [];
         $providers = [
-            'total' => (int) $pdo->query('SELECT COUNT(*) FROM provider_credentials')->fetchColumn(),
-            'configured' => (int) $pdo->query("SELECT COUNT(*) FROM provider_credentials WHERE credentials_enc IS NOT NULL AND credentials_enc <> ''")->fetchColumn(),
+            'total' => (int) ($providerRow['total'] ?? 0),
+            'configured' => (int) ($providerRow['configured'] ?? 0),
         ];
 
         // Audit récent (activité).
-        $recentAudit = $pdo->query(
-            'SELECT action, COUNT(*) AS count FROM audit_logs GROUP BY action ORDER BY count DESC LIMIT 8'
-        )->fetchAll();
+        $recentAuditStmt = $pdo->prepare(
+            'SELECT action, COUNT(*) AS count FROM audit_logs
+             WHERE environment = :environment
+             GROUP BY action ORDER BY count DESC LIMIT 8'
+        );
+        $recentAuditStmt->execute(['environment' => $env]);
+        $recentAudit = $recentAuditStmt->fetchAll();
 
         // Série temporelle (14 jours) pour les graphiques : transactions + volume (EUR).
-        $series = self::dailySeries($pdo, 14);
+        $series = self::dailySeries($pdo, 14, $env);
 
         // Répartition par statut de transaction (donut).
-        $statusBreakdown = $pdo->query(
-            "SELECT status, COUNT(*) AS n FROM transactions GROUP BY status"
-        )->fetchAll();
+        $statusStmt = $pdo->prepare(
+            'SELECT status, COUNT(*) AS n FROM transactions
+             WHERE environment = :environment GROUP BY status'
+        );
+        $statusStmt->execute(['environment' => $env]);
+        $statusBreakdown = $statusStmt->fetchAll();
         $statusBreakdown = array_map(static fn (array $r) => ['status' => $r['status'], 'count' => (int) $r['n']], $statusBreakdown);
 
         // Répartition par provider (top providers).
-        $providerTop = $pdo->query(
-            "SELECT provider, COUNT(*) AS n FROM transactions WHERE provider IS NOT NULL GROUP BY provider ORDER BY n DESC LIMIT 8"
-        )->fetchAll();
+        $providerTopStmt = $pdo->prepare(
+            'SELECT provider, COUNT(*) AS n FROM transactions
+             WHERE provider IS NOT NULL AND environment = :environment
+             GROUP BY provider ORDER BY n DESC LIMIT 8'
+        );
+        $providerTopStmt->execute(['environment' => $env]);
+        $providerTop = $providerTopStmt->fetchAll();
         $providerTop = array_map(static fn (array $r) => ['provider' => $r['provider'], 'count' => (int) $r['n']], $providerTop);
 
         Response::success([
             'accounts'   => $accounts,
+            'environment' => $env,
             'wallets'    => $wallets,
             'assets'     => ['EUR' => $walletBal['eur'], 'USD' => $walletBal['usd'], 'XAF' => $walletBal['xaf']],
+            'assets_basis' => 'available_balance',
+            'assets_scope' => 'shared_wallet_projection',
             'transactions' => [
                 'total' => (int) $tx['total'], 'completed' => (int) $tx['completed'],
                 'failed' => (int) $tx['failed'], 'pending' => (int) $tx['pending'],
@@ -507,17 +552,17 @@ final class AdminController
      *
      * @return array{transactions: array<int,array{date:string,count:int}>, volume_eur: array<int,array{date:string,volume:float}>, audit: array<int,array{date:string,count:int}>}
      */
-    private static function dailySeries(\PDO $pdo, int $days): array
+    private static function dailySeries(\PDO $pdo, int $days, string $environment): array
     {
         $since = date('Y-m-d', strtotime("-{$days} days"));
 
         $txDays = $pdo->prepare(
             'SELECT DATE(created_at) d, COUNT(*) n, COALESCE(SUM(amount_ref),0) v
              FROM transactions
-             WHERE created_at >= :since
+             WHERE created_at >= :since AND environment = :environment
              GROUP BY DATE(created_at) ORDER BY d ASC'
         );
-        $txDays->execute(['since' => $since . ' 00:00:00']);
+        $txDays->execute(['since' => $since . ' 00:00:00', 'environment' => $environment]);
         $txMap = [];
         foreach ($txDays->fetchAll() as $r) {
             $txMap[$r['d']] = ['count' => (int) $r['n'], 'volume' => (float) $r['v']];
@@ -525,9 +570,10 @@ final class AdminController
 
         $auditDays = $pdo->prepare(
             'SELECT DATE(created_at) d, COUNT(*) n FROM audit_logs
-             WHERE created_at >= :since GROUP BY DATE(created_at) ORDER BY d ASC'
+             WHERE created_at >= :since AND environment = :environment
+             GROUP BY DATE(created_at) ORDER BY d ASC'
         );
-        $auditDays->execute(['since' => $since . ' 00:00:00']);
+        $auditDays->execute(['since' => $since . ' 00:00:00', 'environment' => $environment]);
         $auditMap = [];
         foreach ($auditDays->fetchAll() as $r) {
             $auditMap[$r['d']] = (int) $r['n'];
@@ -549,12 +595,12 @@ final class AdminController
     /** GET /api/admin/transactions — liste détaillée des transactions avec filtres. */
     public static function transactions(Request $request): void
     {
-        self::authorize($request);
+        [, $environment] = self::authorizeEnvironment($request);
         $pdo = Database::getConnection();
         $q   = $request->query();
 
-        $where = [];
-        $params = [];
+        $where = ['t.environment = :environment'];
+        $params = ['environment' => $environment->value];
         foreach (['status' => 'status', 'currency' => 'currency', 'type' => 'type', 'provider' => 'provider'] as $k => $col) {
             if (($v = trim((string) ($q[$k] ?? ''))) !== '') {
                 $where[] = "t.{$col} = :{$k}";
@@ -588,6 +634,7 @@ final class AdminController
         $stmt->execute($params);
 
         Response::success([
+            'environment' => $environment->value,
             'items' => $stmt->fetchAll(),
             'total' => $total,
             'page' => $page,
@@ -599,64 +646,102 @@ final class AdminController
     /** GET /api/admin/operations — file d'exécution (transactions non terminales). */
     public static function operations(Request $request): void
     {
-        self::authorize($request);
+        [, $environment] = self::authorizeEnvironment($request);
         $pdo = Database::getConnection();
+        $env = $environment->value;
 
-        $queue = $pdo->query(
+        $queueStmt = $pdo->prepare(
             "SELECT t.id, t.type, t.label, t.amount, t.currency, t.status, t.provider,
                     t.environment, t.execution_time_seconds, t.created_at,
                     u.full_name AS user_name, u.email AS user_email
              FROM transactions t
              LEFT JOIN users u ON u.id = t.user_id
-             WHERE t.status IN ('pending','processing')
+             WHERE t.environment = :environment AND t.status IN ('pending','processing')
              ORDER BY t.created_at DESC
              LIMIT 100"
-        )->fetchAll();
+        );
+        $queueStmt->execute(['environment' => $env]);
+        $queue = $queueStmt->fetchAll();
 
-        $counters = [
-            'pending'    => (int) $pdo->query("SELECT COUNT(*) FROM transactions WHERE status='pending'")->fetchColumn(),
-            'processing' => (int) $pdo->query("SELECT COUNT(*) FROM transactions WHERE status='processing'")->fetchColumn(),
-            'completed'  => (int) $pdo->query("SELECT COUNT(*) FROM transactions WHERE status='completed'")->fetchColumn(),
-            'failed'     => (int) $pdo->query("SELECT COUNT(*) FROM transactions WHERE status='failed'")->fetchColumn(),
-        ];
+        $countStmt = $pdo->prepare(
+            "SELECT
+                COALESCE(SUM(status='pending'),0) pending,
+                COALESCE(SUM(status='processing'),0) processing,
+                COALESCE(SUM(status='completed'),0) completed,
+                COALESCE(SUM(status='failed'),0) failed
+             FROM transactions WHERE environment = :environment"
+        );
+        $countStmt->execute(['environment' => $env]);
+        $countRow = $countStmt->fetch() ?: [];
+        $counters = array_map('intval', $countRow);
         // Durée moyenne d'exécution des opérations terminées.
-        $avgSecs = $pdo->query(
-            "SELECT COALESCE(AVG(execution_time_seconds),0) FROM transactions WHERE status='completed' AND execution_time_seconds IS NOT NULL"
-        )->fetchColumn();
+        $avgStmt = $pdo->prepare(
+            "SELECT COALESCE(AVG(execution_time_seconds),0) FROM transactions
+             WHERE environment = :environment AND status='completed'
+               AND execution_time_seconds IS NOT NULL"
+        );
+        $avgStmt->execute(['environment' => $env]);
+        $avgSecs = $avgStmt->fetchColumn();
 
-        Response::success(['items' => $queue, 'counters' => $counters, 'avg_execution_seconds' => (float) $avgSecs]);
+        Response::success([
+            'environment' => $env,
+            'items' => $queue,
+            'counters' => $counters,
+            'avg_execution_seconds' => (float) $avgSecs,
+        ]);
     }
 
     /** GET /api/admin/risk — indicateurs risque / fraude. */
     public static function risk(Request $request): void
     {
-        self::authorize($request);
+        [, $environment] = self::authorizeEnvironment($request);
         $pdo = Database::getConnection();
+        $env = $environment->value;
 
+        $txStmt = $pdo->prepare(
+            "SELECT COUNT(*) total, COALESCE(SUM(status='failed'),0) failed
+             FROM transactions WHERE environment = :environment"
+        );
+        $txStmt->execute(['environment' => $env]);
+        $tx = $txStmt->fetch() ?: ['total' => 0, 'failed' => 0];
+        $kycStmt = $pdo->prepare(
+            "SELECT COALESCE(SUM(status='rejected'),0) rejected,
+                    COALESCE(SUM(status='resubmission_requested'),0) resubmission
+             FROM kyc_verifications WHERE environment = :environment"
+        );
+        $kycStmt->execute(['environment' => $env]);
+        $kyc = $kycStmt->fetch() ?: [];
         $risk = [
             'suspended_accounts' => (int) $pdo->query("SELECT COUNT(*) FROM users WHERE status='SUSPENDED'")->fetchColumn(),
-            'failed_transactions' => (int) $pdo->query("SELECT COUNT(*) FROM transactions WHERE status='failed'")->fetchColumn(),
-            'kyc_rejected' => (int) $pdo->query("SELECT COUNT(*) FROM kyc_verifications WHERE status='rejected'")->fetchColumn(),
-            'kyc_resubmission' => (int) $pdo->query("SELECT COUNT(*) FROM kyc_verifications WHERE status='resubmission_requested'")->fetchColumn(),
+            'failed_transactions' => (int) $tx['failed'],
+            'kyc_rejected' => (int) ($kyc['rejected'] ?? 0),
+            'kyc_resubmission' => (int) ($kyc['resubmission'] ?? 0),
             'failed_rate' => 0.0,
         ];
-        $tot = (int) $pdo->query('SELECT COUNT(*) FROM transactions')->fetchColumn();
+        $tot = (int) $tx['total'];
         $risk['failed_rate'] = $tot > 0 ? round($risk['failed_transactions'] / $tot * 100, 1) : 0.0;
 
         // Transactions échouées récentes (à surveiller).
-        $recent = $pdo->query(
+        $recentStmt = $pdo->prepare(
             "SELECT t.id, t.label, t.amount, t.currency, t.provider, t.created_at, u.email AS user_email
              FROM transactions t LEFT JOIN users u ON u.id = t.user_id
-             WHERE t.status='failed' ORDER BY t.created_at DESC LIMIT 15"
-        )->fetchAll();
+             WHERE t.environment = :environment AND t.status='failed'
+             ORDER BY t.created_at DESC LIMIT 15"
+        );
+        $recentStmt->execute(['environment' => $env]);
+        $recent = $recentStmt->fetchAll();
 
         // Par provider (taux d'échec).
-        $byProvider = $pdo->query(
+        $providerStmt = $pdo->prepare(
             "SELECT provider,
                     COUNT(*) AS n,
                     COALESCE(SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END),0) AS fails
-             FROM transactions WHERE provider IS NOT NULL GROUP BY provider ORDER BY n DESC LIMIT 8"
-        )->fetchAll();
+             FROM transactions
+             WHERE environment = :environment AND provider IS NOT NULL
+             GROUP BY provider ORDER BY n DESC LIMIT 8"
+        );
+        $providerStmt->execute(['environment' => $env]);
+        $byProvider = $providerStmt->fetchAll();
         $byProvider = array_map(static function (array $r): array {
             $r['n'] = (int) $r['n'];
             $r['fails'] = (int) $r['fails'];
@@ -664,13 +749,18 @@ final class AdminController
             return $r;
         }, $byProvider);
 
-        Response::success(['risk' => $risk, 'recent_failed' => $recent, 'by_provider' => $byProvider]);
+        Response::success([
+            'environment' => $env,
+            'risk' => $risk,
+            'recent_failed' => $recent,
+            'by_provider' => $byProvider,
+        ]);
     }
 
     /** GET /api/admin/technical — santé des services & providers. */
     public static function technical(Request $request): void
     {
-        self::authorize($request);
+        [, $environment] = self::authorizeEnvironment($request);
         $pdo = Database::getConnection();
 
         // Connectivité DB.
@@ -681,12 +771,16 @@ final class AdminController
             $dbOk = false;
         }
 
-        $providers = $pdo->query(
+        $providerStmt = $pdo->prepare(
             "SELECT provider_slug, environment,
                     CASE WHEN credentials_enc IS NOT NULL AND credentials_enc <> '' THEN 'configured' ELSE status END AS state,
                     last_tested_at, last_error
-             FROM provider_credentials ORDER BY provider_slug, environment"
-        )->fetchAll();
+             FROM provider_credentials
+             WHERE user_id IS NULL AND environment = :environment
+             ORDER BY provider_slug"
+        );
+        $providerStmt->execute(['environment' => $environment->value]);
+        $providers = $providerStmt->fetchAll();
 
         $services = [
             ['name' => 'API REST', 'status' => 'operational', 'latency_ms' => 0],
@@ -696,6 +790,11 @@ final class AdminController
             ['name' => 'KYC (SumSub)', 'status' => 'NOT_VERIFIED', 'latency_ms' => 0],
         ];
 
-        Response::success(['services' => $services, 'db_ok' => $dbOk, 'providers' => $providers]);
+        Response::success([
+            'environment' => $environment->value,
+            'services' => $services,
+            'db_ok' => $dbOk,
+            'providers' => $providers,
+        ]);
     }
 }

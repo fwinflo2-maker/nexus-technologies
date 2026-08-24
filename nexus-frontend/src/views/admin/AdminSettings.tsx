@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import SettingsPage from '../dashboard/SettingsPage';
-import { getToken } from '../../api/client';
+import { apiControlOverview, type ControlOverview } from '../../api/client';
 import { Panel, Row, Badge, Stat } from './adminUi';
 
 /**
@@ -13,32 +13,20 @@ import { Panel, Row, Badge, Stat } from './adminUi';
  *     (profil, avatar, mot de passe, sessions, préférences) branchée sur les
  *     mêmes API réelles (/api/users/me, /api/users/me/password, sessions).
  */
-interface ControlOverview {
-  environment: string;
-  is_production: boolean;
-  strict_mode: boolean;
-  providers: { total: number; enabled: number; configured: number; schema_verified: number; with_operations: number };
-  credentials: { sandbox: number; production: number };
-}
-
 export default function AdminSettings() {
   const [ctrl, setCtrl] = useState<ControlOverview | null>(null);
-  const [failed, setFailed] = useState(false);
+  const [state, setState] = useState<'loading' | 'error' | 'ready'>('loading');
 
-  useEffect(() => {
-    let alive = true;
-    fetch('/api/control/overview', { headers: { Authorization: `Bearer ${getToken() ?? ''}` } })
-      .then((r) => r.json())
-      .then((res) => {
-        if (!alive) return;
-        if (res.success && res.data) setCtrl(res.data);
-        else setFailed(true);
-      })
-      .catch(() => { if (alive) setFailed(true); });
-    return () => { alive = false; };
+  const load = useCallback(async () => {
+    setState('loading');
+    const response = await apiControlOverview();
+    if (!response.success || !response.data) { setState('error'); return; }
+    setCtrl(response.data);
+    setState('ready');
   }, []);
+  useEffect(() => { void load(); }, [load]);
 
-  const env = ctrl?.environment ?? '—';
+  const env = ctrl?.environment ?? 'Indisponible';
   const envProd = !!ctrl?.is_production;
   const creds = ctrl?.credentials;
 
@@ -51,8 +39,8 @@ export default function AdminSettings() {
           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-bright)', letterSpacing: 0.3 }}>
             Configuration de la plateforme
           </span>
-          {failed && (
-            <span style={{ fontSize: 11, color: 'var(--gold)' }}>Chargement du contrôle platforme impossible</span>
+          {state === 'error' && (
+            <span style={{ fontSize: 11, color: 'var(--gold)' }}>État indisponible <button className="btn btn-ghost" onClick={() => void load()}>Réessayer</button></span>
           )}
         </div>
 
@@ -68,7 +56,7 @@ export default function AdminSettings() {
                     boxShadow: `0 0 8px ${envProd ? 'var(--green)' : 'var(--gold)'}`,
                   }}
                 />
-                {envProd ? 'Production' : 'Sandbox'}
+                {ctrl ? (envProd ? 'Production' : 'Sandbox') : 'Indisponible'}
               </span>
             }
             sub={env}

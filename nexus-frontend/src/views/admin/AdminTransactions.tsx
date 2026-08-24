@@ -17,7 +17,7 @@ export default function AdminTransactions() {
     const res = await apiAdminTransactions({ ...filters, page, per: 25 });
     if (res.success && res.data) { setItems(res.data.items); setMeta({ total: res.data.total, page: res.data.page, pages: res.data.pages, per: res.data.per }); }
     setLoading(false);
-  }, [filters.status, filters.currency, filters.type, filters.q]);
+  }, [filters]);
 
   useEffect(() => { void load(1); }, [load]);
 
@@ -55,18 +55,18 @@ export default function AdminTransactions() {
           <Table
             head={['ID', 'Date', 'Client', 'Type', 'Libellé', 'Montant', 'Devise', 'Provider', 'Statut']}
             rows={items.map((t) => [
-              <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>#{t.id}</span>,
-              <span style={{ fontSize: 11.5, color: 'var(--text-mid)' }}>{fmtDate(t.created_at)}</span>,
-              <span>
+              <span key="id" style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>#{t.id}</span>,
+              <span key="date" style={{ fontSize: 11.5, color: 'var(--text-mid)' }}>{fmtDate(t.created_at)}</span>,
+              <span key="client">
                 <div style={{ color: 'var(--text-bright)', fontWeight: 600 }}>{t.user_name ?? '—'}</div>
                 <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{t.user_email ?? ''}</div>
               </span>,
-              <span style={{ textTransform: 'capitalize' }}>{t.type}</span>,
-              <span>{t.label}</span>,
-              <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-bright)' }}>{fmtMoney(Number(t.amount), t.currency)}</span>,
+              <span key="type" style={{ textTransform: 'capitalize' }}>{t.type}</span>,
+              <span key="label">{t.label}</span>,
+              <span key="amount" style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-bright)' }}>{fmtMoney(Number(t.amount), t.currency)}</span>,
               t.currency,
-              <span style={{ textTransform: 'capitalize' }}>{t.provider ?? '—'}</span>,
-              <Badge status={t.status} />,
+              <span key="provider" style={{ textTransform: 'capitalize' }}>{t.provider ?? '—'}</span>,
+              <Badge key="status" status={t.status} />,
             ])}
           />
           {meta.pages > 1 && (

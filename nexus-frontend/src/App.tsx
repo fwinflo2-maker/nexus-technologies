@@ -1,46 +1,56 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth, loginPathForLocation } from './context/AuthContext';
 import { I18nProvider } from './context/I18nContext';
 import { NotificationsProvider } from './context/NotificationsContext';
 import SupportChatWidget from './components/chat/SupportChatWidget';
-import { LandingPage } from './views/public/LandingPage';
-import { LoginPage } from './views/auth/LoginPage';
-import { RegisterPage } from './views/auth/RegisterPage';
-import ForgotPasswordPage from './views/auth/ForgotPasswordPage';
-import AdminLoginPage from './views/auth/AdminLoginPage';
-import EmployeeLoginPage from './views/auth/EmployeeLoginPage';
-import StaffHome from './views/staff/StaffHome';
-import { PrivacyPage, TermsPage, DocumentationPage, SupportPage } from './views/public/InfoPages';
 import GearsBackground from './components/dashboard/GearsBackground';
 import { ParticlesBackground } from './components/ParticlesBackground';
 import { SeoMeta } from './components/SeoMeta';
 import Sidebar from './components/dashboard/Sidebar';
 import DashTopbar from './components/dashboard/DashTopbar';
-import DashboardPage from './views/dashboard/DashboardPage';
-import WalletPage from './views/dashboard/WalletPage';
 /* RoutingPage supprimé — le Routing Engine est intégré au workflow /send */
-import NotificationsPage from './views/dashboard/NotificationsPage';
-import SendPage from './views/dashboard/SendPage';
-import ReceivePage from './views/dashboard/ReceivePage';
-import ConvertPage from './views/dashboard/ConvertPage';
-import CardsPage from './views/dashboard/CardsPage';
-import HistoryPage from './views/dashboard/HistoryPage';
-import SettingsPage from './views/dashboard/SettingsPage';
-import KycPage from './views/dashboard/KycPage';
-import AgentsPage from './views/dashboard/AgentsPage';
-import BusinessDashboard from './views/business/BusinessDashboard';
-import PaymentsPage from './views/business/PaymentsPage';
-import BeneficiariesPage from './views/business/BeneficiariesPage';
-import ApprovalsPage from './views/business/ApprovalsPage';
-import TeamPage from './views/business/TeamPage';
-import ReconciliationPage from './views/business/ReconciliationPage';
-import SuperAdminDashboard from './views/admin/SuperAdminDashboard';
 import { useDashT } from './data/dashboard-i18n';
 import './styles/design-system.css';
 import './styles/dashboard-system.css';
 import './styles/premium.css';
 import './styles/premium-anim.css';
 import './styles/revolut.css';
+
+const LandingPage = lazy(() => import('./views/public/LandingPage').then((module) => ({ default: module.LandingPage })));
+const LoginPage = lazy(() => import('./views/auth/LoginPage').then((module) => ({ default: module.LoginPage })));
+const RegisterPage = lazy(() => import('./views/auth/RegisterPage').then((module) => ({ default: module.RegisterPage })));
+const ForgotPasswordPage = lazy(() => import('./views/auth/ForgotPasswordPage'));
+const AdminLoginPage = lazy(() => import('./views/auth/AdminLoginPage'));
+const EmployeeLoginPage = lazy(() => import('./views/auth/EmployeeLoginPage'));
+const StaffHome = lazy(() => import('./views/staff/StaffHome'));
+const SuperAdminDashboard = lazy(() => import('./views/admin/SuperAdminDashboard'));
+const InfoPages = import('./views/public/InfoPages');
+const PrivacyPage = lazy(() => InfoPages.then((module) => ({ default: module.PrivacyPage })));
+const TermsPage = lazy(() => InfoPages.then((module) => ({ default: module.TermsPage })));
+const DocumentationPage = lazy(() => InfoPages.then((module) => ({ default: module.DocumentationPage })));
+const SupportPage = lazy(() => InfoPages.then((module) => ({ default: module.SupportPage })));
+const DashboardPage = lazy(() => import('./views/dashboard/DashboardPage'));
+const WalletPage = lazy(() => import('./views/dashboard/WalletPage'));
+const NotificationsPage = lazy(() => import('./views/dashboard/NotificationsPage'));
+const SendPage = lazy(() => import('./views/dashboard/SendPage'));
+const ReceivePage = lazy(() => import('./views/dashboard/ReceivePage'));
+const ConvertPage = lazy(() => import('./views/dashboard/ConvertPage'));
+const CardsPage = lazy(() => import('./views/dashboard/CardsPage'));
+const HistoryPage = lazy(() => import('./views/dashboard/HistoryPage'));
+const SettingsPage = lazy(() => import('./views/dashboard/SettingsPage'));
+const KycPage = lazy(() => import('./views/dashboard/KycPage'));
+const AgentsPage = lazy(() => import('./views/dashboard/AgentsPage'));
+const BusinessDashboard = lazy(() => import('./views/business/BusinessDashboard'));
+const PaymentsPage = lazy(() => import('./views/business/PaymentsPage'));
+const BeneficiariesPage = lazy(() => import('./views/business/BeneficiariesPage'));
+const ApprovalsPage = lazy(() => import('./views/business/ApprovalsPage'));
+const TeamPage = lazy(() => import('./views/business/TeamPage'));
+const ReconciliationPage = lazy(() => import('./views/business/ReconciliationPage'));
+
+function RouteFallback() {
+  return <div style={{ display: 'grid', placeItems: 'center', minHeight: 180 }}><div className="nexus-spinner" aria-label="Chargement de la page" /></div>;
+}
 
 type Mode = 'personal' | 'business';
 
@@ -240,7 +250,9 @@ function App() {
       <I18nProvider>
         <SeoMeta />
         <AuthProvider>
-          <AppRoutes />
+          <Suspense fallback={<RouteFallback />}>
+            <AppRoutes />
+          </Suspense>
         </AuthProvider>
       </I18nProvider>
     </BrowserRouter>

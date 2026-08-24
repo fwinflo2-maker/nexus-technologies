@@ -50,7 +50,7 @@ export default function ProvidersPage() {
       setCredentials(credRes.data.items);
     }
     setLoading(false);
-  }, []);
+  }, [t]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 

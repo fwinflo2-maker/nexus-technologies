@@ -49,7 +49,7 @@ export default function HistoryPage() {
 
     setTransactions(res.data.items);
     setLoading(false);
-  }, []);
+  }, [t]);
 
   useEffect(() => { fetchTransactions(); }, [fetchTransactions]);
 

@@ -8,11 +8,14 @@ use Nexus\Auth\AuthMiddleware;
 use Nexus\Core\Database;
 use Nexus\Core\Request;
 use Nexus\Core\Response;
+use Nexus\Execution\ExecutionContext;
 use Nexus\Execution\PlatformRole;
 use Nexus\Providers\ProviderRegistry;
 use Nexus\Services\ControlCenterService;
+use Nexus\Services\FXService;
 use Nexus\Services\ProviderCatalog;
 use Nexus\Services\ProviderCredentialService;
+use Nexus\Services\StaffDashboardService;
 
 /**
  * NEXUS CONTROL CENTER — API du plan de contrôle de l'infrastructure.
@@ -203,21 +206,23 @@ final class ControlCenterController
     /** GET /api/control/webhooks — journal des webhooks (§19). */
     public static function webhooks(Request $request): void
     {
-        self::authorize($request);
+        $user = self::authorize($request);
         $pdo = Database::getConnection();
+        $environment = ExecutionContext::fromRequest($request, $user)->environment;
 
-        // Le secret de signature n'est évidemment jamais exposé.
-        $stmt = $pdo->query(
-            'SELECT id, provider, environment, event_id, applicant_id, status, processed_at
-             FROM kyc_webhook_events
-             ORDER BY processed_at DESC
-             LIMIT 200'
+        // KYC et paiements provider partagent maintenant le même journal
+        // normalisé. Aucun payload ni secret n'est exposé.
+        Response::success(StaffDashboardService::webhookEvents($pdo, $environment));
+    }
+
+    /** GET /api/control/status/sources — disponibilité réelle FX/sanctions. */
+    public static function sourceStatuses(Request $request): void
+    {
+        $user = self::authorize($request);
+        $environment = ExecutionContext::fromRequest($request, $user)->environment;
+        Response::success(
+            StaffDashboardService::sourceStatuses(Database::getConnection(), $environment)
         );
-
-        Response::success([
-            'items'    => $stmt->fetchAll(),
-            'counters' => ControlCenterService::webhookCounters($pdo),
-        ]);
     }
 
     /** GET /api/control/audit — journal d'audit (§26). */
@@ -617,23 +622,14 @@ final class ControlCenterController
                 PlatformRole::ERROR_CODE
             );
         }
-        $pdo = Database::getConnection();
-        $sections = [];
-        $sections[$dashboard] = match ($dashboard) {
-            'operations' => self::operationsDashboard($pdo),
-            'compliance' => self::complianceDashboard($pdo),
-            'providers' => self::providersDashboard($pdo),
-            'support' => self::supportDashboard($pdo),
-            'executive' => [
-                'note' => 'Vue exécutive volontairement non sensible. Utilisez les surfaces dédiées selon le besoin d’en connaître.',
-            ],
-            'finance' => ['counters' => ['processing' => self::count($pdo, "SELECT COUNT(*) FROM transactions WHERE status = 'processing'")]],
-            'risk' => ['counters' => ['high_risk' => self::count($pdo, "SELECT COUNT(*) FROM users WHERE risk_level = 'high'")]],
-            'business' => ['counters' => ['pending_kyb' => self::count($pdo, "SELECT COUNT(*) FROM users WHERE account_type = 'business' AND COALESCE(kyb_status,'pending') = 'pending'")]],
-            'technical' => ['note' => 'Diagnostic technique via les surfaces d’exploitation autorisées.'],
-            default => ['note' => 'Aucune donnée disponible.'],
-        };
-        Response::success(['role' => $role, 'dashboard' => $dashboard, 'sections' => $sections]);
+        $context = ExecutionContext::fromRequest($request, $user);
+        Response::success(StaffDashboardService::dashboard(
+            Database::getConnection(),
+            (int) $user['id'],
+            $role,
+            $dashboard,
+            $context->environment
+        ));
     }
 
     /** POST /api/control/staff/action — mutations métier auditées et scopées. */
@@ -652,36 +648,44 @@ final class ControlCenterController
             );
         }
         $allowed = [
-            'operations' => ['tx_approve', 'tx_cancel', 'tx_retry'],
-            'compliance' => ['kyc_approve', 'kyc_reject'],
+            // Aucune mutation de transaction ici : la saga/holds/ledger est
+            // l'unique chemin autorisé. Les opérations de reprise vivent sur
+            // MaintenanceController avec sa capacité et sa confirmation.
+            'operations' => [],
+            'finance' => ['fx_check'],
+            'compliance' => ['kyc_approve', 'kyc_reject', 'kyc_resubmission'],
             'support' => ['ticket_assign', 'ticket_status', 'ticket_escalate'],
             'risk' => ['suspend', 'unsuspend', 'risk_level'],
             'business' => ['kyb_approve', 'kyb_reject'],
+            'technical' => ['service_check'],
         ];
         if (!in_array($action, $allowed[$console] ?? [], true)) {
             Response::badRequest('Action staff inconnue ou interdite.');
         }
 
         $pdo = Database::getConnection();
+        $context = ExecutionContext::fromRequest($request, $actor);
         $pdo->beginTransaction();
         try {
             $result = match ($console) {
-                'operations' => self::staffTransactionAction($pdo, $action, $request),
-                'compliance' => self::staffKycAction($pdo, $action, $request),
+                'finance' => self::staffFxAction($context->environment, $request),
+                'compliance' => self::staffKycAction($pdo, $action, $request, $context->environmentValue()),
                 'support' => self::staffSupportAction($pdo, (int) $actor['id'], $action, $request),
                 'risk' => self::staffRiskAction($pdo, $action, $request),
-                'business' => self::staffBusinessAction($pdo, $action, $request),
+                'business' => self::staffBusinessAction($pdo, $action, $request, $context->environmentValue()),
+                'technical' => self::staffTechnicalAction($pdo, $request, $context->environmentValue()),
                 default => throw new \Nexus\Core\HttpException(400, 'Console invalide.', 'INVALID_STAFF_CONSOLE'),
             };
             $pdo->prepare(
-                'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, metadata)
-                 VALUES (:user, :action, :type, :id, :metadata)'
+                'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, metadata, environment)
+                 VALUES (:user, :action, :type, :id, :metadata, :environment)'
             )->execute([
                 'user' => (int) $actor['id'],
                 'action' => 'staff.' . $console . '.' . $action,
                 'type' => (string) ($result['entity_type'] ?? $console),
                 'id' => $result['entity_id'] ?? null,
                 'metadata' => json_encode(['console' => $console, 'action' => $action], JSON_UNESCAPED_UNICODE),
+                'environment' => $context->environmentValue(),
             ]);
             $pdo->commit();
         } catch (\Throwable $e) {
@@ -693,44 +697,59 @@ final class ControlCenterController
         Response::success($result);
     }
 
-    private static function staffTransactionAction(\PDO $pdo, string $action, Request $request): array
+    private static function staffFxAction(
+        \Nexus\Execution\ExecutionEnvironment $environment,
+        Request $request
+    ): array
     {
-        $id = (int) $request->input('transaction_id', 0);
-        $stmt = $pdo->prepare('SELECT id, status FROM transactions WHERE id = :id FOR UPDATE');
-        $stmt->execute(['id' => $id]);
-        $tx = $stmt->fetch();
-        if ($tx === false) {
-            Response::notFound('Transaction introuvable.');
+        $pair = strtoupper(trim((string) $request->input('pair', '')));
+        $parts = preg_split('/[\/\-\s]+/', $pair) ?: [];
+        if (count($parts) !== 2 || !preg_match('/^[A-Z]{3,5}$/', $parts[0]) || !preg_match('/^[A-Z]{3,5}$/', $parts[1])) {
+            Response::badRequest('Paire FX invalide (exemple : EUR/USD).');
         }
-        $from = (string) $tx['status'];
-        $to = match ($action) {
-            'tx_approve' => $from === 'pending' ? 'processing' : null,
-            'tx_cancel' => $from === 'pending' ? 'cancelled' : null,
-            'tx_retry' => $from === 'failed' ? 'pending' : null,
-            default => null,
-        };
-        if ($to === null) {
-            Response::badRequest('Transition de transaction interdite.');
-        }
-        $pdo->prepare('UPDATE transactions SET status = :status, updated_at = NOW() WHERE id = :id')
-            ->execute(['status' => $to, 'id' => $id]);
-        return ['entity_type' => 'transactions', 'entity_id' => $id, 'status' => $to];
+        $rate = FXService::rate($parts[0], $parts[1], $environment);
+        return [
+            'entity_type' => 'fx_rate',
+            'pair' => $parts[0] . '/' . $parts[1],
+            'environment' => $environment->value,
+            'rate' => $rate,
+            'status' => $rate === null ? 'unavailable' : 'available',
+            'message' => $rate === null
+                ? 'Taux indisponible pour cette paire et cet environnement.'
+                : sprintf('1 %s = %s %s', $parts[0], rtrim(rtrim(number_format($rate, 8, '.', ''), '0'), '.'), $parts[1]),
+        ];
     }
 
-    private static function staffKycAction(\PDO $pdo, string $action, Request $request): array
+    private static function staffKycAction(
+        \PDO $pdo,
+        string $action,
+        Request $request,
+        string $environment
+    ): array
     {
         $id = (int) $request->input('verification_id', 0);
         $reason = trim((string) $request->input('reason', ''));
-        if ($action === 'kyc_reject' && $reason === '') {
-            Response::badRequest('Un motif de rejet est requis.');
+        if (in_array($action, ['kyc_reject', 'kyc_resubmission'], true) && $reason === '') {
+            Response::badRequest('Un motif est requis pour cette décision.');
         }
-        $stmt = $pdo->prepare('SELECT id, user_id, status FROM kyc_verifications WHERE id = :id FOR UPDATE');
-        $stmt->execute(['id' => $id]);
+        $stmt = $pdo->prepare(
+            'SELECT id, user_id, status FROM kyc_verifications
+             WHERE id = :id AND environment = :environment FOR UPDATE'
+        );
+        $stmt->execute(['id' => $id, 'environment' => $environment]);
         $kyc = $stmt->fetch();
         if ($kyc === false) {
             Response::notFound('Vérification introuvable.');
         }
-        $status = $action === 'kyc_approve' ? 'verified' : 'rejected';
+        if (!in_array((string) $kyc['status'], ['in_progress', 'pending', 'resubmission_requested', 'on_hold'], true)) {
+            Response::badRequest('Ce dossier ne peut plus être modifié manuellement.');
+        }
+        $status = match ($action) {
+            'kyc_approve' => 'verified',
+            'kyc_reject' => 'rejected',
+            'kyc_resubmission' => 'resubmission_requested',
+            default => throw new \LogicException('Action KYC non supportée.'),
+        };
         $pdo->prepare('UPDATE kyc_verifications SET status = :status, reason = :reason, reviewed_at = NOW() WHERE id = :id')
             ->execute(['status' => $status, 'reason' => $reason !== '' ? $reason : null, 'id' => $id]);
         if ($status === 'verified') {
@@ -756,7 +775,7 @@ final class ControlCenterController
         }
         if ($action === 'ticket_status') {
             $status = strtolower((string) $request->input('status', ''));
-            if (!in_array($status, ['open', 'pending', 'resolved', 'closed'], true)) {
+            if (!in_array($status, ['open', 'waiting', 'resolved', 'closed'], true)) {
                 Response::badRequest('Statut de ticket invalide.');
             }
             $pdo->prepare('UPDATE support_conversations SET status = :status WHERE id = :id')
@@ -829,69 +848,94 @@ final class ControlCenterController
         return ['entity_type' => 'users', 'entity_id' => $id, 'status' => $status];
     }
 
-    private static function staffBusinessAction(\PDO $pdo, string $action, Request $request): array
+    private static function staffBusinessAction(
+        \PDO $pdo,
+        string $action,
+        Request $request,
+        string $environment
+    ): array
     {
         $id = (int) $request->input('user_id', 0);
         $reason = trim((string) $request->input('reason', ''));
         if ($action === 'kyb_reject' && $reason === '') {
             Response::badRequest('Un motif de rejet est requis.');
         }
-        $stmt = $pdo->prepare("SELECT id FROM users WHERE id = :id AND account_type = 'business' AND COALESCE(platform_role,'user') = 'user'");
-        $stmt->execute(['id' => $id]);
-        if ($stmt->fetchColumn() === false) {
-            Response::notFound('Entreprise cliente introuvable.');
+        $stmt = $pdo->prepare(
+            "SELECT u.id, k.id AS verification_id, k.status
+             FROM users u
+             JOIN kyc_verifications k
+               ON k.user_id = u.id
+              AND k.subject_type = 'company'
+              AND k.environment = :environment
+             WHERE u.id = :id
+               AND u.account_type = 'business'
+               AND COALESCE(u.platform_role,'user') = 'user'
+             FOR UPDATE"
+        );
+        $stmt->execute(['id' => $id, 'environment' => $environment]);
+        $company = $stmt->fetch();
+        if ($company === false) {
+            Response::notFound('Dossier KYB entreprise introuvable dans cet environnement.');
+        }
+        if (!in_array((string) $company['status'], ['in_progress', 'pending', 'resubmission_requested', 'on_hold'], true)) {
+            Response::badRequest('Ce dossier KYB ne peut plus être modifié.');
         }
         $status = $action === 'kyb_approve' ? 'verified' : 'rejected';
-        $pdo->prepare('UPDATE users SET kyb_status = :status WHERE id = :id')->execute(['status' => $status, 'id' => $id]);
-        return ['entity_type' => 'users', 'entity_id' => $id, 'kyb_status' => $status];
-    }
-
-    private static function operationsDashboard(\PDO $pdo): array
-    {
-        $queue = $pdo->query(
-            "SELECT id, user_id, amount, currency, status, provider, created_at
-             FROM transactions WHERE status IN ('pending','processing','reconciliation_required')
-             ORDER BY created_at ASC LIMIT 100"
-        )->fetchAll();
-        return ['counters' => [
-            'pending' => self::count($pdo, "SELECT COUNT(*) FROM transactions WHERE status = 'pending'"),
-            'processing' => self::count($pdo, "SELECT COUNT(*) FROM transactions WHERE status = 'processing'"),
-        ], 'queue' => $queue];
-    }
-
-    private static function complianceDashboard(\PDO $pdo): array
-    {
-        $pending = $pdo->query(
-            "SELECT k.id, k.user_id, k.subject_type, k.status, k.created_at
-             FROM kyc_verifications k WHERE k.status = 'pending' ORDER BY k.created_at ASC LIMIT 100"
-        )->fetchAll();
-        return ['counters' => ['pending' => count($pending)], 'pending' => $pending];
-    }
-
-    private static function providersDashboard(\PDO $pdo): array
-    {
+        $pdo->prepare(
+            'UPDATE kyc_verifications
+             SET status = :status, reason = :reason, reviewed_at = NOW()
+             WHERE id = :verification_id'
+        )->execute([
+            'status' => $status,
+            'reason' => $reason !== '' ? $reason : null,
+            'verification_id' => (int) $company['verification_id'],
+        ]);
+        $pdo->prepare(
+            'UPDATE users
+             SET kyb_status = :status,
+                 kyb_verified_at = CASE WHEN :verified = 1 THEN NOW() ELSE NULL END
+             WHERE id = :id'
+        )->execute([
+            'status' => $status,
+            'verified' => $status === 'verified' ? 1 : 0,
+            'id' => $id,
+        ]);
         return [
-            'providers' => ['total' => count(ProviderCatalog::all())],
-            'credentials' => [
-                'configured' => self::count($pdo, "SELECT COUNT(*) FROM provider_credentials WHERE credentials_enc IS NOT NULL AND status NOT IN ('error','disabled')"),
-            ],
+            'entity_type' => 'kyc_verifications',
+            'entity_id' => (int) $company['verification_id'],
+            'user_id' => $id,
+            'kyb_status' => $status,
         ];
     }
 
-    private static function supportDashboard(\PDO $pdo): array
+    private static function staffTechnicalAction(\PDO $pdo, Request $request, string $environment): array
     {
-        $recent = $pdo->query(
-            'SELECT id, subject, status, priority, assigned_to, created_at
-             FROM support_conversations ORDER BY updated_at DESC LIMIT 100'
-        )->fetchAll();
-        return ['counters' => [
-            'open' => self::count($pdo, "SELECT COUNT(*) FROM support_conversations WHERE status = 'open'"),
-        ], 'recent' => $recent];
-    }
+        $service = strtolower(trim((string) $request->input('service', '')));
+        if (!in_array($service, ['api', 'database', 'queue', 'kyc'], true)) {
+            Response::badRequest('Service technique inconnu.');
+        }
 
-    private static function count(\PDO $pdo, string $sql): int
-    {
-        return (int) $pdo->query($sql)->fetchColumn();
+        $status = match ($service) {
+            'api' => 'operational',
+            'database' => (static function () use ($pdo): string {
+                try {
+                    $pdo->query('SELECT 1')->fetchColumn();
+                    return 'operational';
+                } catch (\Throwable) {
+                    return 'down';
+                }
+            })(),
+            'queue' => 'operational',
+            'kyc' => (new \Nexus\Kyc\SumsubAdapter())->isConfigured() ? 'configured' : 'unavailable',
+        };
+
+        return [
+            'entity_type' => 'service_status',
+            'service' => $service,
+            'environment' => $environment,
+            'status' => $status,
+            'checked_at' => gmdate(DATE_ATOM),
+        ];
     }
 
     private static function normalizedEmail(string $email): string

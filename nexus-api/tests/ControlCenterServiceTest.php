@@ -131,9 +131,14 @@ final class ControlCenterServiceTest extends TestCase
             }
         }
 
-        // Verrou explicite : à ce jour, une seule clé au monde est exposable.
+        // Verrou explicite : seules les clés publiques documentées ci-dessous
+        // peuvent être envoyées à un SDK côté client.
         $this->assertSame(
-            ['stripe.publishable_key'],
+            [
+                'stripe.publishable_key',
+                'xendit.public_key',
+                'cashramp.public_key',
+            ],
             $exposable,
             'La liste des clés exposables au frontend a changé : toute addition '
             . 'doit être justifiée par la documentation officielle du provider.'
@@ -149,13 +154,19 @@ final class ControlCenterServiceTest extends TestCase
             $status = ControlCenterService::documentationStatus($slug);
             $hasSchema = ProviderCredentialSchema::for($slug) !== null;
 
+            $this->assertSame(
+                $hasSchema ? 'verified' : 'unknown',
+                $status['documentation'],
+                "{$slug} annonce un statut documentaire incohérent avec son schéma."
+            );
+            $this->assertSame(
+                $hasSchema ? 'verified' : 'unknown',
+                $status['authentication'],
+                "{$slug} annonce un statut d'authentification incohérent avec son schéma."
+            );
+
             if (!$hasSchema) {
-                $this->assertSame(
-                    'unknown',
-                    $status['documentation'],
-                    "{$slug} n'a pas de schéma vérifié mais est annoncé comme documenté."
-                );
-                $this->assertSame('unknown', $status['authentication']);
+                $this->assertSame('unknown', $status['public_key']);
                 $this->assertSame('unknown', $status['webhook']);
             }
         }

@@ -188,9 +188,11 @@ final class ProviderCredentialIsolationTest extends TestCase
     public function test_provider_non_verifie_n_expose_rien_par_defaut(): void
     {
         // Principe de précaution : schéma non vérifié → rien n'est exposable.
-        self::assertFalse(ProviderCredentialSchema::isVerified('dlocal'));
-        self::assertSame([], ProviderCredentialSchema::frontendExposableFields('dlocal'));
-        self::assertFalse(ProviderCredentialSchema::isFrontendExposable('dlocal', 'publishable_key'));
+        $unknownProvider = 'provider_non_verifie';
+
+        self::assertFalse(ProviderCredentialSchema::isVerified($unknownProvider));
+        self::assertSame([], ProviderCredentialSchema::frontendExposableFields($unknownProvider));
+        self::assertFalse(ProviderCredentialSchema::isFrontendExposable($unknownProvider, 'publishable_key'));
     }
 
     public function test_toute_credential_secrete_est_backend_only(): void

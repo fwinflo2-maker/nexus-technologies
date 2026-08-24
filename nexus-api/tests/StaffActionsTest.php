@@ -16,7 +16,7 @@ use PHPUnit\Framework\TestCase;
  * Tests des ACTIONS métier du personnel (POST /api/control/staff/action) :
  *   - un compte client est refusé (403) ;
  *   - un employé n'agit que dans SA console (403 sinon) ;
- *   - operations : tx_approve / tx_cancel / tx_retry ;
+ *   - operations : aucune mutation directe des transactions (saga obligatoire) ;
  *   - compliance : kyc_approve (statut + niveau utilisateur) ;
  *   - support    : ticket_status ;
  *   - risk       : suspend / unsuspend / risk_level ;
@@ -129,44 +129,42 @@ final class StaffActionsTest extends TestCase
         $this->assertSame('FORBIDDEN_PLATFORM_ROLE', $res['json']['code'] ?? null);
     }
 
-    public function test_operations_tx_approve_and_cancel(): void
+    public function test_operations_transaction_actions_are_rejected_without_ledger_bypass(): void
     {
         $emp    = $this->newUser('operations_manager');
         $client = $this->newUser('user');
         $txId   = $this->insertTransaction($client['id'], 'pending');
+        $pdo = Database::getConnection();
+        $ledgerBefore = (int) $pdo->query('SELECT COUNT(*) FROM ledger_entries')->fetchColumn();
 
         $res = $this->call($emp['token'], [
             'console' => 'operations',
             'action'  => 'tx_approve',
             'transaction_id' => (string) $txId,
         ]);
-        $this->assertSame(200, $res['status']);
-        $this->assertTrue($res['json']['success']);
-        $status = Database::getConnection()->query("SELECT status FROM transactions WHERE id = $txId")->fetchColumn();
-        $this->assertSame('processing', $status);
+        $this->assertSame(400, $res['status']);
+        $this->assertFalse($res['json']['success']);
+        $status = $pdo->query("SELECT status FROM transactions WHERE id = $txId")->fetchColumn();
+        $this->assertSame('pending', $status);
+        $this->assertSame(
+            $ledgerBefore,
+            (int) $pdo->query('SELECT COUNT(*) FROM ledger_entries')->fetchColumn()
+        );
 
-        // Une transaction en processing ne peut pas être annulée.
         $res = $this->call($emp['token'], [
             'console' => 'operations',
             'action'  => 'tx_cancel',
             'transaction_id' => (string) $txId,
+            'reason' => 'Test.',
         ]);
         $this->assertSame(400, $res['status']);
-    }
-
-    public function test_operations_tx_retry_failed(): void
-    {
-        $emp    = $this->newUser('operations_manager');
-        $client = $this->newUser('user');
-        $txId   = $this->insertTransaction($client['id'], 'failed');
-
         $res = $this->call($emp['token'], [
             'console' => 'operations',
             'action'  => 'tx_retry',
             'transaction_id' => (string) $txId,
         ]);
-        $this->assertSame(200, $res['status']);
-        $status = Database::getConnection()->query("SELECT status FROM transactions WHERE id = $txId")->fetchColumn();
+        $this->assertSame(400, $res['status']);
+        $status = $pdo->query("SELECT status FROM transactions WHERE id = $txId")->fetchColumn();
         $this->assertSame('pending', $status);
     }
 
@@ -238,6 +236,34 @@ final class StaffActionsTest extends TestCase
         $this->assertSame('resolved', $status);
     }
 
+    public function test_support_waiting_status_matches_database_contract(): void
+    {
+        $emp = $this->newUser('customer_support');
+        $client = $this->newUser('user');
+        $ticket = $this->insertTicket($client['id']);
+
+        $res = $this->call($emp['token'], [
+            'console' => 'support',
+            'action' => 'ticket_status',
+            'conversation_id' => (string) $ticket,
+            'status' => 'waiting',
+        ]);
+
+        $this->assertSame(200, $res['status']);
+        $status = Database::getConnection()
+            ->query("SELECT status FROM support_conversations WHERE id = $ticket")
+            ->fetchColumn();
+        $this->assertSame('waiting', $status);
+
+        $invalid = $this->call($emp['token'], [
+            'console' => 'support',
+            'action' => 'ticket_status',
+            'conversation_id' => (string) $ticket,
+            'status' => 'pending',
+        ]);
+        $this->assertSame(400, $invalid['status']);
+    }
+
     public function test_risk_suspend_unsuspend_and_risk_level(): void
     {
         $emp    = $this->newUser('risk_fraud');
@@ -291,6 +317,7 @@ final class StaffActionsTest extends TestCase
     {
         $emp     = $this->newUser('business_manager');
         $company = $this->newUser('user', 'business');
+        $kybId = $this->insertKyc($company['id'], 'pending', 'company');
 
         $res = $this->call($emp['token'], [
             'console' => 'business',
@@ -300,12 +327,15 @@ final class StaffActionsTest extends TestCase
         $this->assertSame(200, $res['status']);
         $status = Database::getConnection()->query("SELECT kyb_status FROM users WHERE id = {$company['id']}")->fetchColumn();
         $this->assertSame('verified', $status);
+        $verification = Database::getConnection()->query("SELECT status FROM kyc_verifications WHERE id = $kybId")->fetchColumn();
+        $this->assertSame('verified', $verification);
     }
 
     public function test_business_kyb_reject_requires_reason(): void
     {
         $emp     = $this->newUser('business_manager');
         $company = $this->newUser('user', 'business');
+        $kybId = $this->insertKyc($company['id'], 'pending', 'company');
 
         $res = $this->call($emp['token'], [
             'console' => 'business',
@@ -323,5 +353,7 @@ final class StaffActionsTest extends TestCase
         $this->assertSame(200, $res['status']);
         $status = Database::getConnection()->query("SELECT kyb_status FROM users WHERE id = {$company['id']}")->fetchColumn();
         $this->assertSame('rejected', $status);
+        $verification = Database::getConnection()->query("SELECT status FROM kyc_verifications WHERE id = $kybId")->fetchColumn();
+        $this->assertSame('rejected', $verification);
     }
 }

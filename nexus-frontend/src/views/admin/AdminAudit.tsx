@@ -35,11 +35,11 @@ export default function AdminAudit() {
         <Table
           head={['Heure', 'Acteur', 'Action', 'Entité', 'IP']}
           rows={filtered.map((r) => [
-            <span style={{ fontSize: 11.5, color: 'var(--text-mid)' }}>{fmtDate(r.created_at)}</span>,
-            <span style={{ color: 'var(--text-bright)' }}>{r.actor ?? '—'}</span>,
-            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--cyan2)' }}>{r.action}</span>,
-            <span style={{ textTransform: 'capitalize' }}>{r.entity_type ?? '—'}</span>,
-            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>{r.ip_address ?? '—'}</span>,
+            <span key="date" style={{ fontSize: 11.5, color: 'var(--text-mid)' }}>{fmtDate(r.created_at)}</span>,
+            <span key="actor" style={{ color: 'var(--text-bright)' }}>{r.actor ?? '—'}</span>,
+            <span key="action" style={{ fontFamily: 'var(--font-mono)', color: 'var(--cyan2)' }}>{r.action}</span>,
+            <span key="entity" style={{ textTransform: 'capitalize' }}>{r.entity_type ?? '—'}</span>,
+            <span key="ip" style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>{r.ip_address ?? '—'}</span>,
           ])}
           empty={filter ? 'Aucun événement pour ce filtre.' : 'Aucun événement.'}
         />

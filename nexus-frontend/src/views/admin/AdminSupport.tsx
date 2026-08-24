@@ -27,6 +27,7 @@ export default function AdminSupport() {
     if (!activeId) return;
     let alive = true;
     const tick = async () => {
+      if (document.hidden) return;
       const res = await apiSupportMessages(activeId, lastMsgId.current);
       if (alive && res.success && res.data) {
         const items = res.data.items;

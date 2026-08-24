@@ -117,7 +117,7 @@ export default function DashboardPage({ mode }: DashboardProps) {
     if (actRes.success && actRes.data) setActivity(actRes.data);
     if (ratesRes.success && ratesRes.data) setRates(ratesRes.data);
     setLoading(false);
-  }, [period]);
+  }, [period, t]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 

@@ -638,7 +638,7 @@ export default function SendPage() {
       }
     }
     return errors;
-  }, [step, amount, fundingType, sourceCurrency, wallets, originCountry, destCountry, destCurrency, receivingMethod, beneficiary, t, locale]);
+  }, [step, amount, fundingType, sourceCurrency, wallets, destCountry, destCurrency, receivingMethod, beneficiary, t, locale]);
 
   const [errors, setErrors] = useState<FormErrors>({});
 

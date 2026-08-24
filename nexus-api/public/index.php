@@ -190,6 +190,7 @@ $router->get('/control/credentials', [ControlCenterController::class, 'credentia
 $router->get('/control/public-keys', [ControlCenterController::class, 'publicKeys']);
 $router->get('/control/kyc', [ControlCenterController::class, 'kyc']);
 $router->get('/control/webhooks', [ControlCenterController::class, 'webhooks']);
+$router->get('/control/status/sources', [ControlCenterController::class, 'sourceStatuses']);
 $router->get('/control/audit', [ControlCenterController::class, 'audit']);
 $router->get('/control/clients', [ControlCenterController::class, 'clients']);
 $router->get('/control/clients/linked', [ControlCenterController::class, 'linkedClients']);

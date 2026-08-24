@@ -68,7 +68,7 @@ export default function InternalChat({ myId }: { myId: number }) {
       if (res.success && res.data) setChats(res.data.items);
       setLoading(false);
     })();
-    const poll = window.setInterval(() => { void loadChats(); }, 5000);
+    const poll = window.setInterval(() => { if (!document.hidden) void loadChats(); }, 5000);
     return () => { alive = false; window.clearInterval(poll); };
   }, [loadChats]);
 
@@ -79,7 +79,7 @@ export default function InternalChat({ myId }: { myId: number }) {
     lastMsgIdRef.current = 0;
     void loadMessages(activeId, 0);
     const poll = window.setInterval(() => {
-      if (activeId !== null) void loadMessages(activeId, lastMsgIdRef.current);
+      if (!document.hidden && activeId !== null) void loadMessages(activeId, lastMsgIdRef.current);
     }, 3000);
     return () => window.clearInterval(poll);
   }, [activeId, loadMessages]);

@@ -13,30 +13,14 @@ import AdminTechnical from './AdminTechnical';
 import AdminTreasury from './AdminTreasury';
 import AdminSecurity from './AdminSecurity';
 import AdminSupport from './AdminSupport';
+import AdminEmployees from './AdminEmployees';
+import AdminSettings from './AdminSettings';
+import { AdminLinkedAccounts, AdminMaintenance, AdminWebhooks } from './AdminControlSurfaces';
 import { VolumeAreaChart, TransactionsStackChart, AssetDonut, StatusDonut, ProviderTopChart, AuditBarChart } from './CockpitCharts';
 import { Row, Panel, fmtMoney } from './adminUi';
 import { motion } from 'framer-motion';
-import { getToken } from '../../api/client';
+import { apiAdminOverview, type AdminOverviewData } from '../../api/client';
 import { HoverCard, AnimatedNumber, SectionTransition, RevealGroup, AnimatedTitle, LivePulse } from '../../components/anim/Premium';
-
-interface AdminOverview {
-  accounts: { total: number; personal: number; business: number; active: number; pending: number; suspended: number; connect: number };
-  wallets: number;
-  assets: { EUR: string; USD: string; XAF: string };
-  transactions: { total: number; completed: number; failed: number; pending: number; processing: number; volume_xaf: number };
-  kyc: { total: number; pending: number; approved: number; rejected: number };
-  providers: { total: number; configured: number };
-  recent_activity: Array<{ action: string; count: number }>;
-  series: {
-    transactions: Array<{ date: string; count: number }>;
-    volume_eur: Array<{ date: string; volume: number }>;
-    audit: Array<{ date: string; count: number }>;
-  };
-  status_breakdown: Array<{ status: string; count: number }>;
-  provider_top: Array<{ provider: string; count: number }>;
-  generated_at: string;
-}
-
 
 function Num({ v, suffix = '', c, size = 26 }: { v: number; suffix?: string; c?: string; size?: number }) {
   return (
@@ -59,18 +43,14 @@ function Card({ title, icon, children, index = 0, glow }: { title: string; icon?
 }
 
 export default function SuperAdminDashboard() {
-  const [ov, setOv] = useState<AdminOverview | null>(null);
+  const [ov, setOv] = useState<AdminOverviewData | null>(null);
   const [state, setState] = useState<'loading' | 'error' | 'ready'>('loading');
   const [section, setSection] = useState('overview');
 
   const load = useCallback(async () => {
     setState('loading');
-    try {
-      const res = await fetch('/api/admin/overview', {
-        headers: { Authorization: `Bearer ${getToken() ?? ''}` },
-      }).then((r) => r.json());
-      if (res.success && res.data) { setOv(res.data); setState('ready'); } else setState('error');
-    } catch { setState('error'); }
+    const res = await apiAdminOverview();
+    if (res.success && res.data) { setOv(res.data); setState('ready'); } else setState('error');
   }, []);
   useEffect(() => { void load(); }, [load]);
 
@@ -82,14 +62,14 @@ export default function SuperAdminDashboard() {
 
   return (
     <AdminLayout active={section} onNavigate={setSection}>
-      {state === 'loading' && <div className="card" style={{ padding: 50, textAlign: 'center' }}><div className="nexus-spinner" /><p style={{ marginTop: 14, color: 'var(--text-mid)' }}>Chargement…</p></div>}
-      {state === 'error' && <div className="card card-hi-g" style={{ padding: 40, textAlign: 'center' }}>Impossible de charger les données.</div>}
+      {section === 'overview' && state === 'loading' && <div className="card" style={{ padding: 50, textAlign: 'center' }}><div className="nexus-spinner" /><p style={{ marginTop: 14, color: 'var(--text-mid)' }}>Chargement…</p></div>}
+      {section === 'overview' && state === 'error' && <div className="card card-hi-g" style={{ padding: 40, textAlign: 'center' }}>Impossible de charger la vue d'ensemble. <button className="btn btn-ghost" onClick={() => void load()}>Réessayer</button></div>}
 
-      {state === 'ready' && ov && (
+      {(section !== 'overview' || (state === 'ready' && ov)) && (
         <SectionTransition id={section}>
         <div className="page">
           {/* ═══ VUE D'ENSEMBLE — cockpit ═══ */}
-          {section === 'overview' && (
+          {section === 'overview' && ov && (
             <>
               <Header section="overview" title={<AnimatedTitle text="Vue d'ensemble" />} desc="Cockpit temps réel de Nexus Technologies — activité, liquidité et santé de la plateforme." />
 
@@ -160,12 +140,12 @@ export default function SuperAdminDashboard() {
           {section === 'accounts' && (
             <>
               <Header title="Comptes" desc="Tous les clients Nexus classés par secteur (Personnel / Business). Cliquez sur un compte pour le détail complet." />
-              <div className="g4" style={{ marginBottom: 20 }}>
+              {ov && <div className="g4" style={{ marginBottom: 20 }}>
                 <Card title="Total" icon="👥"><Num v={ov.accounts.total} /></Card>
                 <Card title="Personnel" icon="👤"><Num v={ov.accounts.personal} /></Card>
                 <Card title="Business" icon="🏢"><Num v={ov.accounts.business} /></Card>
                 <Card title="Connect" icon="🔌"><Num v={ov.accounts.connect} /></Card>
-              </div>
+              </div>}
               <AdminAccounts />
             </>
           )}
@@ -174,12 +154,12 @@ export default function SuperAdminDashboard() {
           {section === 'transactions' && (
             <>
               <Header title="Transactions" desc="Registre détaillé des opérations avec filtres (statut, devise, type, recherche)." />
-              <div className="g4" style={{ marginBottom: 20 }}>
+              {ov && <div className="g4" style={{ marginBottom: 20 }}>
                 <Card title="Total" icon="🔄"><Num v={ov.transactions.total} /></Card>
                 <Card title="Volume (XAF)" icon="💰"><Num v={ov.transactions.volume_xaf} /></Card>
                 <Card title="Taux de succès" icon="📈"><Num v={ov.transactions.total > 0 ? Math.round((ov.transactions.completed / ov.transactions.total) * 100) : 0} suffix="%" c="var(--green)" /></Card>
                 <Card title="En cours" icon="⚙️"><Num v={ov.transactions.processing + ov.transactions.pending} c="var(--gold)" /></Card>
-              </div>
+              </div>}
               <AdminTransactions />
             </>
           )}
@@ -193,7 +173,7 @@ export default function SuperAdminDashboard() {
           )}
 
           {/* ═══ TRÉSORERIE ═══ */}
-          {section === 'treasury' && (
+          {section === 'treasury' && ov && (
             <>
               <Header title="Trésorerie" desc="Liquidité et actifs par devise, évolution du volume traité." />
               <AdminTreasury assets={ov.assets} series={ov.series} />
@@ -224,6 +204,27 @@ export default function SuperAdminDashboard() {
             </>
           )}
 
+          {section === 'webhooks' && (
+            <>
+              <Header title="Webhooks providers & KYC" desc="Journal normalisé des événements entrants, sans payload ni secret." />
+              <AdminWebhooks />
+            </>
+          )}
+
+          {section === 'linked-accounts' && (
+            <>
+              <Header title="Comptes liés" desc="Signaux réels de rapprochement par e-mail ou téléphone normalisé." />
+              <AdminLinkedAccounts />
+            </>
+          )}
+
+          {section === 'employees' && (
+            <>
+              <Header title="Employés" desc="Comptes internes, rôles plateforme, invitations et activation." />
+              <AdminEmployees />
+            </>
+          )}
+
           {/* ═══ SUPPORT ═══ */}
           {section === 'support' && (
             <>
@@ -248,6 +249,13 @@ export default function SuperAdminDashboard() {
             </>
           )}
 
+          {section === 'maintenance' && (
+            <>
+              <Header title="Maintenance" desc="Diagnostic et réconciliation explicite des paiements immobilisés dans l'environnement actif." />
+              <AdminMaintenance />
+            </>
+          )}
+
           {/* ═══ AUDIT ═══ */}
           {section === 'audit' && (
             <>
@@ -260,12 +268,7 @@ export default function SuperAdminDashboard() {
           {section === 'settings' && (
             <>
               <Header title="Paramètres" desc="Configuration de la plateforme Nexus." />
-              <div className="card card-hi-c" style={{ padding: 24, maxWidth: 560 }}>
-                <Row k="Environnement" v="Sandbox" />
-                <Row k="Mode strict" v="Désactivé" />
-                <Row k="Providers configurés" v={ov.providers.configured} />
-                <Row k="Dernière génération" v={new Date(ov.generated_at).toLocaleString('fr-FR')} />
-              </div>
+              <AdminSettings />
             </>
           )}
         </div>

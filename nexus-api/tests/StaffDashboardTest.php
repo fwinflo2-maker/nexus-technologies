@@ -103,9 +103,35 @@ final class StaffDashboardTest extends TestCase
         $this->assertArrayHasKey('operations', $data['sections']);
         $this->assertArrayHasKey('counters', $data['sections']['operations']);
         $this->assertArrayHasKey('queue', $data['sections']['operations']);
+        $this->assertSame('sandbox', $data['environment']);
+        $this->assertSame([], $data['sections']['operations']['actions']);
+        $this->assertArrayHasKey('generated_at', $data);
         // Un opérateur ne reçoit PAS les sections d'autres consoles.
         $this->assertArrayNotHasKey('compliance', $data['sections']);
         $this->assertArrayNotHasKey('finance', $data['sections']);
+    }
+
+    public function test_operations_queue_is_scoped_to_execution_environment(): void
+    {
+        $employee = $this->newUser('operations_manager');
+        $client = $this->newUser('user');
+        $pdo = Database::getConnection();
+        $insert = $pdo->prepare(
+            "INSERT INTO transactions
+                (user_id, type, direction, label, amount, currency, amount_ref, ref_currency, amount_xaf, status, environment)
+             VALUES
+                (:user, 'send', 'out', :label, 1, 'EUR', 1, 'EUR', 655.96, 'pending', :environment)"
+        );
+        $insert->execute(['user' => $client['id'], 'label' => 'scope-sandbox', 'environment' => 'sandbox']);
+        $sandboxId = (int) $pdo->lastInsertId();
+        $insert->execute(['user' => $client['id'], 'label' => 'scope-production', 'environment' => 'production']);
+        $productionId = (int) $pdo->lastInsertId();
+
+        $res = $this->call($employee['token']);
+        $ids = array_map('intval', array_column($res['json']['data']['sections']['operations']['queue'], 'id'));
+
+        $this->assertContains($sandboxId, $ids);
+        $this->assertNotContains($productionId, $ids);
     }
 
     public function test_compliance_officer_gets_compliance_section(): void
@@ -143,6 +169,37 @@ final class StaffDashboardTest extends TestCase
         $this->assertArrayHasKey('support', $data['sections']);
         $this->assertArrayHasKey('counters', $data['sections']['support']);
         $this->assertArrayHasKey('recent', $data['sections']['support']);
+        $this->assertArrayHasKey('waiting', $data['sections']['support']['counters']);
+    }
+
+    /**
+     * @dataProvider remainingDashboardRoles
+     */
+    public function test_each_remaining_role_gets_compatible_real_section(
+        string $role,
+        string $dashboard,
+        array $requiredKeys
+    ): void {
+        $employee = $this->newUser($role);
+        $res = $this->call($employee['token']);
+
+        $this->assertSame(200, $res['status']);
+        $data = $res['json']['data'];
+        $this->assertSame($dashboard, $data['dashboard']);
+        $this->assertSame([$dashboard], array_keys($data['sections']));
+        foreach ($requiredKeys as $key) {
+            $this->assertArrayHasKey($key, $data['sections'][$dashboard]);
+        }
+    }
+
+    public static function remainingDashboardRoles(): array
+    {
+        return [
+            'finance' => ['treasury_manager', 'finance', ['assets', 'transactions', 'status_breakdown', 'sources']],
+            'risk' => ['risk_analyst', 'risk', ['risk', 'flagged', 'recent_failed', 'by_provider']],
+            'technical' => ['technical_admin', 'technical', ['services', 'webhooks', 'credentials', 'db_ok', 'sources']],
+            'business' => ['business_manager', 'business', ['accounts', 'volume_xaf', 'top']],
+        ];
     }
 
     public function test_executive_returns_note_not_sensitive_data(): void

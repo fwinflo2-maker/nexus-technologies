@@ -43,12 +43,12 @@ export default function AdminRisk() {
           <Table
             head={['ID', 'Client', 'Libellé', 'Montant', 'Provider', 'Heure']}
             rows={recent.map((t) => [
-              <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>#{t.id}</span>,
-              <span style={{ color: 'var(--text-bright)' }}>{t.user_email ?? '—'}</span>,
-              <span>{t.label}</span>,
-              <span style={{ fontFamily: 'var(--font-mono)' }}>{fmtMoney(Number(t.amount), t.currency)}</span>,
-              <span style={{ textTransform: 'capitalize' }}>{t.provider ?? '—'}</span>,
-              <span style={{ fontSize: 11.5, color: 'var(--text-mid)' }}>{fmtDate(t.created_at)}</span>,
+              <span key="id" style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>#{t.id}</span>,
+              <span key="client" style={{ color: 'var(--text-bright)' }}>{t.user_email ?? '—'}</span>,
+              <span key="label">{t.label}</span>,
+              <span key="amount" style={{ fontFamily: 'var(--font-mono)' }}>{fmtMoney(Number(t.amount), t.currency)}</span>,
+              <span key="provider" style={{ textTransform: 'capitalize' }}>{t.provider ?? '—'}</span>,
+              <span key="date" style={{ fontSize: 11.5, color: 'var(--text-mid)' }}>{fmtDate(t.created_at)}</span>,
             ])}
           />
         </div>
