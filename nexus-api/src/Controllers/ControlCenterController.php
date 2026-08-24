@@ -321,6 +321,7 @@ final class ControlCenterController
                     (SELECT COUNT(*) FROM transactions t WHERE t.user_id = u.id) AS tx_count
              FROM users u
              LEFT JOIN wallets w ON w.user_id = u.id
+             WHERE ' . PlatformRole::sqlClientOnly('u') . '
              GROUP BY u.id
              ORDER BY u.created_at DESC'
         );
@@ -397,6 +398,9 @@ final class ControlCenterController
 
         if ($row === false) {
             Response::notFound('Client introuvable.');
+        }
+        if (self::isInternalAccount($pdo, $row)) {
+            Response::forbidden('Les comptes internes sont gérés par le module Employés.');
         }
 
         // Comptes de paiement (avec adresse/ville déchiffrées).
@@ -530,7 +534,7 @@ final class ControlCenterController
                 $pdo->rollBack();
                 Response::notFound('Client introuvable.');
             }
-            if (PlatformRole::of($target) !== PlatformRole::USER) {
+            if (self::isInternalAccount($pdo, $target)) {
                 $pdo->rollBack();
                 Response::forbidden('Les comptes internes sont gérés par le module Employés.');
             }
@@ -569,9 +573,9 @@ final class ControlCenterController
         self::authorize($request, 'superadmin');
         $pdo = Database::getConnection();
         $rows = $pdo->query(
-            "SELECT id, full_name, email, phone, status FROM users
-             WHERE COALESCE(platform_role, 'user') = 'user'
-             ORDER BY id ASC"
+            'SELECT id, full_name, email, phone, status FROM users
+             WHERE ' . PlatformRole::sqlClientOnly('') . '
+             ORDER BY id ASC'
         )->fetchAll();
 
         $byEmail = [];
@@ -861,16 +865,16 @@ final class ControlCenterController
             Response::badRequest('Un motif de rejet est requis.');
         }
         $stmt = $pdo->prepare(
-            "SELECT u.id, k.id AS verification_id, k.status
+            'SELECT u.id, k.id AS verification_id, k.status
              FROM users u
              JOIN kyc_verifications k
                ON k.user_id = u.id
-              AND k.subject_type = 'company'
+              AND k.subject_type = \'company\'
               AND k.environment = :environment
              WHERE u.id = :id
-               AND u.account_type = 'business'
-               AND COALESCE(u.platform_role,'user') = 'user'
-             FOR UPDATE"
+               AND u.account_type = \'business\'
+               AND ' . PlatformRole::sqlClientOnly('u') . '
+             FOR UPDATE'
         );
         $stmt->execute(['id' => $id, 'environment' => $environment]);
         $company = $stmt->fetch();
@@ -936,6 +940,17 @@ final class ControlCenterController
             'status' => $status,
             'checked_at' => gmdate(DATE_ATOM),
         ];
+    }
+
+    private static function isInternalAccount(\PDO $pdo, array $row): bool
+    {
+        if (PlatformRole::of($row) !== PlatformRole::USER) {
+            return true;
+        }
+        $stmt = $pdo->prepare('SELECT 1 FROM employees WHERE user_id = :id LIMIT 1');
+        $stmt->execute(['id' => (int) $row['id']]);
+
+        return $stmt->fetchColumn() !== false;
     }
 
     private static function normalizedEmail(string $email): string

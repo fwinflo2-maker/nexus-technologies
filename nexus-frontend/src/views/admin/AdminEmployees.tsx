@@ -5,6 +5,7 @@ import {
   apiControlSetEmployeeStatus, apiControlInviteEmployee,
   type EmployeeRow, type EmployeeInvite,
 } from '../../api/client';
+import { ROLE_CATALOG } from '../../lib/platformRoles';
 import { Stat, Badge } from './adminUi';
 
 /**
@@ -15,19 +16,6 @@ import { Stat, Badge } from './adminUi';
  * statut invité/actif/désactivé. Aucun mot de passe ne transite par l'admin :
  * l'employé est invité via un lien d'activation (jeton 30 min, usage unique).
  */
-
-export const ROLE_CATALOG: Array<{ value: string; label: string; dept: string; desc: string }> = [
-  { value: 'operations_manager', label: 'Operations Manager', dept: 'Operations', desc: 'Pilotage des opérations de paiement' },
-  { value: 'treasury_manager', label: 'Treasury Manager', dept: 'Finance & Trésorerie', desc: 'Liquidités, trésorerie et règlements' },
-  { value: 'compliance_officer', label: 'Compliance Officer', dept: 'Compliance', desc: 'KYC/KYB et conformité réglementaire' },
-  { value: 'risk_analyst', label: 'Risk Analyst', dept: 'Risque & Fraude', desc: 'Analyse de risque et prévention de la fraude' },
-  { value: 'provider_manager', label: 'Provider Manager', dept: 'Providers', desc: 'Corridors de paiement et partenaires' },
-  { value: 'customer_support', label: 'Customer Support', dept: 'Support Client', desc: 'Assistance client de premier niveau' },
-  { value: 'security_admin', label: 'Security Admin', dept: 'Sécurité', desc: 'Administration de la sécurité de la plateforme' },
-  { value: 'technical_admin', label: 'Technical Admin', dept: 'Technique & Ingénierie', desc: 'Administration technique et infrastructure' },
-  { value: 'business_manager', label: 'Business Manager', dept: 'Business Development', desc: 'Partenariats et développement commercial' },
-  { value: 'superadmin', label: 'Super Admin', dept: 'Direction', desc: 'Privilège total sur la plateforme' },
-];
 
 const DEPARTMENTS = Array.from(new Set(ROLE_CATALOG.map((r) => r.dept)));
 const ROLE_MAP = Object.fromEntries(ROLE_CATALOG.map((r) => [r.value, r]));
@@ -305,6 +293,7 @@ export default function AdminEmployees() {
                           <div>
                             <div style={{ fontWeight: 600, color: 'var(--text-bright)', fontSize: 13 }}>{r.full_name}</div>
                             <div style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>{r.email}</div>
+                            <div style={{ fontSize: 10.5, color: 'var(--cyan2)', marginTop: 2 }}>Employé interne · pas un compte client</div>
                           </div>
                         </div>
                       </td>

@@ -218,6 +218,7 @@ echo "kyc_verifications: " . count($kycs) . "\n";
 // Employés internes
 // ---------------------------------------------------------------------------
 $emps = [
+    [3, 'Compliance', 'compliance_officer', '["compliance"]', 'active'],
     [7, 'Operations', 'operations_manager', '["operations"]', 'active'],
     [8, 'Risk', 'risk_analyst', '["risk"]', 'active'],
 ];

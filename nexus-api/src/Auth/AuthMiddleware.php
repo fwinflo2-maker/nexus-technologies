@@ -86,6 +86,8 @@ final class AuthMiddleware
                 throw new HttpException(403, 'Compte indisponible', 'ACCOUNT_RESTRICTED');
             }
 
+            $user = PlatformIdentity::resolve($pdo, $user);
+
             $request->setAttribute('user', $user);
             $request->setAttribute('jwt_payload', $payload);
 

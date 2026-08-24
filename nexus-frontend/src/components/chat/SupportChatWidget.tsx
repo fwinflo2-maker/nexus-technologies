@@ -201,16 +201,19 @@ export default function SupportChatWidget() {
     }
   }
 
-  async function sendQuick(q: string) {
+  async function sendQuick(q: string, chip?: string) {
     if (sending) return;
-    setDraft(q);
+    setDraft('');
     setSending(true);
     const prior = historyPayload(botHistory);
     const history = [...botHistory, { sender: 'customer' as const, body: q }];
     setBotHistory(history);
-    const res = await apiSupportBot(q, prior, lang);
+    const res = await apiSupportBot(q, prior, lang, chip);
     setSending(false);
-    if (!res.success || !res.data) return;
+    if (!res.success || !res.data) {
+      setBotHistory((h) => [...h, { sender: 'bot', body: t('chat.escalate') }]);
+      return;
+    }
     const r = res.data;
     const botMsg = r.reply ?? (r.escalate ? t('chat.escalate') : '');
     if (botMsg) setBotHistory((h) => [...h, { sender: 'bot', body: botMsg, quickReplies: r.quick_replies ?? [] }]);
@@ -418,13 +421,34 @@ export default function SupportChatWidget() {
             <div className="chat-panel-body" ref={scrollRef}>
               {mode === 'bot' ? (
                 <div className="chat-thread">
-                  {[{ sender: 'bot' as const, body: t('chat.welcome'), quickReplies: [t('chat.quick.send'), t('chat.quick.balance'), t('chat.quick.kyc'), t('chat.quick.fees'), t('chat.quick.agent')] }, ...botHistory].map((m, i) => (
+                  {[{
+                    sender: 'bot' as const,
+                    body: t('chat.welcome'),
+                    quickReplies: [
+                      { id: 'transfer', label: t('chat.quick.send') },
+                      { id: 'balance', label: t('chat.quick.balance') },
+                      { id: 'kyc', label: t('chat.quick.kyc') },
+                      { id: 'fees', label: t('chat.quick.fees') },
+                      { id: 'human', label: t('chat.quick.agent') },
+                    ],
+                  }, ...botHistory.map((m) => ({
+                    ...m,
+                    quickReplies: (m.quickReplies ?? []).map((label) => ({ id: undefined as string | undefined, label })),
+                  }))].map((m, i) => (
                     <div key={i} className={`chat-bubble ${m.sender === 'customer' ? 'mine' : 'bot'}`}>
                       <ChatRichBody text={m.body} />
                       {m.sender === 'bot' && m.quickReplies && m.quickReplies.length > 0 && (
                         <div className="chat-quick">
                           {m.quickReplies.map((q, j) => (
-                            <button key={j} className="chat-quick-btn" onClick={() => sendQuick(q)}>{q}</button>
+                            <button
+                              key={j}
+                              type="button"
+                              className="chat-quick-btn"
+                              disabled={sending}
+                              onClick={() => void sendQuick(q.label, q.id)}
+                            >
+                              {q.label}
+                            </button>
                           ))}
                         </div>
                       )}

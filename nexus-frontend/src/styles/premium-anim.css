@@ -282,5 +282,6 @@
   border-radius: 16px; padding: 6px 12px; font-size: 12px; cursor: pointer; font-weight: 600;
   transition: all 0.15s ease;
 }
-.chat-quick-btn:hover { background: var(--cyan); color: #fff; transform: translateY(-1px); }
-.chat-quick-btn:active { transform: scale(0.96); }
+.chat-quick-btn:hover:not(:disabled) { background: var(--cyan); color: #fff; transform: translateY(-1px); }
+.chat-quick-btn:active:not(:disabled) { transform: scale(0.96); }
+.chat-quick-btn:disabled { opacity: 0.55; cursor: wait; }

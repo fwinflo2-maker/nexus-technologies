@@ -241,6 +241,82 @@ final class PlatformRole
         ];
     }
 
+    public static function isKnown(?string $role): bool
+    {
+        return is_string($role) && in_array($role, self::all(), true);
+    }
+
+    public static function isInternal(?string $role): bool
+    {
+        return self::isKnown($role) && $role !== self::USER;
+    }
+
+    /** Compte client (personnel ou business), jamais un exploitant interne. */
+    public static function isClient(?array $user): bool
+    {
+        return self::of($user) === self::USER;
+    }
+
+    /**
+     * Prédicat SQL : utilisateurs clients uniquement.
+     * Exclut les rôles internes ET toute ligne `employees`, même si
+     * `users.platform_role` est encore resté à `user`.
+     */
+    public static function sqlClientOnly(string $alias = 'u'): string
+    {
+        $col = $alias === '' ? 'platform_role' : $alias . '.platform_role';
+        $id = $alias === '' ? 'id' : $alias . '.id';
+
+        return "COALESCE({$col}, 'user') = 'user'"
+            . " AND NOT EXISTS (SELECT 1 FROM employees emp_iso WHERE emp_iso.user_id = {$id})";
+    }
+
+    /**
+     * Super Admin, employés et rôles d'exploitation.
+     * Distinct de `account_type`, qui décrit uniquement un client.
+     */
+    public static function isOperator(?array $user): bool
+    {
+        return self::isInternal(self::of($user));
+    }
+
+    /** @return 'client'|'employee'|'superadmin' */
+    public static function identityKind(?array $user): string
+    {
+        $role = self::of($user);
+        if ($role === self::SUPERADMIN) {
+            return 'superadmin';
+        }
+        if (self::isInternal($role)) {
+            return 'employee';
+        }
+        return 'client';
+    }
+
+    /**
+     * Surfaces wallet/dashboard/KYC client : interdites aux employés.
+     * Le superadmin conserve l'accès pour les outils embarqués de la console.
+     */
+    public static function requireClientSurface(?array $user, bool $allowSuperadmin = true): void
+    {
+        $role = self::of($user);
+        if ($allowSuperadmin && $role === self::SUPERADMIN) {
+            return;
+        }
+        if ($role !== self::USER) {
+            throw new HttpException(403, 'Surface client réservée aux comptes clients.', 'CLIENT_SURFACE_FORBIDDEN');
+        }
+    }
+
+    /** @return list<string> */
+    public static function employeeRoles(): array
+    {
+        return array_values(array_filter(
+            self::all(),
+            static fn (string $role): bool => $role !== self::USER
+        ));
+    }
+
     /** @param array<string,mixed>|null $user */
     public static function isSuperadmin(?array $user): bool
     {

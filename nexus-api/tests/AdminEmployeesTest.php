@@ -157,6 +157,22 @@ final class AdminEmployeesTest extends TestCase
         $this->assertFalse($res['json']['success']);
     }
 
+    public function test_every_platform_employee_role_can_be_created(): void
+    {
+        foreach (\Nexus\Execution\PlatformRole::employeeRoles() as $role) {
+            $employeeId = $this->newEmployee($role, 'Role catalogue');
+            $stmt = Database::getConnection()->prepare(
+                'SELECT e.role, u.platform_role
+                 FROM employees e JOIN users u ON u.id = e.user_id
+                 WHERE e.id = :id'
+            );
+            $stmt->execute(['id' => $employeeId]);
+            $row = $stmt->fetch();
+            $this->assertSame($role, $row['role'], $role);
+            $this->assertSame($role, $row['platform_role'], $role);
+        }
+    }
+
     public function test_create_employee(): void
     {
         $employeeId = $this->newEmployee();
@@ -197,7 +213,7 @@ final class AdminEmployeesTest extends TestCase
         // En dev, le jeton brut est retourné pour être relayé manuellement.
         $token = $res['json']['data']['reset_token'];
         $this->assertIsString($token);
-        $this->assertSame('/forgot-password?token=' . $token, $res['json']['data']['reset_url']);
+        $this->assertSame('/forgot-password?token=' . $token . '&portal=staff', $res['json']['data']['reset_url']);
 
         // Le jeton est stocké HACHÉ (jamais en clair) et expirera.
         $pdo = Database::getConnection();

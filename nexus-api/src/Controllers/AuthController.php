@@ -6,9 +6,11 @@ namespace Nexus\Controllers;
 
 use Nexus\Auth\AuthMiddleware;
 use Nexus\Auth\Jwt;
+use Nexus\Auth\PlatformIdentity;
 use Nexus\Core\Database;
 use Nexus\Core\Request;
 use Nexus\Core\Response;
+use Nexus\Execution\PlatformRole;
 use PDOException;
 
 // Note : AccountController est importé via autoloader, pas besoin de use
@@ -234,6 +236,12 @@ final class AuthController
 
             Response::unauthorized('Identifiants incorrects.');
         }
+
+        // `account_type` décrit le client, jamais ses privilèges. Pour un
+        // employé actif, la relation employees fournit le rôle interne
+        // effectif. Les rôles inconnus et employés inactifs sont refusés.
+        $user = PlatformIdentity::resolve($pdo, $user);
+        self::assertLoginAudience($request, $user);
 
         // Succès : purge des tentatives + trace d'audit.
         $pdo->prepare('DELETE FROM login_attempts WHERE email = :email')->execute(['email' => $identifier]);
@@ -531,6 +539,67 @@ final class AuthController
 
         self::audit($userId, 'auth.password_reset', 'users', $userId, ['completed' => true], $request);
 
-        Response::success(['message' => 'Mot de passe mis à jour. Vous pouvez vous connecter.']);
+        $account = $pdo->prepare(
+            'SELECT u.platform_role, e.role AS employee_role
+             FROM users u
+             LEFT JOIN employees e ON e.user_id = u.id
+             WHERE u.id = :id
+             LIMIT 1'
+        );
+        $account->execute(['id' => $userId]);
+        $row = $account->fetch() ?: [];
+        $effectiveRole = (string) (($row['employee_role'] ?? '') !== ''
+            ? $row['employee_role']
+            : ($row['platform_role'] ?? PlatformRole::USER));
+        $loginPath = self::loginPathForRole($effectiveRole);
+
+        Response::success([
+            'message' => 'Mot de passe mis à jour. Vous pouvez vous connecter.',
+            'login_path' => $loginPath,
+        ]);
+    }
+
+    /**
+     * Isole les portails : un employé ne doit jamais entrer par le login client,
+     * et un client ne doit jamais entrer par le login employé/admin.
+     *
+     * @param array<string,mixed> $user
+     */
+    private static function assertLoginAudience(Request $request, array $user): void
+    {
+        $audience = strtolower(trim((string) $request->input('audience', '')));
+        if ($audience === '') {
+            return;
+        }
+
+        $kind = PlatformRole::identityKind($user);
+        $allowed = match ($audience) {
+            'client' => $kind === 'client',
+            'staff' => $kind === 'employee',
+            'admin' => $kind === 'superadmin',
+            default => false,
+        };
+        if ($allowed) {
+            return;
+        }
+
+        $message = match ($audience) {
+            'client' => 'Ce compte est interne. Utilisez le portail employés ou Super Admin.',
+            'staff' => 'Ce portail est réservé aux employés internes.',
+            'admin' => 'Ce portail est réservé au Super Admin.',
+            default => 'Portail d\'authentification invalide.',
+        };
+        Response::error($message, 403, 'WRONG_PORTAL');
+    }
+
+    private static function loginPathForRole(string $role): string
+    {
+        if ($role === PlatformRole::SUPERADMIN) {
+            return '/admin-login';
+        }
+        if (PlatformRole::isInternal($role)) {
+            return '/staff-login';
+        }
+        return '/login';
     }
 }

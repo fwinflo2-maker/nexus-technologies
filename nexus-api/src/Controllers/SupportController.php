@@ -105,8 +105,9 @@ final class SupportController
         if ($lang === '') {
             $lang = 'fr';
         }
+        $chip = strtolower(trim((string) $request->input('chip', '')));
 
-        Response::success(self::analyzeBot($message, $history, is_array($user) ? $user : [], $lang));
+        Response::success(self::analyzeBot($message, $history, is_array($user) ? $user : [], $lang, $chip));
     }
 
     /**
@@ -603,11 +604,14 @@ final class SupportController
      * @param list<array{sender?:string,body?:string}> $history
      * @return array{reply:?string,escalate:bool,category:string,subject:string,intent:string,quick_replies:list<string>}
      */
-    private static function analyzeBot(string $body, array $history = [], array $user = [], string $lang = 'fr'): array
+    private static function analyzeBot(string $body, array $history = [], array $user = [], string $lang = 'fr', string $chip = ''): array
     {
         $pdo = Database::getConnection();
         $ctx = $user !== [] ? SupportBot::loadContext($pdo, $user) : [];
         $ctx['lang'] = $lang !== '' ? $lang : 'fr';
+        if ($chip !== '') {
+            $ctx['chip'] = $chip;
+        }
 
         return SupportBot::reply($body, $history, $ctx);
     }

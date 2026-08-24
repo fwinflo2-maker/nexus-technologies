@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { apiControlAccess, apiStaffChats, type InternalAccess } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
-import { ROLE_CATALOG } from '../admin/AdminEmployees';
+import { isInternalPlatformRole, ROLE_CATALOG } from '../../lib/platformRoles';
 import StaffDashboard from './StaffDashboard';
 import InternalChat from './InternalChat';
 import GearsBackground from '../../components/dashboard/GearsBackground';
@@ -80,8 +80,12 @@ export default function StaffHome() {
 
   useEffect(() => { void loadAccess(); }, [loadAccess]);
 
-  if (user && (user.platform_role ?? 'user') === 'user') {
-    return <Navigate to="/dashboard" replace />;
+  const isStaff = user?.identity_kind === 'employee' || isInternalPlatformRole(user?.platform_role);
+  if (!isStaff) {
+    if (user?.identity_kind === 'client' || user?.platform_role === 'user') {
+      return <Navigate to="/dashboard" replace />;
+    }
+    return <Navigate to="/staff-login" replace />;
   }
 
   const role = user?.platform_role ?? 'user';

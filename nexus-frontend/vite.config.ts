@@ -5,6 +5,9 @@ import react from '@vitejs/plugin-react'
 // Toutes les requêtes /api/* sont redirigées vers le backend PHP (XAMPP, port 8080).
 export default defineConfig({
   plugins: [react()],
+  optimizeDeps: {
+    include: ['jspdf', 'jspdf-autotable'],
+  },
   build: {
     rolldownOptions: {
       output: {

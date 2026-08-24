@@ -3,6 +3,7 @@ import {
   apiControlClients, apiControlClient, apiControlClientStatus,
   type ControlClient, type ControlClientDetail,
 } from '../../api/client';
+import AdminClientDossier, { type DossierSection } from './AdminClientDossier';
 
 const COUNTRY_NAME: Record<string, string> = {
   FR: 'France', CG: 'Congo', CD: 'RDC', CM: 'Cameroun', GA: 'Gabon',
@@ -32,13 +33,18 @@ function statusColor(s: string): string {
  * Clients classés par secteur (Personnel / Business), recherche + filtres,
  * et popup de détail au clic avec toutes les informations personnelles.
  */
-export default function AdminAccounts() {
+export default function AdminAccounts({
+  onOpenSection,
+}: {
+  onOpenSection?: (section: DossierSection) => void;
+}) {
   const [rows, setRows] = useState<ControlClient[]>([]);
   const [state, setState] = useState<'loading' | 'error' | 'ready'>('loading');
   const [query, setQuery] = useState('');
   const [sector, setSector] = useState<'all' | 'personal' | 'business'>('all');
-  const [status, setStatus] = useState<'all' | 'ACTIVE' | 'PENDING' | 'SUSPENDED'>('all');
+  const [status, setStatus] = useState<'all' | 'ACTIVE' | 'PENDING' | 'SUSPENDED' | 'CLOSED'>('all');
   const [detail, setDetail] = useState<ControlClientDetail | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [actionError, setActionError] = useState('');
 
@@ -51,17 +57,23 @@ export default function AdminAccounts() {
   useEffect(() => { void load(); }, [load]);
 
   const openDetail = async (id: number) => {
+    setDetailOpen(true);
+    setDetail(null);
+    setActionError('');
     setDetailLoading(true);
     const res = await apiControlClient(id);
     if (res.success && res.data) setDetail(res.data.client);
     setDetailLoading(false);
   };
 
-  const setClientStatus = async (client: ControlClientDetail, next: 'ACTIVE' | 'SUSPENDED') => {
-    const reason = next === 'SUSPENDED'
-      ? window.prompt(`Motif obligatoire pour suspendre ${client.full_name} :`)?.trim()
-      : '';
-    if (next === 'SUSPENDED' && !reason) return;
+  const closeDetail = () => {
+    setDetailOpen(false);
+    setDetail(null);
+    setActionError('');
+  };
+
+  const setClientStatus = async (client: ControlClientDetail, next: 'ACTIVE' | 'SUSPENDED' | 'CLOSED', reason: string) => {
+    if ((next === 'SUSPENDED' || next === 'CLOSED') && reason.trim() === '') return;
     setActionError('');
     const response = await apiControlClientStatus(client.id, next, reason);
     if (!response.success) {
@@ -102,6 +114,7 @@ export default function AdminAccounts() {
           <option value="ACTIVE">Actifs</option>
           <option value="PENDING">En attente</option>
           <option value="SUSPENDED">Suspendus</option>
+          <option value="CLOSED">Clôturés</option>
         </select>
         <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => void load()}>↻ Actualiser</button>
       </div>
@@ -129,10 +142,17 @@ export default function AdminAccounts() {
         </>
       )}
 
-      {/* ── Popup détail ── */}
-      {detail && (
-        <DetailPopup client={detail} loading={detailLoading} actionError={actionError}
-          onStatus={(next) => void setClientStatus(detail, next)} onClose={() => setDetail(null)} />
+      {detailOpen && (
+        <AdminClientDossier
+          client={detail}
+          loading={detailLoading}
+          actionError={actionError}
+          onStatus={(next, reason) => {
+            if (detail) void setClientStatus(detail, next, reason);
+          }}
+          onOpenSection={onOpenSection}
+          onClose={closeDetail}
+        />
       )}
     </div>
   );
@@ -179,130 +199,3 @@ function ClientCard({ c, onClick }: { c: ControlClient; onClick: () => void }) {
   );
 }
 
-function DetailPopup({ client, loading, actionError, onStatus, onClose }: {
-  client: ControlClientDetail;
-  loading: boolean;
-  actionError: string;
-  onStatus: (status: 'ACTIVE' | 'SUSPENDED') => void;
-  onClose: () => void;
-}) {
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 300, display: 'flex', justifyContent: 'flex-end' }} onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={{
-        width: 'min(560px, 96vw)', height: '100vh', background: 'var(--panel)', borderLeft: '1px solid var(--borderStrong, var(--border))',
-        padding: 24, overflowY: 'auto', position: 'relative', boxShadow: '-20px 0 60px rgba(0,0,0,0.5)',
-      }}>
-        <button onClick={onClose} style={{ position: 'absolute', top: 14, right: 14, border: 'none', background: 'transparent', color: 'var(--text-dim)', fontSize: 20, cursor: 'pointer' }}>✕</button>
-
-        {loading ? (
-          <div style={{ padding: 40, textAlign: 'center' }}><div className="nexus-spinner" /></div>
-        ) : (
-          <>
-            {/* En-tête */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
-              {client.avatar ? <img src={client.avatar} alt="" style={{ width: 56, height: 56, borderRadius: '50%', objectFit: 'cover' }} />
-                : <span style={{ fontSize: 34 }}>{client.account_type === 'business' ? '🏢' : '👤'}</span>}
-              <div>
-                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--text-bright)' }}>{client.full_name}</h2>
-                <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>{client.email} · {client.phone || '—'}</div>
-                <div style={{ fontSize: 12, color: statusColor(client.status), marginTop: 2 }}>{client.status} · KYC {client.kyc_level} · {client.account_type === 'business' ? 'Business' : 'Personnel'}</div>
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-              {client.status === 'SUSPENDED'
-                ? <button className="btn" onClick={() => onStatus('ACTIVE')}>Réactiver le client</button>
-                : <button className="btn btn-ghost" style={{ color: 'var(--red)' }} onClick={() => onStatus('SUSPENDED')}>Suspendre le client</button>}
-              {actionError && <span role="alert" style={{ color: 'var(--red)', fontSize: 12 }}>{actionError}</span>}
-            </div>
-
-            {/* Informations */}
-            <Section title="Informations">
-              <Row k="Type" v={client.account_type === 'business' ? 'Entreprise' : 'Personnel'} />
-              <Row k="Pays de résidence" v={countryLabel(client.country_of_residence)} />
-              <Row k="Téléphone" v={client.phone || '—'} />
-              <Row k="Adresse" v={client.address || '—'} />
-              <Row k="Ville" v={client.city || '—'} />
-              {client.postal_code && <Row k="Code postal" v={client.postal_code} />}
-              <Row k="Rôle plateforme" v={client.platform_role} />
-              <Row k="Membre depuis" v={new Date(client.created_at).toLocaleDateString('fr-FR')} />
-            </Section>
-
-            {/* Personnes physiques */}
-            {client.account_type !== 'business' && (client.birth_date || client.gender) && (
-              <Section title="Personne physique">
-                {client.birth_date && <Row k="Date de naissance" v={client.birth_date} />}
-                {client.gender && <Row k="Genre" v={client.gender} />}
-              </Section>
-            )}
-
-            {/* Entreprise */}
-            {client.account_type === 'business' && (
-              <Section title="Entreprise">
-                <Row k="Raison sociale" v={client.company_name || client.full_name} />
-                <Row k="Forme juridique" v={client.legal_form || '—'} />
-                <Row k="Immatriculation" v={client.company_registration_number || '—'} />
-                <Row k="Secteur d'activité" v={client.industry || '—'} />
-                <Row k="Taille" v={client.company_size || '—'} />
-                <Row k="Site web" v={client.website || '—'} />
-              </Section>
-            )}
-
-            {/* Soldes */}
-            <Section title="Soldes">
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-                {(['EUR', 'USD', 'XAF'] as const).map((cur) => (
-                  <div key={cur} style={{ background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 10, padding: 10, textAlign: 'center' }}>
-                    <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{cur}</div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-bright)', fontFamily: 'var(--font-mono)' }}>{money(client.balances[cur], cur)}</div>
-                  </div>
-                ))}
-              </div>
-            </Section>
-
-            {/* Comptes de paiement */}
-            <Section title={`Comptes de paiement (${client.accounts.length})`}>
-              {client.accounts.length === 0 ? <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>Aucun compte.</div>
-                : client.accounts.map((a) => (
-                  <div key={a.id} style={{ background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 10, padding: 12, marginBottom: 8 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600, color: 'var(--text-bright)', fontSize: 13 }}>
-                      <span>{a.label}</span><span style={{ color: 'var(--text-dim)', fontSize: 11 }}>{a.kind}</span>
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 6 }}>
-                      {a.holder_name && <div>Titulaire : {a.holder_name}</div>}
-                      {a.operator && <div>Opérateur : {a.operator}</div>}
-                      {a.network && <div>Réseau : {a.network}</div>}
-                      {a.country && <div>Pays : {countryLabel(a.country)}</div>}
-                      {a.city && <div>Ville : {a.city}</div>}
-                      {a.address && <div>Adresse : {a.address}</div>}
-                      {a.phone && <div>Téléphone : {a.phone}</div>}
-                    </div>
-                  </div>
-                ))}
-            </Section>
-
-            {/* Historique */}
-            <Section title={`Historique (${client.transactions.length})`}>
-              {client.transactions.length === 0 ? <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>Aucune transaction.</div>
-                : client.transactions.map((tx, i) => (
-                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 10px', fontSize: 12, marginBottom: 6 }}>
-                    <span style={{ color: 'var(--text-bright)' }}>{String(tx.label ?? tx.type ?? '')}</span>
-                    <span style={{ color: 'var(--text-dim)', display: 'flex', gap: 8 }}>
-                      <span>{String(tx.currency ?? '')} {String(tx.amount ?? '')}</span>
-                      <span style={{ color: statusColor(String(tx.status ?? '')) }}>{String(tx.status ?? '')}</span>
-                    </span>
-                  </div>
-                ))}
-            </Section>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return <div style={{ marginTop: 18 }}><div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.8, color: 'var(--text-dim)', marginBottom: 8 }}>{title}</div>{children}</div>;
-}
-function Row({ k, v }: { k: string; v: string }) {
-  return <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '6px 0', borderBottom: '1px solid var(--border-soft)', fontSize: 13 }}><span style={{ color: 'var(--text-dim)' }}>{k}</span><span style={{ color: 'var(--text-bright)', textAlign: 'right' }}>{v}</span></div>;
-}

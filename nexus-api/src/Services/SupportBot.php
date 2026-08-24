@@ -15,6 +15,14 @@ final class SupportBot
     {
         $message = trim($message);
         $history = self::cleanHistory($history);
+        $chipIntent = self::intentFromChip($ctx['chip'] ?? null, $message);
+        if ($chipIntent === 'human' || $chipIntent === 'security') {
+            return self::pack($chipIntent, $message, $ctx, true);
+        }
+        if ($chipIntent !== null) {
+            return self::pack($chipIntent, $message, $ctx, false);
+        }
+
         $norm = self::normalize($message);
 
         if ($norm === '') {
@@ -161,6 +169,144 @@ final class SupportBot
         return (bool) preg_match('/\b' . preg_quote($term, '/') . '\b/', $norm);
     }
 
+    /**
+     * Boutons du widget : identifiant stable, ou libellé exact (toutes langues).
+     * Sans ça, « Transferts » / l’arabe / le chinois tombaient en unknown.
+     */
+    public static function intentFromChip(mixed $chip, string $message): ?string
+    {
+        $allowed = [
+            'human', 'security', 'transfer', 'transfer_stuck', 'transfer_delay', 'transfer_currencies',
+            'balance', 'balance_gap', 'account_blocked', 'kyc', 'kyc_docs', 'kyc_pending', 'kyc_rejected',
+            'fees', 'fees_intl', 'fees_why', 'password', 'beneficiaries', 'limits', 'transactions',
+            'business', 'connect', 'hours', 'greeting', 'thanks',
+        ];
+        $id = strtolower(trim((string) $chip));
+        if (in_array($id, $allowed, true)) {
+            return $id;
+        }
+
+        $raw = trim($message);
+        if ($raw === '') {
+            return null;
+        }
+        $map = self::chipLabelIntents();
+        if (isset($map[$raw])) {
+            return $map[$raw];
+        }
+        $lower = mb_strtolower($raw, 'UTF-8');
+        if (isset($map[$lower])) {
+            return $map[$lower];
+        }
+        $norm = self::normalize($raw);
+
+        return $norm !== '' && isset($map[$norm]) ? $map[$norm] : null;
+    }
+
+    /** @return array<string, string> */
+    private static function chipLabelIntents(): array
+    {
+        $pairs = [
+            // Accueil widget (7 langues)
+            'Je veux envoyer de l\'argent' => 'transfer',
+            'I want to send money' => 'transfer',
+            'Quiero enviar dinero' => 'transfer',
+            'Quero enviar dinheiro' => 'transfer',
+            'Ich möchte Geld senden' => 'transfer',
+            'أريد إرسال أموال' => 'transfer',
+            '我想汇款' => 'transfer',
+            'Question sur mon solde' => 'balance',
+            'Question about my balance' => 'balance',
+            'Pregunta sobre mi saldo' => 'balance',
+            'Pergunta sobre o meu saldo' => 'balance',
+            'Frage zu meinem Guthaben' => 'balance',
+            'سؤال حول رصيدي' => 'balance',
+            '关于我的余额的问题' => 'balance',
+            'Vérification KYC' => 'kyc',
+            'KYC verification' => 'kyc',
+            'Verificación KYC' => 'kyc',
+            'Verificação KYC' => 'kyc',
+            'KYC-Verifizierung' => 'kyc',
+            'التحقق من KYC' => 'kyc',
+            'KYC 验证' => 'kyc',
+            'Mes frais' => 'fees',
+            'My fees' => 'fees',
+            'Mis comisiones' => 'fees',
+            'As minhas taxas' => 'fees',
+            'Meine Gebühren' => 'fees',
+            'رسومي' => 'fees',
+            '我的费用' => 'fees',
+            'Parler à un agent' => 'human',
+            'Talk to an agent' => 'human',
+            'Speak to an agent' => 'human',
+            'Hablar con un agente' => 'human',
+            'Falar com um agente' => 'human',
+            'Mit einem Agenten sprechen' => 'human',
+            'التحدث مع وكيل' => 'human',
+            '与客服人员交谈' => 'human',
+            // Raccourcis du fallback « préciser »
+            'Transferts' => 'transfer',
+            'Transfers' => 'transfer',
+            'Solde' => 'balance',
+            'Balance' => 'balance',
+            'Frais' => 'fees',
+            'Fees' => 'fees',
+            'KYC' => 'kyc',
+            // Suivis émis par le bot
+            'Mon transfert est bloqué' => 'transfer_stuck',
+            'My transfer is stuck' => 'transfer_stuck',
+            'Quels sont les délais ?' => 'transfer_delay',
+            'What are the timelines?' => 'transfer_delay',
+            'Quelles devises sont supportées ?' => 'transfer_currencies',
+            'Which currencies are supported?' => 'transfer_currencies',
+            'Comment envoyer ?' => 'transfer',
+            'How do I send?' => 'transfer',
+            'Frais à l’international' => 'fees_intl',
+            'Frais pour l’international' => 'fees_intl',
+            'International fees' => 'fees_intl',
+            'Pourquoi des frais sont-ils prélevés ?' => 'fees_why',
+            'Why are fees charged?' => 'fees_why',
+            'Détail avant confirmation' => 'fees',
+            'Detail before confirmation' => 'fees',
+            'Je vois un écart sur mon solde' => 'balance_gap',
+            'I see a gap on my balance' => 'balance_gap',
+            'Comment fonctionnent les wallets ?' => 'balance_gap',
+            'How do wallets work?' => 'balance_gap',
+            'Quel est mon solde ?' => 'balance',
+            'What is my balance?' => 'balance',
+            'Quels documents sont acceptés ?' => 'kyc_docs',
+            'Which documents are accepted?' => 'kyc_docs',
+            'Ma vérification est en attente' => 'kyc_pending',
+            'My verification is pending' => 'kyc_pending',
+            'Mon dossier a été refusé' => 'kyc_rejected',
+            'My file was rejected' => 'kyc_rejected',
+            'Voir mes transactions' => 'transactions',
+            'See my transactions' => 'transactions',
+            'Comment voir mes transactions ?' => 'transactions',
+            'How do I see my transactions?' => 'transactions',
+            'J’ai une autre question' => 'greeting',
+            'J\'ai une autre question' => 'greeting',
+            'I have another question' => 'greeting',
+            'Je n’arrive pas à me connecter' => 'password',
+            'I cannot sign in' => 'password',
+            'Compte Business' => 'business',
+            'Business account' => 'business',
+            'Nexus Connect / API' => 'connect',
+        ];
+
+        $map = [];
+        foreach ($pairs as $label => $intent) {
+            $map[$label] = $intent;
+            $map[mb_strtolower($label, 'UTF-8')] = $intent;
+            $norm = self::normalize($label);
+            if ($norm !== '') {
+                $map[$norm] = $intent;
+            }
+        }
+
+        return $map;
+    }
+
     private static function anyTerm(string $norm, array $terms): bool
     {
         foreach ($terms as $t) {
@@ -181,12 +327,13 @@ final class SupportBot
             'parler avec un', 'parler avec une', 'real person', 'speak to someone',
             'speak to an agent', 'talk to a human', 'talk to someone', 'talk to an agent',
             'speak with someone', 'human agent', 'assistance humaine',
+            'hablar con un agente', 'falar com um agente', 'mit einem agenten',
         ];
         if (self::anyTerm($norm, $phrases)) {
             return true;
         }
         $words = [
-            'agent', 'agents', 'humain', 'humaine', 'conseiller', 'conseillere',
+            'agent', 'agents', 'agente', 'agenten', 'humain', 'humaine', 'conseiller', 'conseillere',
             'operateur', 'operatrice', 'operator', 'manager',
             'reclamation', 'plainte', 'complaint', 'complaints',
         ];
@@ -318,7 +465,7 @@ final class SupportBot
             'transfer' => [
                 'spec' => 20,
                 'groups' => [
-                    ['weight' => 3, 'terms' => ['envoyer', 'envoi', 'envois', 'transfert', 'transfer', 'virement', 'send money', 'envoyer de l argent']],
+                    ['weight' => 3, 'terms' => ['envoyer', 'envoi', 'envois', 'transfert', 'transferts', 'transfer', 'transfers', 'virement', 'send money', 'envoyer de l argent', 'enviar', 'senden', 'dinero', 'dinheiro']],
                     ['weight' => 2, 'terms' => ['destinataire', 'faire un transfert', 'envoyer de l']],
                     ['weight' => 1, 'terms' => ['argent', 'payer']],
                 ],
@@ -333,7 +480,7 @@ final class SupportBot
             'balance' => [
                 'spec' => 20,
                 'groups' => [
-                    ['weight' => 3, 'terms' => ['solde', 'balance', 'portefeuille', 'wallet', 'wallets', 'combien j ai']],
+                    ['weight' => 3, 'terms' => ['solde', 'balance', 'portefeuille', 'wallet', 'wallets', 'combien j ai', 'saldo', 'guthaben']],
                     ['weight' => 2, 'terms' => ['disponible', 'mes fonds', 'my funds']],
                 ],
             ],
@@ -392,7 +539,7 @@ final class SupportBot
             'fees' => [
                 'spec' => 20,
                 'groups' => [
-                    ['weight' => 3, 'terms' => ['frais', 'commission', 'commissions', 'tarif', 'tarifs', 'fee', 'fees', 'cout', 'couts']],
+                    ['weight' => 3, 'terms' => ['frais', 'commission', 'commissions', 'comisiones', 'tarif', 'tarifs', 'fee', 'fees', 'cout', 'couts', 'taxas', 'gebuhren']],
                     ['weight' => 2, 'terms' => ['facturation', 'billing']],
                 ],
             ],

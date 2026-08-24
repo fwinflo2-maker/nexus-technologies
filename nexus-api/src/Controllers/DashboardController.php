@@ -9,6 +9,7 @@ use Nexus\Core\Currency;
 use Nexus\Core\Database;
 use Nexus\Core\Request;
 use Nexus\Execution\ExecutionContext;
+use Nexus\Execution\PlatformRole;
 use Nexus\Core\Response;
 use Nexus\Services\FXService;
 use Nexus\Services\PolicyEngine;
@@ -46,6 +47,7 @@ final class DashboardController
     {
         $request = AuthMiddleware::handle($request);
         $user    = $request->attribute('user');
+        PlatformRole::requireClientSurface($user);
         $userId  = (int) $user['id'];
 
         // §21 — un total financier ne doit jamais additionner de l'argent
@@ -170,6 +172,7 @@ final class DashboardController
     {
         $request = AuthMiddleware::handle($request);
         $user    = $request->attribute('user');
+        PlatformRole::requireClientSurface($user);
         $userId  = (int) $user['id'];
 
         $period = strtolower((string) $request->query('period', '30d'));

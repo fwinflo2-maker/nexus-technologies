@@ -11,6 +11,7 @@ import Sidebar from './components/dashboard/Sidebar';
 import DashTopbar from './components/dashboard/DashTopbar';
 /* RoutingPage supprimé — le Routing Engine est intégré au workflow /send */
 import { useDashT } from './data/dashboard-i18n';
+import { getHomePathForRole, isInternalPlatformRole } from './lib/platformRoles';
 import './styles/design-system.css';
 import './styles/dashboard-system.css';
 import './styles/premium.css';
@@ -190,7 +191,7 @@ function DashboardLayout() {
 }
 
 function AppRoutes() {
-  const { user, isLoaded } = useAuth();
+  const { user, isLoaded, logout } = useAuth();
 
   // Pendant la restauration de session, afficher un écran de chargement
   if (!isLoaded) {
@@ -215,10 +216,29 @@ function AppRoutes() {
 
   if (!user) return <PublicRouter />;
 
-  // Dashboard Super Admin : réservé au rôle superadmin. Les autres comptes
-  // sont redirigés vers leur dashboard client.
-  const isSuperAdmin = user.platform_role === 'superadmin';
-  const isInternalStaff = user.platform_role !== 'user';
+  const homePath = user.identity_kind === 'superadmin'
+    ? '/admin'
+    : user.identity_kind === 'employee'
+      ? '/staff'
+      : user.identity_kind === 'client'
+        ? '/dashboard'
+        : getHomePathForRole(user.platform_role);
+  if (homePath === null) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#0B0B0F', color: '#E0E0E0' }}>
+        <div style={{ textAlign: 'center' }}>
+          <p>Identité plateforme invalide. Accès refusé.</p>
+          <button className="btn" onClick={() => { void logout('/login'); }}>Fermer la session</button>
+        </div>
+      </div>
+    );
+  }
+
+  const isSuperAdmin = user.identity_kind === 'superadmin' || user.platform_role === 'superadmin';
+  const isInternalStaff = !isSuperAdmin && (
+    user.identity_kind === 'employee' || isInternalPlatformRole(user.platform_role)
+  );
+  const isClient = homePath === '/dashboard' && !isSuperAdmin && !isInternalStaff;
 
   return (
     <Routes>
@@ -239,7 +259,9 @@ function AppRoutes() {
       {isInternalStaff && (
         <Route path="/staff" element={<StaffHome />} />
       )}
-      <Route path="*" element={<DashboardLayout />} />
+      {isClient
+        ? <Route path="*" element={<DashboardLayout />} />
+        : <Route path="*" element={<Navigate to={homePath} replace />} />}
     </Routes>
   );
 }

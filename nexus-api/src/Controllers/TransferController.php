@@ -10,6 +10,7 @@ use Nexus\Core\HttpException;
 use Nexus\Core\Request;
 use Nexus\Core\Response;
 use Nexus\Execution\ExecutionContext;
+use Nexus\Execution\PlatformRole;
 use Nexus\Services\ExecutionEngine;
 use PDO;
 
@@ -38,6 +39,7 @@ final class TransferController
     {
         $request = AuthMiddleware::handle($request);
         $user    = $request->attribute('user');
+        PlatformRole::requireClientSurface($user);
         $userId  = (int) $user['id'];
 
         // Contexte d'exécution : résolu UNE fois, en amont, puis transporté.
@@ -70,6 +72,7 @@ final class TransferController
     {
         $request = AuthMiddleware::handle($request);
         $user    = $request->attribute('user');
+        PlatformRole::requireClientSurface($user);
         $userId  = (int) $user['id'];
 
         $page     = max(1, (int) $request->query('page', 1));
@@ -136,6 +139,7 @@ final class TransferController
     {
         $request = AuthMiddleware::handle($request);
         $user    = $request->attribute('user');
+        PlatformRole::requireClientSurface($user);
         $userId  = (int) $user['id'];
         $id      = (int) $request->param('id', '0');
 

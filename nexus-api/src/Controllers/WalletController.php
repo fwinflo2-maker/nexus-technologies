@@ -10,6 +10,7 @@ use Nexus\Core\Database;
 use Nexus\Core\Request;
 use Nexus\Models\TransferRequest;
 use Nexus\Execution\ExecutionContext;
+use Nexus\Execution\PlatformRole;
 use Nexus\Core\HttpException;
 use Nexus\Core\Response;
 use Nexus\Providers\ProviderConfig;
@@ -57,6 +58,7 @@ final class WalletController
     {
         $request = AuthMiddleware::handle($request);
         $user    = $request->attribute('user');
+        PlatformRole::requireClientSurface($user);
         $userId  = (int) $user['id'];
 
         $amount         = trim((string) $request->input('amount', ''));
@@ -259,6 +261,7 @@ final class WalletController
     {
         $request = AuthMiddleware::handle($request);
         $user    = $request->attribute('user');
+        PlatformRole::requireClientSurface($user);
         $userId  = (int) $user['id'];
 
         $walletId = (int) $request->input('wallet_id', 0);
@@ -303,6 +306,7 @@ final class WalletController
     {
         $request = AuthMiddleware::handle($request);
         $user    = $request->attribute('user');
+        PlatformRole::requireClientSurface($user);
         $userId  = (int) $user['id'];
 
         $opId    = (string) $request->input('operation_id', '');
@@ -337,6 +341,7 @@ final class WalletController
     {
         $request = AuthMiddleware::handle($request);
         $user    = $request->attribute('user');
+        PlatformRole::requireClientSurface($user);
         $userId  = (int) $user['id'];
 
         $opId    = (string) $request->input('operation_id', '');
@@ -386,6 +391,7 @@ final class WalletController
     {
         $request = AuthMiddleware::handle($request);
         $user    = $request->attribute('user');
+        PlatformRole::requireClientSurface($user);
         $userId  = (int) $user['id'];
 
         $status = (string) $request->query('status', 'pending');
@@ -448,6 +454,7 @@ final class WalletController
     {
         $request = AuthMiddleware::handle($request);
         $user    = $request->attribute('user');
+        PlatformRole::requireClientSurface($user);
         $userId  = (int) $user['id'];
 
         try {
@@ -545,6 +552,7 @@ final class WalletController
     {
         $request = AuthMiddleware::handle($request);
         $user    = $request->attribute('user');
+        PlatformRole::requireClientSurface($user);
 
         $context = ExecutionContext::fromRequest($request, $user);
         $rate    = FXService::rate('EUR', 'XAF', $context->environment);
@@ -576,6 +584,7 @@ final class WalletController
     {
         $request = AuthMiddleware::handle($request);
         $user    = $request->attribute('user');
+        PlatformRole::requireClientSurface($user);
         $userId  = (int) $user['id'];
 
         $currency = strtoupper((string) $request->param('currency', ''));
@@ -631,6 +640,7 @@ final class WalletController
     {
         $request = AuthMiddleware::handle($request);
         $user    = $request->attribute('user');
+        PlatformRole::requireClientSurface($user);
         $userId  = (int) $user['id'];
 
         // Fail-closed : production (APP_ENV ou PROVIDERS_ENV) = refus.

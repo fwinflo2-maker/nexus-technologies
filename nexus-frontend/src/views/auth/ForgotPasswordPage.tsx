@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import './AuthPages.css';
@@ -28,11 +28,16 @@ const authEnter = {
  * ou non ; l'UI n'affiche jamais « compte introuvable ».
  */
 export default function ForgotPasswordPage() {
-  const [step, setStep] = useState<'email' | 'newpass' | 'done'>('email');
+  const [searchParams] = useSearchParams();
+  const portal = searchParams.get('portal');
+  const loginPath = portal === 'admin' ? '/admin-login' : portal === 'staff' ? '/staff-login' : '/login';
+  const tokenFromUrl = searchParams.get('token');
+  const [step, setStep] = useState<'email' | 'newpass' | 'done'>(tokenFromUrl ? 'newpass' : 'email');
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [sending, setSending] = useState(false);
-  const [devToken, setDevToken] = useState<string | null>(null);
+  const [devToken, setDevToken] = useState<string | null>(tokenFromUrl);
+  const [doneLoginPath, setDoneLoginPath] = useState(loginPath);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const navigate = useNavigate();
@@ -91,6 +96,7 @@ export default function ForgotPasswordPage() {
         setError(resp.error ?? 'Erreur lors de la réinitialisation.');
         return;
       }
+      setDoneLoginPath(resp.data?.login_path || loginPath);
       setStep('done');
     } catch {
       setError('Service temporairement indisponible. Veuillez réessayer.');
@@ -107,7 +113,7 @@ export default function ForgotPasswordPage() {
         <div className="auth-card-inner">
           <div className="auth-form-side">
             <motion.div variants={authEnter} initial="hidden" animate="visible" custom={0} className="auth-topbar">
-              <button className="auth-back" onClick={() => navigate('/login')}>
+              <button className="auth-back" onClick={() => navigate(loginPath)}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
                 {t('fp_back_login')}
               </button>
@@ -176,7 +182,7 @@ export default function ForgotPasswordPage() {
                   transition={{ duration: 0.4, ease: EASE }}>
                   <motion.h1 variants={authEnter} initial="hidden" animate="visible" custom={1} className="auth-title">{t('fp_sent_title')}</motion.h1>
                   <motion.p variants={authEnter} initial="hidden" animate="visible" custom={2} className="auth-subtitle">{t('fp_sent_text')}</motion.p>
-                  <motion.button className="btn btn-glow btn-block btn-lg" onClick={() => navigate('/login')}
+                  <motion.button className="btn btn-glow btn-block btn-lg" onClick={() => navigate(doneLoginPath)}
                     whileHover={{ scale: 1.02, y: -1 }} whileTap={{ scale: 0.98 }}
                     transition={{ type: 'spring', stiffness: 300, damping: 17 }}>
                     Retour à la connexion

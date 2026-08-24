@@ -22,19 +22,6 @@ use Nexus\Execution\PlatformRole;
 final class AdminController
 {
     private const EMPLOYEE_INVITE_TTL = 1800;
-    /** Rôles internes autorisés à être attribués à un employé. */
-    private const ALLOWED_EMPLOYEE_ROLES = [
-        'operations_manager',
-        'treasury_manager',
-        'compliance_officer',
-        'risk_analyst',
-        'provider_manager',
-        'customer_support',
-        'security_admin',
-        'technical_admin',
-        'business_manager',
-        'superadmin',
-    ];
 
     private static function authorize(Request $request): array
     {
@@ -74,13 +61,14 @@ final class AdminController
 
         $stmt = $pdo->query(
             'SELECT e.id, e.user_id, u.full_name, u.email, u.status AS user_status,
-                    e.department, u.platform_role AS role, e.status, e.last_login_at, e.created_at
+                    e.department, e.role, u.platform_role, u.account_type, e.status, e.last_login_at, e.created_at
              FROM employees e
              JOIN users u ON u.id = e.user_id
              ORDER BY e.created_at DESC'
         );
         $rows = array_map(static function (array $r): array {
             $r['authorization_model'] = 'platform_role';
+            $r['identity_kind'] = 'employee';
             return $r;
         }, $stmt->fetchAll());
 
@@ -109,7 +97,7 @@ final class AdminController
         if ($fullName === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             Response::badRequest('Nom et email valide requis.');
         }
-        if (!in_array($role, self::ALLOWED_EMPLOYEE_ROLES, true)) {
+        if (!in_array($role, PlatformRole::employeeRoles(), true)) {
             Response::badRequest('Rôle employé invalide.');
         }
 
@@ -130,6 +118,9 @@ final class AdminController
                     'full_name'     => $fullName,
                     'email'         => $email,
                     'password_hash' => '', // activation ultérieure — jamais de mot de passe en clair
+                    // `account_type` est une colonne client obligatoire (enum personal|business).
+                    // Un employé n'est PAS un client : les listes /control/clients et le
+                    // dashboard personnel filtrent sur platform_role = user.
                     'account_type'  => 'personal',
                     'platform_role' => $role,
                     'status'        => 'PENDING',
@@ -263,7 +254,7 @@ final class AdminController
             'employee_id' => $id,
             'expires_in' => self::EMPLOYEE_INVITE_TTL,
             'reset_token' => $isDevelopment ? $token : null,
-            'reset_url' => $isDevelopment ? '/forgot-password?token=' . $token : null,
+            'reset_url' => $isDevelopment ? '/forgot-password?token=' . $token . '&portal=staff' : null,
             'delivery' => $isDevelopment ? 'DEVELOPMENT_MANUAL_DELIVERY' : 'PENDING_EMAIL_DELIVERY',
         ]);
     }
@@ -280,19 +271,27 @@ final class AdminController
             Response::badRequest('Statut invalide.');
         }
 
-        $stmt = $pdo->prepare('UPDATE employees SET status = :status WHERE id = :id');
-        $stmt->execute(['status' => $status, 'id' => $id]);
-
-        // Synchronise le statut du compte users rattaché.
         $emp = $pdo->prepare('SELECT user_id FROM employees WHERE id = :id');
         $emp->execute(['id' => $id]);
         $uid = $emp->fetchColumn();
-        if ($uid !== false) {
-            $pdo->prepare('UPDATE users SET status = :s WHERE id = :id')
-                ->execute(['s' => $status === 'active' ? 'ACTIVE' : ($status === 'disabled' ? 'SUSPENDED' : 'PENDING'), 'id' => (int) $uid]);
+        if ($uid === false) {
+            Response::notFound('Employé introuvable.');
         }
 
-        self::audit($pdo, (int) $user['id'], strtoupper('EMPLOYEE_' . $status), 'employees', $id, ['status' => $status]);
+        $pdo->beginTransaction();
+        try {
+            $pdo->prepare('UPDATE employees SET status = :status WHERE id = :id')
+                ->execute(['status' => $status, 'id' => $id]);
+            $pdo->prepare('UPDATE users SET status = :s WHERE id = :id')
+                ->execute(['s' => $status === 'active' ? 'ACTIVE' : ($status === 'disabled' ? 'SUSPENDED' : 'PENDING'), 'id' => (int) $uid]);
+            self::audit($pdo, (int) $user['id'], strtoupper('EMPLOYEE_' . $status), 'employees', $id, ['status' => $status]);
+            $pdo->commit();
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
 
         Response::success(['id' => $id, 'status' => $status]);
     }
@@ -311,7 +310,7 @@ final class AdminController
         $params = [':id' => $id];
 
         if ($role !== '') {
-            if (!in_array($role, self::ALLOWED_EMPLOYEE_ROLES, true)) {
+            if (!in_array($role, PlatformRole::employeeRoles(), true)) {
                 Response::badRequest('Rôle invalide.');
             }
             $updates[] = 'role = :role';
@@ -325,21 +324,31 @@ final class AdminController
             Response::badRequest('Aucune modification.');
         }
 
-        $pdo->prepare('UPDATE employees SET ' . implode(', ', $updates) . ' WHERE id = :id')
-            ->execute($params);
+        $emp = $pdo->prepare('SELECT user_id FROM employees WHERE id = :id');
+        $emp->execute(['id' => $id]);
+        $uid = $emp->fetchColumn();
+        if ($uid === false) {
+            Response::notFound('Employé introuvable.');
+        }
 
-        // Synchronise platform_role si le rôle a changé.
-        if ($role !== '') {
-            $emp = $pdo->prepare('SELECT user_id FROM employees WHERE id = :id');
-            $emp->execute(['id' => $id]);
-            $uid = $emp->fetchColumn();
-            if ($uid !== false) {
+        $pdo->beginTransaction();
+        try {
+            $pdo->prepare('UPDATE employees SET ' . implode(', ', $updates) . ' WHERE id = :id')
+                ->execute($params);
+
+            // Les deux projections de rôle changent atomiquement.
+            if ($role !== '') {
                 $pdo->prepare('UPDATE users SET platform_role = :role WHERE id = :id')
                     ->execute(['role' => $role, 'id' => (int) $uid]);
             }
+            self::audit($pdo, (int) $user['id'], 'ROLE_CHANGED', 'employees', $id, ['role' => $role]);
+            $pdo->commit();
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
         }
-
-        self::audit($pdo, (int) $user['id'], 'ROLE_CHANGED', 'employees', $id, ['role' => $role]);
 
         Response::success(['id' => $id, 'updated' => true]);
     }
@@ -421,13 +430,15 @@ final class AdminController
         $env = $environment->value;
 
         // Comptes par type et statut.
+        $clientScope = PlatformRole::sqlClientOnly('');
         $accounts = [
-            'total'     => (int) $pdo->query('SELECT COUNT(*) FROM users')->fetchColumn(),
-            'personal'  => (int) $pdo->query("SELECT COUNT(*) FROM users WHERE account_type='personal'")->fetchColumn(),
-            'business'  => (int) $pdo->query("SELECT COUNT(*) FROM users WHERE account_type='business'")->fetchColumn(),
-            'active'    => (int) $pdo->query("SELECT COUNT(*) FROM users WHERE status='ACTIVE'")->fetchColumn(),
-            'pending'   => (int) $pdo->query("SELECT COUNT(*) FROM users WHERE status='PENDING'")->fetchColumn(),
-            'suspended' => (int) $pdo->query("SELECT COUNT(*) FROM users WHERE status='SUSPENDED'")->fetchColumn(),
+            'total'     => (int) $pdo->query("SELECT COUNT(*) FROM users WHERE {$clientScope}")->fetchColumn(),
+            'personal'  => (int) $pdo->query("SELECT COUNT(*) FROM users WHERE account_type='personal' AND {$clientScope}")->fetchColumn(),
+            'business'  => (int) $pdo->query("SELECT COUNT(*) FROM users WHERE account_type='business' AND {$clientScope}")->fetchColumn(),
+            'active'    => (int) $pdo->query("SELECT COUNT(*) FROM users WHERE status='ACTIVE' AND {$clientScope}")->fetchColumn(),
+            'pending'   => (int) $pdo->query("SELECT COUNT(*) FROM users WHERE status='PENDING' AND {$clientScope}")->fetchColumn(),
+            'suspended' => (int) $pdo->query("SELECT COUNT(*) FROM users WHERE status='SUSPENDED' AND {$clientScope}")->fetchColumn(),
+            'internal'  => (int) $pdo->query("SELECT COUNT(*) FROM users WHERE COALESCE(platform_role, 'user') <> 'user'")->fetchColumn(),
         ];
         $accounts['connect'] = (int) $pdo->query('SELECT COUNT(*) FROM connect_accounts')->fetchColumn();
 

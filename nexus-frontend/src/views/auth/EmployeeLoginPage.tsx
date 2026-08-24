@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, MotionConfig, useMotionValue, useSpring } from 'framer-motion';
-import { apiLogin } from '../../api/client';
+import { apiLogin, getHomePath } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { ParticlesBackground } from '../../components/ParticlesBackground';
 import { TiltCard, AnimatedTitle, EASE } from '../../components/anim/Premium';
@@ -78,14 +78,11 @@ export default function EmployeeLoginPage() {
     if (!email.trim() || !password) { setError('Identifiant et mot de passe requis.'); return; }
     setLoading(true);
     try {
-      const resp = await apiLogin(email.trim(), password);
+      const resp = await apiLogin(email.trim(), password, 'staff');
       if (!resp.success) { setError(resp.error ?? "Échec de l'authentification."); return; }
       await refreshSession();
-      const role = resp.data?.user?.platform_role;
-      // Super admin → Console Admin ; personnel interne → Espace Employé ;
-      // compte client → dashboard client habituel.
-      const target = role === 'superadmin' ? '/admin' : role !== 'user' ? '/staff' : '/dashboard';
-      navigate(target, { replace: true });
+      if (!resp.data?.user) throw new Error('MISSING_LOGIN_IDENTITY');
+      navigate(getHomePath(resp.data.user), { replace: true });
     } catch {
       setError('Service temporairement indisponible.');
     } finally {

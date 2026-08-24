@@ -11,6 +11,7 @@
 const API_PREFIX = '/api';
 
 import { safeStorage, isTokenExpired } from '../lib/safeStorage';
+import { getHomePathForRole } from '../lib/platformRoles';
 
 /**
  * Récupère le token JWT depuis le stockage sûr.
@@ -48,6 +49,7 @@ export interface ApiUser {
   phone?: string;
   account_type: 'personal' | 'business';
   platform_role?: string;
+  identity_kind?: 'client' | 'employee' | 'superadmin';
   auth_provider: 'local';
   status: string;
   kyc_level: string;
@@ -961,8 +963,12 @@ export async function apiRegister(payload: {
 }
 
 /** Connexion classique (identifiant + mot de passe). */
-export async function apiLogin(identifier: string, password: string): Promise<ApiResponse<{ token: string; user: ApiUser }>> {
-  const data = await request<{ token: string; user: ApiUser }>('POST', '/login', { identifier, password });
+export async function apiLogin(
+  identifier: string,
+  password: string,
+  audience: 'client' | 'staff' | 'admin' = 'client',
+): Promise<ApiResponse<{ token: string; user: ApiUser }>> {
+  const data = await request<{ token: string; user: ApiUser }>('POST', '/login', { identifier, password, audience });
   if (data.success && data.data) {
     setToken(data.data.token);
     safeStorage.set('local', 'nexus_user', JSON.stringify(data.data.user));
@@ -1862,17 +1868,26 @@ export async function apiForgotPassword(email: string): Promise<ApiResponse<{ me
   return request('POST', '/auth/forgot-password', { email });
 }
 
-export async function apiResetPassword(token: string, newPassword: string, confirmPassword: string): Promise<ApiResponse<{ message: string }>> {
+export async function apiResetPassword(token: string, newPassword: string, confirmPassword: string): Promise<ApiResponse<{ message: string; login_path?: string }>> {
   return request('POST', '/auth/reset-password', { token, new_password: newPassword, confirm_password: confirmPassword });
 }
 
 /**
  * Chemin d'accueil d'un utilisateur après connexion/inscription.
  * - superadmin → tableau de bord Super Admin
- * - sinon       → dashboard client (personal/business selon account_type)
+ * - rôle interne reconnu → espace employé
+ * - user → dashboard client
+ * - rôle absent/inconnu → refus, jamais de repli client
  */
-export function getHomePath(user: { platform_role?: string }): string {
-  return user.platform_role === 'superadmin' ? '/admin' : '/dashboard';
+export function getHomePath(user: { platform_role?: string; identity_kind?: string }): string {
+  if (user.identity_kind === 'superadmin') return '/admin';
+  if (user.identity_kind === 'employee') return '/staff';
+  if (user.identity_kind === 'client') return '/dashboard';
+  const path = getHomePathForRole(user.platform_role);
+  if (path === null) {
+    throw new Error('INVALID_PLATFORM_ROLE');
+  }
+  return path;
 }
 
 // --- Support chat (tickets / conversations) --------------------------------
@@ -1957,8 +1972,9 @@ export async function apiSupportBot(
   message: string,
   history: Array<{ sender: string; body: string }> = [],
   lang = 'fr',
+  chip?: string,
 ): Promise<ApiResponse<SupportBotResult>> {
-  return request('POST', '/support/bot', { message, history, lang });
+  return request('POST', '/support/bot', { message, history, lang, ...(chip ? { chip } : {}) });
 }
 
 export async function apiSupportUnread(): Promise<ApiResponse<{ total: number; conversations: Array<{ id: number; unread: number }> }>> {
@@ -2033,6 +2049,9 @@ export interface EmployeeRow {
   user_status: string;
   department: string | null;
   role: string;
+  platform_role?: string;
+  account_type?: string;
+  identity_kind?: 'employee';
   authorization_model: 'platform_role';
   status: 'active' | 'invited' | 'disabled';
   last_login_at: string | null;

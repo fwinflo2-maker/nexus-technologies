@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { apiLogin } from '../../api/client';
+import { apiLogin, getHomePath } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { ParticlesBackground } from '../../components/ParticlesBackground';
 import { EASE } from '../../components/anim/Premium';
@@ -10,7 +10,7 @@ import './AdminLoginPage.css';
 /**
  * Page de connexion SUPER ADMIN — ultra premium (glassmorphism).
  * Accessible via le logo NEXUS (3 clics) sur la landing. Réservée au rôle
- * superadmin : un autre compte est redirigé vers son dashboard client.
+ * superadmin : un employé ou un client est refusé (WRONG_PORTAL).
  */
 export default function AdminLoginPage() {
   const [email, setEmail] = useState('');
@@ -27,11 +27,11 @@ export default function AdminLoginPage() {
     if (!email.trim() || !password) { setError('Identifiant et mot de passe requis.'); return; }
     setLoading(true);
     try {
-      const resp = await apiLogin(email.trim(), password);
+      const resp = await apiLogin(email.trim(), password, 'admin');
       if (!resp.success) { setError(resp.error ?? 'Échec de l\'authentification.'); return; }
       await refreshSession();
-      // Seul le superadmin reste ici ; sinon retour au dashboard client.
-      navigate(resp.data?.user?.platform_role === 'superadmin' ? '/admin' : '/dashboard', { replace: true });
+      if (!resp.data?.user) throw new Error('MISSING_LOGIN_IDENTITY');
+      navigate(getHomePath(resp.data.user), { replace: true });
     } catch {
       setError('Service temporairement indisponible.');
     } finally {

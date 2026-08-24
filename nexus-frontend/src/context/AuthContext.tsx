@@ -1,12 +1,14 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiMe, apiLogout, type ApiUser } from '../api/client';
+import { isKnownPlatformRole, type PlatformRole } from '../lib/platformRoles';
 
 // ─── Types ───────────────────────────────────────────────────────────────
 
 /** User étendu avec `name` pour rétro-compatibilité avec les composants existants */
 interface User extends ApiUser {
   name: string;
+  platform_role: PlatformRole;
 }
 
 interface AuthContextType {
@@ -28,10 +30,12 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
-function toUser(apiUser: ApiUser): User {
+function toUser(apiUser: ApiUser): User | null {
+  if (!isKnownPlatformRole(apiUser.platform_role)) return null;
   return {
     ...apiUser,
     name: apiUser.full_name,
+    platform_role: apiUser.platform_role,
   };
 }
 

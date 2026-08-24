@@ -109,6 +109,47 @@ final class SupportBotTest extends TestCase
         $this->assertNotSame('human', $r['intent']);
     }
 
+    public function testPresetWidgetChipsResolveInFrench(): void
+    {
+        $chips = [
+            "Je veux envoyer de l'argent" => 'transfer',
+            'Question sur mon solde' => 'balance',
+            'Vérification KYC' => 'kyc',
+            'Mes frais' => 'fees',
+            'Parler à un agent' => 'human',
+            'Transferts' => 'transfer',
+            'J’ai une autre question' => 'greeting',
+        ];
+        foreach ($chips as $label => $intent) {
+            $r = SupportBot::reply($label, [], ['lang' => 'fr']);
+            self::assertSame($intent, $r['intent'], $label);
+            self::assertNotSame('', (string) $r['reply'], $label);
+            if ($intent === 'human') {
+                self::assertTrue($r['escalate'], $label);
+            } else {
+                self::assertFalse($r['escalate'], $label);
+            }
+        }
+    }
+
+    public function testPresetChipIdBypassesLanguage(): void
+    {
+        $r = SupportBot::reply('我想汇款', [], ['lang' => 'zh', 'chip' => 'transfer']);
+        self::assertSame('transfer', $r['intent']);
+        self::assertFalse($r['escalate']);
+        self::assertNotSame('', (string) $r['reply']);
+    }
+
+    public function testSpanishAndChineseWelcomeLabelsResolve(): void
+    {
+        $r = SupportBot::reply('Quiero enviar dinero', [], ['lang' => 'es']);
+        self::assertSame('transfer', $r['intent']);
+        $zh = SupportBot::reply('我想汇款', [], ['lang' => 'zh']);
+        self::assertSame('transfer', $zh['intent']);
+        $fees = SupportBot::reply('Mis comisiones', [], ['lang' => 'es']);
+        self::assertSame('fees', $fees['intent']);
+    }
+
     public function testEnglishGreeting(): void
     {
         $r = SupportBot::reply('hello', [], ['lang' => 'en']);

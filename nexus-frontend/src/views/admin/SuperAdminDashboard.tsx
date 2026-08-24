@@ -146,7 +146,7 @@ export default function SuperAdminDashboard() {
                 <Card title="Business" icon="🏢"><Num v={ov.accounts.business} /></Card>
                 <Card title="Connect" icon="🔌"><Num v={ov.accounts.connect} /></Card>
               </div>}
-              <AdminAccounts />
+              <AdminAccounts onOpenSection={setSection} />
             </>
           )}
 

@@ -6,7 +6,7 @@ import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import './AuthPages.css';
 import { useI18n } from '../../context/I18nContext';
 import { useAuth } from '../../context/AuthContext';
-import { apiLogin } from '../../api/client';
+import { apiLogin, getHomePath } from '../../api/client';
 import { ParticlesBackground } from '../../components/ParticlesBackground';
 import { EASE } from '../../components/anim/Premium';
 
@@ -61,7 +61,7 @@ export function LoginPage({ onSwitchToRegister, onBackHome }: LoginPageProps) {
     setLoading(true);
     try {
       // Appel direct à l'API backend — le token et le user sont stockés côté client
-      const resp = await apiLogin(identifier, password);
+      const resp = await apiLogin(identifier, password, 'client');
       if (!resp.success) {
         setError(resp.error ?? t('login_err_required'));
         return;
@@ -69,10 +69,10 @@ export function LoginPage({ onSwitchToRegister, onBackHome }: LoginPageProps) {
       // Le user est déjà retourné par /api/login (fiable, aucune re-requête).
       // refreshSession() synchronise le contexte React avec ce même user.
       await refreshSession();
-      // Super Admin → son centre de contrôle ; les autres comptes → dashboard
-      // client (personal/business). Le user vient de la réponse de login, donc
-      // aucune course de timing (fiable sur tous les navigateurs).
-      const target = resp.data?.user?.platform_role === 'superadmin' ? '/admin' : '/dashboard';
+      if (!resp.data?.user) {
+        throw new Error('MISSING_LOGIN_IDENTITY');
+      }
+      const target = getHomePath(resp.data.user);
       navigate(target, { replace: true });
     } catch {
       // Filet de sécurité : ne jamais laisser le formulaire bloqué en « envoi ».
