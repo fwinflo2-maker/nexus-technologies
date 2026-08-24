@@ -1685,6 +1685,29 @@ export async function apiControlClient(id: number): Promise<ApiResponse<{ client
   return request<{ client: ControlClientDetail }>('GET', `/control/clients/${id}`);
 }
 
+/** Suspension, ban (CLOSED) ou réactivation — exclusif superadmin, motif requis si restriction. */
+export async function apiControlClientStatus(
+  id: number,
+  status: 'ACTIVE' | 'SUSPENDED' | 'CLOSED',
+  reason = '',
+): Promise<ApiResponse<{ id: number; status: string }>> {
+  return request('POST', `/control/clients/${id}/status`, { status, reason });
+}
+
+export interface LinkedClientGroup {
+  signal: string;
+  detail: string;
+  risk: string;
+  members: Array<{ id: number; full_name: string; status: string }>;
+}
+
+export async function apiControlLinkedClients(): Promise<ApiResponse<{
+  groups: LinkedClientGroup[];
+  total: number;
+}>> {
+  return request('GET', '/control/clients/linked');
+}
+
 // --- Super Admin — cockpit (données réelles, RBAC superadmin côté serveur) ---
 
 export interface AdminTransaction {
