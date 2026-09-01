@@ -23,7 +23,7 @@ use Throwable;
  * l'état réel — ou signale les écarts qui exigent une décision humaine.
  *
  * Providers pollables = ceux dont la matrice déclare reconciliation=IMPLEMENTED
- * (aujourd'hui : pawapay). Aucun hardcode métier hors de la matrice.
+ * (aujourd'hui : cashramp). Aucun hardcode métier hors de la matrice.
  *
  * Cas détectés :
  *   - provider COMPLETED   → Nexus 'processing' : régler (completed).

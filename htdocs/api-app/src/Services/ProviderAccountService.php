@@ -34,7 +34,7 @@ final class ProviderAccountService
      * Résout le compte provider pour (slug, environnement, devise) : retourne
      * le compte existant actif, ou le crée si absent (sandbox/développement).
      *
-     * @param string $providerSlug   'pawapay', ...
+     * @param string $providerSlug   'cashramp', ...
      * @param string $environment    sandbox|production
      * @param string $currency       devise du compte
      * @param string $accountType    safeguarding|settlement|operating|pool

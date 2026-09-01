@@ -36,7 +36,7 @@ use Nexus\Providers\ProviderConfig;
  *
  * Milestone 2 — contrat futur provider-native :
  *   eligible providers → adapter.getQuote($intent) → Nexus fees → quote finale.
- *   Non branché tant que Cashramp/pawaPay ne fournissent pas de quotes réelles.
+ *   Non branché tant que Cashramp ne fournit pas de quotes réelles.
  * appliquée à de l'argent réel : il vient maintenant de `fx_rates_cache`
  * (colonne `spread_pct`), et vaut 0 quand la source n'en déclare aucun.
  *

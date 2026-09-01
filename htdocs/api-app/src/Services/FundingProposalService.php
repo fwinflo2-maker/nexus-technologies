@@ -12,11 +12,11 @@ use Nexus\Providers\ProviderConfig;
  *
  * Règle d’or : un pays ne voit QUE les providers dont `countries` le couvre.
  * Ex. France → Swan / Wise / Stripe / SEPA — JAMAIS MTN ou Orange MoMo
- * (réservés à l’Afrique via pawaPay / MTN / Orange Money).
+ * (réservés à l’Afrique via MTN / Orange Money).
  *
  * Sources vérifiées :
- *   - pawaPay markets : Afrique uniquement (pas EU/FR) — pawapay.io/markets
- *   - Docs pawaPay providers (MTN_MOMO_COG, ORANGE_SEN, …)
+ *   - Mobile Money markets : Afrique uniquement (pas EU/FR)
+ *   - Docs MoMo providers (MTN_MOMO_COG, ORANGE_SEN, …)
  *   - SEPA / cartes EU : Swan, Wise, Stripe, Currencycloud, BVNK
  */
 final class FundingProposalService
@@ -37,8 +37,8 @@ final class FundingProposalService
     ];
 
     /**
-     * Opérateurs MoMo par pays (ISO-2) pour enrichir pawaPay / MTN / Orange.
-     * Aligné sur docs.pawapay.io/v2/docs/providers (codes COG=CG, COD=CD, CIV=CI…).
+     * Opérateurs MoMo par pays (ISO-2) pour enrichir MTN / Orange.
+     * Aligné sur les codes COG=CG, COD=CD, CIV=CI…
      *
      * @var array<string, list<array{operator: string, label: string, currency: string}>>
      */

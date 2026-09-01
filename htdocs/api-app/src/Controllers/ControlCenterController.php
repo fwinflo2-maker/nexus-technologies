@@ -114,7 +114,38 @@ final class ControlCenterController
 
         $items = [];
         foreach (array_keys(ProviderCatalog::all()) as $slug) {
-            $items[] = ControlCenterService::providerCard($pdo, (int) $user['id'], $slug);
+            try {
+                $items[] = ControlCenterService::providerCard($pdo, (int) $user['id'], $slug);
+            } catch (\Throwable $e) {
+                error_log("[NEXUS CONTROL CENTER] Erreur carte provider '{$slug}': " . $e->getMessage());
+                $items[] = [
+                    'slug'            => $slug,
+                    'name'            => ProviderCatalog::get($slug)['name'] ?? $slug,
+                    'category'        => ProviderCatalog::get($slug)['category'] ?? 'unknown',
+                    'icon'            => ProviderCatalog::get($slug)['icon'] ?? null,
+                    'doc_url'         => ProviderCatalog::get($slug)['doc_url'] ?? null,
+                    'countries'       => ProviderCatalog::get($slug)['countries'] ?? [],
+                    'active_environment' => 'sandbox',
+                    'enabled'         => false,
+                    'status'          => 'error',
+                    'missing_required'=> [],
+                    'reason'          => 'Erreur de chargement: ' . $e->getMessage(),
+                    'environments'    => [
+                        'sandbox'    => ['configured' => false, 'status' => 'error', 'last_tested_at' => null, 'last_error' => $e->getMessage(), 'updated_at' => null, 'base_url' => '', 'inherited_from' => null],
+                        'production' => ['configured' => false, 'status' => 'error', 'last_tested_at' => null, 'last_error' => $e->getMessage(), 'updated_at' => null, 'base_url' => '', 'inherited_from' => null],
+                    ],
+                    'payment_rails'   => [],
+                    'operations'      => ControlCenterService::operationMatrix($slug),
+                    'operations_enabled' => false,
+                    'integration'     => 'NOT_IMPLEMENTED',
+                    'capabilities'    => \Nexus\Providers\ProviderCapabilityMatrix::for($slug),
+                    'routing'         => ['eligible' => false, 'reasons' => ['Provider loading degraded']],
+                    'card_creation_policy' => null,
+                    'feature_flags'   => null,
+                    'credential_schema' => \Nexus\Providers\ProviderCredentialSchema::describe($slug),
+                    'documentation'   => ControlCenterService::documentationStatus($slug),
+                ];
+            }
         }
 
         Response::success([

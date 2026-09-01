@@ -16,7 +16,7 @@ use Throwable;
 /**
  * ExecutionSettlementService — règlement asynchrone des transferts provider.
  *
- * L'API pawaPay est asynchrone : un payout est d'abord accepté
+ * L'API de payout asynchrone : un payout est d'abord accepté
  * (ACCEPTED/ENQUEUED → transaction Nexus 'processing'), puis évolue vers un
  * état final via webhook ou polling :
  *

@@ -17,7 +17,7 @@ use Throwable;
  * La fiabilité vivait dans `CapabilityEngine::PERFORMANCE_SCORES`, une
  * constante PHP de 20 valeurs écrites à la main :
  *
- *     'pawapay' => 0.97, 'stripe' => 0.99, 'noah' => 0.85, …
+ *     'cashramp' => 0.97, 'stripe' => 0.99, 'noah' => 0.85, …
  *
  * Ces nombres ne mesuraient rien. Aucune table `providers` ni service de
  * métriques n'existe dans le schéma : il n'y avait aucune source d'où ils
@@ -26,7 +26,7 @@ use Throwable;
  * « 🛡️ PLUS FIABLE ») et pesaient jusqu'à 55 % du classement des routes pour
  * l'objectif `most_reliable`.
  *
- * Vérifié en HTTP pendant l'audit : après 10 paiements pawaPay `failed` sur 10
+ * Vérifié en HTTP pendant l'audit : après 10 paiements `failed` sur 10
  * (taux de succès réel 0 %), l'API annonçait toujours « Élevée / 0.97 / PLUS
  * FIABLE ». Un nombre insensible à la réalité qu'il prétend décrire n'est pas
  * une mesure imprécise : c'est un faux succès (§12), et il contredisait
@@ -68,8 +68,8 @@ use Throwable;
  * IDENTIFICATION DU PROVIDER
  * ──────────────────────────
  * La colonne `provider` n'est pas normalisée : l'ExecutionEngine y écrit le
- * NOM d'affichage issu de la route (`pawaPay`), tandis que le reste du Core
- * raisonne en slug (`pawapay`). Vérifié en base : les deux formes coexistent.
+ * NOM d'affichage issu de la route, tandis que le reste du Core
+ * raisonne en slug. Vérifié en base : les deux formes coexistent.
  *
  * Ne compter que le slug ferait silencieusement disparaître des exécutions
  * réelles — et une mesure amputée est une mesure fausse. On interroge donc le

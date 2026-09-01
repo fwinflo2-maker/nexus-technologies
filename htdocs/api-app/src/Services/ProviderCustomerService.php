@@ -14,7 +14,7 @@ use Throwable;
 /**
  * ProviderCustomerService — mapping utilisateur Nexus → customer provider.
  *
- * Un customer provider est l'identité chez le partenaire (Cashramp, pawaPay, …).
+ * Un customer provider est l'identité chez le partenaire (Cashramp, Stripe, …).
  * Le service est provider-agnostic : le provisioning spécifique est injecté via
  * callable ou adaptateur futur, jamais via des branches `if ($slug === …)`.
  *

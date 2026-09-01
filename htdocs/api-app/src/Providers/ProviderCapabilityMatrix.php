@@ -16,7 +16,7 @@ use Nexus\Services\ProviderCatalog;
  *   IMPLEMENTED        — code réel, testé, derrière l'adaptateur ;
  *   NOT_IMPLEMENTED    — non câblé (aucun appel réel, aucune simulation) ;
  *   NOT_SUPPORTED      — la documentation officielle du provider ne l'offre
- *                        pas (ex. pawaPay : pas d'annulation de payout) ;
+ *                        pas ;
  *   CONFIG_REQUIRED    — le code existe mais exige une configuration
  *                        (credentials, clé de webhook, compte provider).
  *

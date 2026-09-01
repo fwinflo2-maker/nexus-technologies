@@ -67,7 +67,7 @@ final class ProviderCredentialService
      * Lit la credential de PLATEFORME (`user_id IS NULL`).
      *
      * Une credential provider est un actif de Nexus, pas du client : c'est
-     * Nexus qui contracte avec Stripe ou pawaPay. Elle vaut donc pour tous
+     * Nexus qui contracte avec Stripe ou Cashramp. Elle vaut donc pour tous
      * les clients, dans un environnement donné.
      *
      * @return array<string,mixed>|null

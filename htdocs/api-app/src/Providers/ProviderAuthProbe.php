@@ -18,7 +18,7 @@ use Throwable;
  *  3. exécute une sonde HTTP réelle (jamais un faux succès).
  *
  * Utilisé par ConfigDrivenProviderAdapter. Les adaptateurs dédiés
- * (pawaPay, Stripe, …) gardent leur propre testConnection.
+ * (Cashramp, Stripe, …) gardent leur propre testConnection.
  */
 final class ProviderAuthProbe
 {

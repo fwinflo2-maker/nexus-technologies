@@ -26,7 +26,7 @@ use Throwable;
  * sans rapport avec le provider concerné.
  *
  * Vérifié en HTTP pendant l'audit : après 20 exécutions réelles à 600 s pour
- * pawaPay et 20 à 30 s pour MTN MoMo — un écart mesuré de 20× — l'API
+ * 1 à 2 s pour certains partenaires et 20 à 30 s pour d'autres — un écart mesuré de 20× — l'API
  * annonçait « ~3 min » pour les deux. Sur une base ne contenant AUCUNE
  * transaction, elle annonçait déjà « ~3 min » et décernait le badge
  * « ⚡ PLUS RAPIDE ». Un délai insensible aux temps réellement observés est un
@@ -171,8 +171,8 @@ final class ProviderLatency
 
             $statuses = self::placeholders(self::COUNTED_STATUSES, 's');
             // Même problème d'identité que pour la fiabilité : l'ExecutionEngine
-            // enregistre le NOM d'affichage de la route (« pawaPay »), le Core
-            // raisonne en slug (« pawapay »). Ignorer l'une des formes
+            // enregistre le NOM d'affichage de la route, le Core
+            // raisonne en slug. Ignorer l'une des formes
             // amputerait la mesure d'exécutions réelles.
             $identities = self::placeholders(self::identitiesOf($slug), 'p');
 

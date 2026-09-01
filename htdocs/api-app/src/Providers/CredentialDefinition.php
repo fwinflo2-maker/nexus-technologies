@@ -14,7 +14,7 @@ namespace Nexus\Providers;
  * explicitement qu'elle est destinée à être publiée côté client.
  *
  * Ne JAMAIS déduire qu'une clé est publique parce que son nom contient
- * « public ». Contre-exemple réel : la « clé publique » de pawaPay
+ * « public ».
  * (`public_key`) sert à vérifier les signatures de requêtes financières —
  * c'est une clé de configuration serveur, jamais un secret à publier dans
  * un navigateur. À l'inverse, la `publishable_key` de Stripe est

@@ -96,8 +96,6 @@
 2026_08_16_kyb_company_risk.sql
 # 0.33 — Journal des webhooks providers (idempotence, §13)
 2026_08_17_provider_webhook_events.sql
-# 0.34 — Exécution pawaPay
-2026_08_17_pawapay_execution.sql
 # 0.35 — Modèle comptable cible / GL
 2026_08_17_financial_gl_model.sql
 # 0.36 — États financiers cibles
