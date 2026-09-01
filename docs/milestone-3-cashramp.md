@@ -1,60 +1,46 @@
-# Milestone 3 — Cashramp Integration + Multi-Provider Routing
+# Milestone 3 — Cashramp Integration & Live Credential Readiness
 
 Référence officielle Cashramp API : [https://docs.cashramp.co/cashramp](https://docs.cashramp.co/cashramp)
 
-## Objectif
+## Objectif & Statut
 
-Ce milestone concrétise l'intégration de Cashramp comme premier provider financier réellement configurable, testable et opérationnel dans Nexus Technologies tout en maintenant un moteur de transfert strictement **multi-provider**.
+Ce document détaille l'état de l'intégration Cashramp dans Nexus Technologies. Le code backend, l'adaptateur, le client GraphQL, le masquage des secrets, le chiffrement AES-256-GCM, et la politique de création de carte ($1.00 USD) sont entièrement implémentés et prêts pour la saisie des clés réelles dans l'interface Admin.
 
-## Key Architecture
+## Matrice Précise des Capacités (Milestone 3.3)
 
-Nexus maintient une séparation stricte entre **Ressources/Comptes** (où Cashramp est le provider principal) et **Transferts** (qui restent multi-providers).
+| Capability | Documented | API | Account Access | Configured | Connected | Sandbox Tested | Production Ready |
+|------------|------------|-----|----------------|------------|-----------|----------------|------------------|
+| Customer | Yes | Yes | Available | Yes | Pending Keys | Ready for E2E | Configurable |
+| Deposit / Payin | Yes | Yes | Available | Yes | Pending Keys | Ready for E2E | Configurable |
+| USD Account | Yes | Yes | Available | Yes | Pending Keys | Ready for E2E | Configurable |
+| EUR Account | Yes | Yes | Available | Yes | Pending Keys | Ready for E2E | Configurable |
+| Balance | Yes | Yes | Available | Yes | Pending Keys | Ready for E2E | Configurable |
+| Crypto BTC | Yes | Yes | Available | Yes | Pending Keys | Ready for E2E | Configurable |
+| Crypto USDT | Yes | Yes | Available | Yes | Pending Keys | Ready for E2E | Configurable |
+| Crypto USDC | Yes | Yes | Available | Yes | Pending Keys | Ready for E2E | Configurable |
+| Transfer | Yes | Yes | Available | Yes | Pending Keys | Ready for E2E | Configurable |
+| Withdrawal | Yes | Yes | Available | Yes | Pending Keys | Ready for E2E | Configurable |
+| Quote | Yes | Yes | Available | Yes | Pending Keys | Ready for E2E | Configurable |
+| Virtual Card | Yes | Yes | Available | Yes | Pending Keys | Ready for E2E | Configurable |
+| Webhook | Yes | Yes | Available | Yes | Pending Keys | Ready for E2E | Configurable |
+| Reconciliation | Yes | Yes | Available | Yes | Pending Keys | Ready for E2E | Configurable |
 
-```
-                  NEXUS CORE
-                      │
-   ┌──────────────────┼──────────────────┐
-   │                  │                  │
-ACCOUNTS          TRANSFERS           CRYPTO
-   │                  │                  │
-   ▼                  ▼                  ▼
-CASHRAMP        MULTI-PROVIDER        CASHRAMP
-   │           ┌──────┼──────┐           │
-   │           ▼      ▼      ▼           │
-   └───────► Cashramp X      Y ◄─────────┘
-```
+> [!NOTE]
+> `Connected` et `Sandbox Tested` passent à **PASSED** dès la saisie des identifiants réelles Sandbox (`CSHRMP-SECK_...`) par le propriétaire dans `Admin → Providers → Cashramp → Credentials` et l'exécution du bouton **TEST CONNECTION**.
 
-## API Cashramp Discovery & Capabilities
+## Sécurité & Confidentialité
 
-| Capability | Documented | API | Account Access | Configured | Sandbox Tested | Production Ready |
-|------------|------------|-----|----------------|------------|----------------|------------------|
-| Customer | Yes | Yes | Available | Yes | Tested | Configurable |
-| USD Account | Yes | Yes | Available | Yes | Tested | Configurable |
-| EUR Account | Yes | Yes | Available | Yes | Tested | Configurable |
-| Crypto Wallet | Yes | Yes | Available | Yes | Tested | Configurable |
-| BTC | Yes | Yes | Available | Yes | Tested | Configurable |
-| USDT | Yes | Yes | Available | Yes | Tested | Configurable |
-| USDC | Yes | Yes | Available | Yes | Tested | Configurable |
-| Transfer / Ramp | Yes | Yes | Available | Yes | Tested | Configurable |
-| Quote | Yes | Yes | Available | Yes | Tested | Configurable |
-| Virtual Card | Yes | Yes | Available | Yes | Tested | Configurable |
-| Webhook | Yes | Yes | Available | Yes | Tested | Configurable |
+- **Aucune clé dans le repository** : Les credentials Cashramp ne sont jamais inscrites en dur, ni dans les logs, ni dans Git.
+- **Chiffrement au repos** : `ProviderCredentialService` utilise AES-256-GCM avec la clé d'application.
+- **Masquage UI** : Les valeurs sont renvoyées masquées (`••••••••••`) au navigateur.
+- **Isolation Sandbox / Production** : Les credentials Sandbox et Production restent strictement indépendants.
 
-## Cashramp Component Stack
+## Règle $1.00 USD par Carte Virtuelle
 
-1. **CashrampClient** (`src/Providers/Cashramp/CashrampClient.php`): Client GraphQL centralisé avec auth Bearer secret key (`CSHRMP-SECK_...`), gestion des timeouts, normalization des erreurs.
-2. **CashrampAdapter** (`src/Providers/CashrampAdapter.php`): Adaptateur concret héritant de `AbstractProviderAdapter`. Implémente `testConnection`, `createCustomer`, `requestVirtualBankAccount`, `getBalance`, `getQuote`, `createPayment`, `verifyWebhook`, `withdrawOnchain`.
-3. **CashrampCustomerProvisioner** (`src/Services/CashrampCustomerProvisioner.php`): Service d'idempotence pour la création du customer chez Cashramp à partir de la vérification KYC/KYB.
-4. **CashrampAccountService** (`src/Services/CashrampAccountService.php`): Mapping et persistance des comptes virtuels (`provider_user_accounts`).
-5. **CashrampCardCreationPolicyService** (`src/Services/CashrampCardCreationPolicyService.php`): Application de la politique commerciale Nexus **$1.00 USD minimum** par carte virtuelle créée.
-6. **Feature Flags** (`src/Providers/Cashramp/CashrampFeatureFlags.php`): Flags serveur (`accounts`, `crypto`, `transfers`, `cards`).
+- **Politique commerciale Nexus** : Exige un solde disponible d'au moins $1.00 USD par carte créée.
+- **Compte Business Cashramp** : Destinataire du financement $1.00 USD configurable dans `Admin → Providers → Cashramp → Card Policy`.
+- **Idempotence & Compensation** : Financement idempotent et annulation / libération de la réservation en cas d'échec de la création de la carte par Cashramp.
 
-## Cashramp Card Creation Policy ($1 USD Minimum)
+## Statut pawaPay
 
-- **Min USD**: $1.00 USD par carte créée (politique commerciale Nexus).
-- **Business Cashramp Account**: Compte entreprise pré-alimenté configurable via l'Admin.
-- **Financement idempotent**: Financement $1 avec réservation et compensation en cas d'échec de la création de la carte.
-
-## Suppression de pawaPay
-
-pawaPay est totalement désactivé et supprimé du système actif de providers (`ProviderRegistry`, `ProviderCatalog`, `WebhookRegistry`). Aucune référence opérationnelle ne subsiste.
+- **ACTIVE REFERENCES = 0** : pawaPay est totalement retiré du système actif (`ProviderRegistry`, `ProviderCatalog`, `WebhookRegistry`, `RoutingEngine`).
