@@ -40,10 +40,45 @@ final class ProviderRegistry
     /** Résout l'adaptateur d'un provider (instancié une seule fois). */
     public static function adapter(string $slug): ProviderAdapter
     {
+        return self::get($slug);
+    }
+
+    /** Convention unique : récupère l'adaptateur d'un provider. */
+    public static function get(string $slug): ProviderAdapter
+    {
         if (isset(self::$cache[$slug])) {
             return self::$cache[$slug];
         }
         return self::$cache[$slug] = self::build($slug);
+    }
+
+    /** Le slug existe-t-il dans le catalogue ? */
+    public static function has(string $slug): bool
+    {
+        return ProviderCatalog::exists($slug);
+    }
+
+    /**
+     * Tous les slugs du catalogue.
+     *
+     * @return list<string>
+     */
+    public static function all(): array
+    {
+        return array_keys(ProviderCatalog::all());
+    }
+
+    /**
+     * Providers activés pour le routing (catalogue + flag routing).
+     *
+     * @return list<string>
+     */
+    public static function enabled(): array
+    {
+        return array_values(array_filter(
+            self::all(),
+            static fn (string $slug): bool => ProviderCatalog::isRoutingEnabled($slug)
+        ));
     }
 
     /**
@@ -193,6 +228,7 @@ final class ProviderRegistry
             'stripe_issuing' => new StripeIssuingAdapter(),
             'maplerad' => new MapleradIssuingAdapter(),
             'pawapay' => new PawaPayAdapter(),
+            'cashramp' => new CashrampAdapter(),
             'western_union' => new WesternUnionAdapter(),
             'moneygram' => new MoneyGramAdapter(),
             default   => new ConfigDrivenProviderAdapter($slug),

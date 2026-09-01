@@ -7,13 +7,19 @@ namespace Nexus\Execution;
 use Nexus\Core\Database;
 use Nexus\Core\HttpException;
 use Nexus\Providers\ProviderAdapter;
+use Nexus\Providers\ProviderCatalog;
 use Nexus\Providers\ProviderConfig;
+use Nexus\Providers\ProviderEligibilityService;
 use Nexus\Providers\ProviderRegistry;
-use Nexus\Services\ProviderCatalog;
+use Nexus\Providers\ProviderRouteCandidate;
+use Nexus\Providers\ProviderRouteScoring;
 use Nexus\Services\ProviderCredentialService;
+use Nexus\Services\ProviderHealthService;
+use Nexus\Services\ProviderLatency;
+use Nexus\Services\ProviderReliability;
 
 /**
- * ProviderResolver — obtention d'un provider utilisable DANS un contexte donné.
+ * ProviderResolver — résolution multi-provider pour le routing (Milestone 2).
  *
  * INVERSION DE DÉPENDANCE FONDAMENTALE
  * ────────────────────────────────────
@@ -21,14 +27,6 @@ use Nexus\Services\ProviderCredentialService;
  *
  *     contexte → environnement → credential          (CORRECT)
  *     credential disponible → environnement          (INTERDIT)
- *
- * La seconde forme est celle qui produit les accidents : la simple présence
- * d'une clé de production suffirait à faire exécuter en production une
- * opération demandée en sandbox.
- *
- * Ici, l'environnement est arrêté AVANT toute consultation de credential. Si
- * la credential de cet environnement précis est absente, l'opération échoue
- * proprement — jamais de repli vers l'autre environnement.
  */
 final class ProviderResolver
 {
@@ -50,8 +48,6 @@ final class ProviderResolver
 
         $environment = $context->environmentValue();
 
-        // L'environnement est déjà décidé : on EXIGE la credential
-        // correspondante. On ne cherche pas « ce qui est disponible ».
         if (!self::hasCredentialFor($slug, $context)) {
             ExecutionAudit::recordDenied(
                 'PROVIDER_NOT_CONFIGURED_FOR_ENVIRONMENT',
@@ -72,17 +68,125 @@ final class ProviderResolver
             );
         }
 
-        return ProviderRegistry::adapter($slug);
+        return ProviderRegistry::get($slug);
+    }
+
+    /**
+     * Recherche les providers éligibles pour une opération de transfert.
+     *
+     * @param array{
+     *     amount: float,
+     *     sourceCurrency: string,
+     *     sourceCountry?: string,
+     *     destCountry: string,
+     *     destCurrency: string,
+     *     receivingMethod: string,
+     *     operation?: string
+     * } $intent
+     *
+     * @return array{
+     *     status: string,
+     *     operation: string,
+     *     candidates: list<array<string,mixed>>,
+     *     selected: array<string,mixed>|null,
+     *     eligible_providers: list<array<string,mixed>>
+     * }
+     */
+    public static function resolveTransferRoute(
+        array $intent,
+        ExecutionContext $context,
+        bool $allRoutes = false,
+    ): array {
+        $resolution = self::resolveProviders($intent, $context, $allRoutes);
+        $eligible   = array_values(array_filter(
+            $resolution['candidates'],
+            static fn (array $candidate): bool => ($candidate['eligible'] ?? false) === true
+        ));
+
+        return [
+            'status'             => $resolution['status'],
+            'operation'          => (string) ($intent['operation'] ?? 'payout'),
+            'candidates'         => $resolution['candidates'],
+            'selected'           => $eligible[0] ?? null,
+            'eligible_providers' => self::mapEligibleForQuoteEngine($eligible, $context),
+        ];
+    }
+
+    /**
+     * @param array{
+     *     amount: float,
+     *     sourceCurrency: string,
+     *     sourceCountry?: string,
+     *     destCountry: string,
+     *     destCurrency: string,
+     *     receivingMethod: string,
+     *     operation?: string
+     * } $intent
+     *
+     * @return array{
+     *     status: string,
+     *     candidates: list<array<string,mixed>>
+     * }
+     */
+    public static function resolveProviders(
+        array $intent,
+        ExecutionContext $context,
+        bool $allRoutes = false,
+    ): array {
+        $intent['operation'] ??= 'payout';
+        $candidates = [];
+
+        foreach (ProviderCatalog::all() as $slug => $provider) {
+            $evaluation = ProviderEligibilityService::evaluate($slug, $intent, $context, $allRoutes);
+            $health     = self::healthConnectionFor($slug, $context);
+            $score      = ProviderRouteScoring::scoreFor($evaluation, $health);
+            $candidate  = ProviderRouteCandidate::fromEvaluation(
+                $slug,
+                $provider,
+                $intent,
+                $evaluation,
+                $score,
+                $health,
+            );
+            $candidates[] = $candidate->toArray();
+        }
+
+        $ranked = ProviderRouteScoring::rank(
+            array_map(
+                static fn (array $row): ProviderRouteCandidate => new ProviderRouteCandidate(
+                    (string) $row['provider'],
+                    (string) $row['operation'],
+                    (string) $row['source_currency'],
+                    (string) $row['destination_currency'],
+                    (string) $row['source_country'],
+                    (string) $row['destination_country'],
+                    (string) $row['channel'],
+                    (bool) $row['eligible'],
+                    isset($row['estimated_fee']) ? (float) $row['estimated_fee'] : null,
+                    isset($row['estimated_fx']) ? (float) $row['estimated_fx'] : null,
+                    isset($row['estimated_delivery']) ? (int) $row['estimated_delivery'] : null,
+                    (string) $row['provider_health'],
+                    (int) $row['score'],
+                    (array) $row['reasons'],
+                ),
+                $candidates
+            )
+        );
+
+        $rankedArrays = array_map(static fn (ProviderRouteCandidate $c): array => $c->toArray(), $ranked);
+        $eligible     = array_values(array_filter(
+            $rankedArrays,
+            static fn (array $row): bool => ($row['eligible'] ?? false) === true
+        ));
+
+        return [
+            'status'     => $eligible === [] ? 'NO_ELIGIBLE_PROVIDER' : 'OK',
+            'candidates' => $rankedArrays,
+        ];
     }
 
     /**
      * Une credential existe-t-elle pour CE provider dans CET environnement ?
-     *
-     * Les deux sources possibles sont consultées, chacune strictement scopée :
-     *   - variables d'environnement (PROVIDER_{SLUG}_{ENV}_{FIELD}) ;
-     *   - credentials chiffrées en base, pour le sujet du contexte.
-     *
-     * Aucune valeur n'est retournée ni journalisée : uniquement l'existence.
      */
     public static function hasCredentialFor(string $slug, ExecutionContext $context): bool
     {
@@ -93,11 +197,6 @@ final class ProviderResolver
             return false;
         }
 
-        // 1) Variables d'environnement, scopées.
-        //    Tous les champs REQUIS doivent être présents dans cet
-        //    environnement. Un provider sans champ requis déclaré ne peut pas
-        //    être considéré comme configuré « par défaut » : il faut au moins
-        //    un champ effectivement renseigné.
         $required  = [];
         foreach (($provider['credentials'] ?? []) as $field) {
             if (($field['required'] ?? false) === true) {
@@ -118,14 +217,6 @@ final class ProviderResolver
             }
         }
 
-        // 2) Credentials chiffrées en base, pour le sujet et cet environnement.
-        //    findRow() n'effectue AUCUN déchiffrement : tester la présence ne
-        //    justifie pas de manipuler des secrets en clair.
-        // La credential de PLATEFORME est consultée en premier : c'est Nexus
-        // qui contracte avec le provider, pas le client. Sans cela, la
-        // credential déposée par le superadmin (boucle 7) resterait invisible
-        // à tous les clients et AUCUN transfert ne pourrait résoudre son
-        // provider.
         $row = ProviderCredentialService::findEffectiveRow(
             Database::getConnection(),
             $context->subjectUserId,
@@ -137,11 +228,6 @@ final class ProviderResolver
     }
 
     /**
-     * Providers réellement utilisables dans ce contexte.
-     *
-     * Sert au routing : ne jamais proposer une route dont le provider n'est
-     * pas configuré POUR l'environnement d'exécution retenu.
-     *
      * @param list<string> $slugs
      * @return list<string>
      */
@@ -155,5 +241,56 @@ final class ProviderResolver
         }
 
         return $usable;
+    }
+
+    /**
+     * @param list<array<string,mixed>> $eligibleCandidates
+     * @return list<array<string,mixed>>
+     */
+    private static function mapEligibleForQuoteEngine(array $eligibleCandidates, ExecutionContext $context): array
+    {
+        $out = [];
+        foreach ($eligibleCandidates as $candidate) {
+            $slug = (string) ($candidate['provider'] ?? '');
+            if ($slug === '') {
+                continue;
+            }
+            $provider = ProviderCatalog::get($slug);
+            if ($provider === null) {
+                continue;
+            }
+
+            $reliability = ProviderReliability::forProvider($slug, $context->environment);
+            $latency     = ProviderLatency::forProvider($slug, $context->environment);
+
+            $out[] = [
+                'slug'               => $slug,
+                'name'               => $provider['name'],
+                'category'           => $provider['category'],
+                'reliability'        => $reliability['score'],
+                'reliability_status' => $reliability['status'],
+                'reliability_obs'    => $reliability['observations'],
+                'delay_seconds'      => $latency['seconds'],
+                'delay_status'       => $latency['status'],
+                'delay_obs'          => $latency['observations'],
+                'delay_p90_seconds'  => $latency['p90_seconds'],
+                'method_type'        => (string) ($candidate['channel'] ?? ''),
+                'route_score'        => (int) ($candidate['score'] ?? 0),
+                'route_reasons'      => $candidate['reasons'] ?? [],
+            ];
+        }
+
+        return $out;
+    }
+
+    private static function healthConnectionFor(string $slug, ExecutionContext $context): string
+    {
+        try {
+            $pdo    = Database::getConnection();
+            $health = ProviderHealthService::healthFor($pdo, $slug, $context->environmentValue());
+            return strtoupper((string) ($health['connection'] ?? 'NOT_CONFIGURED'));
+        } catch (\Throwable) {
+            return 'NOT_CONFIGURED';
+        }
     }
 }

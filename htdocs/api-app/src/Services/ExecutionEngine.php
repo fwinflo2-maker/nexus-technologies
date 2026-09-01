@@ -10,6 +10,7 @@ use Nexus\Core\HttpException;
 use Nexus\Execution\EnvironmentGuard;
 use Nexus\Execution\ExecutionContext;
 use Nexus\Execution\ExecutionEnvironment;
+use Nexus\Execution\ProviderResolver;
 use Nexus\Providers\ProviderConfig;
 use Nexus\Providers\ProviderOperationNotImplemented;
 use Nexus\Providers\ProviderRegistry;
@@ -409,13 +410,19 @@ final class ExecutionEngine
             );
         }
 
-        if (!ProviderRegistry::isConfigured($provider)) {
+        if ($context !== null) {
+            try {
+                ProviderResolver::resolve($provider, $context);
+            } catch (HttpException $e) {
+                throw $e;
+            }
+        } elseif (!ProviderRegistry::isConfigured($provider)) {
             throw new HttpException(
                 409,
                 sprintf(
                     'Le provider « %s » n\'est pas configuré pour l\'environnement « %s » : aucune transaction ne sera créée.',
                     $provider,
-                    $context?->environmentValue() ?? ProviderConfig::defaultEnvironment()
+                    ProviderConfig::defaultEnvironment()
                 ),
                 'NO_AVAILABLE_PROVIDER'
             );
@@ -433,7 +440,10 @@ final class ExecutionEngine
         ];
 
         try {
-            $raw = ProviderRegistry::adapter($provider)->createPayment($params);
+            $raw = ($context !== null
+                ? ProviderResolver::resolve($provider, $context)
+                : ProviderRegistry::adapter($provider)
+            )->createPayment($params);
             if (!is_array($raw)) {
                 $raw = [];
             }

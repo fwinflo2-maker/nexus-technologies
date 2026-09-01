@@ -31,7 +31,25 @@ final class ProviderCapabilityMatrix
     public const NOT_SUPPORTED   = 'NOT_SUPPORTED';
     public const CONFIG_REQUIRED = 'CONFIG_REQUIRED';
 
-    /** Capacités suivies par la matrice (ordre d'affichage). */
+    /** États corridor (Milestone 2) — aucune donnée inventée par défaut. */
+    public const STATE_UNKNOWN           = 'UNKNOWN';
+    public const STATE_AVAILABLE         = 'AVAILABLE';
+    public const STATE_UNAVAILABLE       = 'UNAVAILABLE';
+    public const STATE_DISABLED          = 'DISABLED';
+    public const STATE_TESTED            = 'TESTED';
+    public const STATE_PRODUCTION_READY  = 'PRODUCTION_READY';
+
+    /** Dimensions d'une capacité corridor. */
+    public const ROUTE_DIMENSIONS = [
+        'provider',
+        'operation',
+        'source_currency',
+        'destination_currency',
+        'source_country',
+        'destination_country',
+        'channel',
+        'status',
+    ];
     public const CAPABILITIES = [
         'test_connection',
         'balance',
@@ -128,7 +146,24 @@ final class ProviderCapabilityMatrix
             'reconciliation'  => self::NOT_IMPLEMENTED,
             'account'         => self::NOT_IMPLEMENTED,
         ],
+        'cashramp' => [
+            'test_connection' => self::NOT_IMPLEMENTED,
+            'balance'         => self::NOT_IMPLEMENTED,
+            'quote'           => self::NOT_IMPLEMENTED,
+            'payout'          => self::NOT_IMPLEMENTED,
+            'refund'          => self::NOT_IMPLEMENTED,
+            'webhook'         => self::NOT_IMPLEMENTED,
+            'reconciliation'  => self::NOT_IMPLEMENTED,
+            'account'         => self::NOT_IMPLEMENTED,
+        ],
     ];
+
+    /**
+     * Capacités corridor explicites (vide au Milestone 2 — modèle prêt).
+     *
+     * @var list<array<string, string>>
+     */
+    private const ROUTE_DECLARED = [];
 
     private function __construct()
     {
@@ -201,5 +236,58 @@ final class ProviderCapabilityMatrix
             ];
         }
         return $rows;
+    }
+
+    /** @return list<string> */
+    public static function routeDimensions(): array
+    {
+        return self::ROUTE_DIMENSIONS;
+    }
+
+    /**
+     * Statut corridor pour une intention (UNKNOWN tant qu'aucune donnée réelle).
+     *
+     * @param array<string, mixed> $intent
+     */
+    public static function routeStatus(string $slug, array $intent): string
+    {
+        $operation = (string) ($intent['operation'] ?? 'payout');
+        $key = self::routeKey(
+            $slug,
+            $operation,
+            strtoupper((string) ($intent['sourceCurrency'] ?? '')),
+            strtoupper((string) ($intent['destCurrency'] ?? '')),
+            strtoupper((string) ($intent['sourceCountry'] ?? '')),
+            strtoupper((string) ($intent['destCountry'] ?? '')),
+            (string) ($intent['receivingMethod'] ?? ''),
+        );
+
+        foreach (self::ROUTE_DECLARED as $row) {
+            if (($row['key'] ?? '') === $key) {
+                return (string) ($row['status'] ?? self::STATE_UNKNOWN);
+            }
+        }
+
+        return self::STATE_UNKNOWN;
+    }
+
+    public static function routeKey(
+        string $provider,
+        string $operation,
+        string $sourceCurrency,
+        string $destinationCurrency,
+        string $sourceCountry,
+        string $destinationCountry,
+        string $channel,
+    ): string {
+        return implode('|', [
+            strtolower($provider),
+            strtolower($operation),
+            $sourceCurrency,
+            $destinationCurrency,
+            $sourceCountry,
+            $destinationCountry,
+            strtolower($channel),
+        ]);
     }
 }

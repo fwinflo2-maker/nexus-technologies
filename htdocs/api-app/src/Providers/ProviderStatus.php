@@ -17,7 +17,9 @@ namespace Nexus\Providers;
  */
 enum ProviderStatus: string
 {
+    case NOT_CONFIGURED       = 'not_configured';
     case CONFIGURED           = 'configured';
+    case CONNECTED            = 'connected';
     case MISSING_CREDENTIALS  = 'missing_credentials';
     case INVALID_CONFIGURATION = 'invalid_configuration';
     case DISABLED             = 'disabled';

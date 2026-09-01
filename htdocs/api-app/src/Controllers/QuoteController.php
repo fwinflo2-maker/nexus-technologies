@@ -100,7 +100,7 @@ final class QuoteController
         // ── 2. Capability Engine : providers éligibles ───────────
         // Le Super Admin accède à toutes les routes possibles (sans restriction
         // de pays/corridor), depuis n'importe où.
-        $providers = CapabilityEngine::findEligible($intent, $context->environment, $isSuperAdmin);
+        $providers = CapabilityEngine::findEligible($intent, $context->environment, $isSuperAdmin, $context);
 
         // ── 3. Policy Engine : vérification avant quotes ────────
         // Conversion du montant source en EUR pour comparer aux plafonds.

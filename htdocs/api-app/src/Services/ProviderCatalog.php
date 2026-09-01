@@ -30,6 +30,7 @@ final class ProviderCatalog
         'pawapay' => [
             'name'        => 'pawaPay',
             'category'    => 'mobile_money',
+            'routing_enabled' => false,
             'icon'        => '📱',
             'auth_type'   => 'bearer_token',
             'base_url'    => 'https://api.pawapay.io',
@@ -427,6 +428,7 @@ final class ProviderCatalog
         'cashramp' => [
             'name'        => 'CashRamp',
             'category'    => 'onramp',
+            'routing_enabled' => false,
             'icon'        => '🔀',
             'auth_type'   => 'api_key',
             'base_url'    => 'https://api.cashramp.com',
@@ -489,6 +491,17 @@ final class ProviderCatalog
     public static function exists(string $slug): bool
     {
         return isset(self::PROVIDERS[$slug]);
+    }
+
+    /** Le provider participe-t-il au routing des transferts ? */
+    public static function isRoutingEnabled(string $slug): bool
+    {
+        $provider = self::get($slug);
+        if ($provider === null) {
+            return false;
+        }
+
+        return ($provider['routing_enabled'] ?? true) === true;
     }
 
     /** Retourne les slugs d'un provider triés par catégorie. */

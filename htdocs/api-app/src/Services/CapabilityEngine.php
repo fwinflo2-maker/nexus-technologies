@@ -5,56 +5,21 @@ declare(strict_types=1);
 namespace Nexus\Services;
 
 use Nexus\Core\HttpException;
+use Nexus\Execution\ExecutionContext;
 use Nexus\Execution\ExecutionEnvironment;
-use Nexus\Providers\ProviderCapabilityMatrix;
+use Nexus\Execution\ProviderResolver;
 use Nexus\Providers\ProviderConfig;
-use Nexus\Providers\ProviderRegistry;
 
 /**
  * Capability Engine — détermine les providers éligibles pour un corridor donné.
  *
- * Étape 2 du pipeline. Reçoit l'intention normalisée et retourne la liste
- * des providers capables de traiter le transfert (corridor EUR→XAF,
- * Mobile Money, pays CG, etc.).
- *
- * Source de vérité : le ProviderCatalog (registre statique des providers)
- * couplé aux données de couverture d'IntentEngine (pays, devise, méthodes).
- *
- * Pour chaque provider éligible, retourne sa fiabilité MESURÉE (ou l'état
- * expliquant pourquoi elle ne l'est pas) et les métadonnées nécessaires au
- * Quote Engine.
- *
- * DÉLAIS : MESURÉS OU DÉCLARÉS INCONNUS (§12, §17)
- * ────────────────────────────────────────────────
- * `CATEGORY_DELAYS` fixait le délai par CATÉGORIE : les trois providers
- * Mobile Money d'un corridor annonçaient donc le même « ~3 min », quels que
- * soient leurs temps réels. Elle est supprimée au profit de
- * `ProviderLatency`, qui mesure depuis `transactions.execution_time_seconds`.
- * Sans mesure, `delay_seconds` vaut `null` et `delay_status` dit pourquoi.
- *
- * FIABILITÉ : MESURÉE OU DÉCLARÉE INCONNUE (§12, §17)
- * ───────────────────────────────────────────────────
- * Ce moteur portait une constante `PERFORMANCE_SCORES` de 20 valeurs écrites
- * à la main, présentées au client comme une mesure. Elle est supprimée : la
- * fiabilité vient désormais de `ProviderReliability`, qui l'agrège depuis les
- * exécutions réelles. Quand rien n'est mesurable, `reliability` vaut `null`
- * et `reliability_status` dit pourquoi — jamais un nombre plausible.
+ * Délègue la résolution multi-provider au ProviderResolver (Milestone 2).
  */
 final class CapabilityEngine
 {
-    /**
-     * Mapping method_type → catégories de providers éligibles.
-     */
-    private const METHOD_TO_CATEGORIES = [
-        'mobile_money' => ['mobile_money', 'payout_network'],
-        'bank'         => ['banking', 'fx', 'payout_network'],
-        'crypto'       => ['crypto', 'onramp'],
-        // cash_pickup : retrait en espèces — Western Union (payout_network) et
-        // les réseaux de paiement / FX cash-out historiques.
-        'cash_pickup'  => ['payout_network', 'fx'],
-    ];
-
-    private function __construct() {}
+    private function __construct()
+    {
+    }
 
     /**
      * Détermine les providers éligibles pour l'intention donnée.
@@ -78,96 +43,32 @@ final class CapabilityEngine
      *
      * @throws HttpException 400 si aucun provider ne couvre le corridor.
      */
-    public static function findEligible(array $intent, ?ExecutionEnvironment $environment = null, bool $allRoutes = false): array
-    {
-        // La fiabilité se mesure PAR environnement : des succès en sandbox ne
-        // disent rien de la production. À défaut de contexte, on suit le
-        // défaut du déploiement plutôt qu'une sandbox en dur.
+    public static function findEligible(
+        array $intent,
+        ?ExecutionEnvironment $environment = null,
+        bool $allRoutes = false,
+        ?ExecutionContext $context = null,
+    ): array {
         $environment ??= ExecutionEnvironment::fromString(ProviderConfig::defaultEnvironment());
 
-        $countryCode  = $intent['destCountry'];
-        $methodType   = $intent['receivingMethod'];
-        $destCurrency = $intent['destCurrency'];
-
-        // Catégories de providers compatibles avec le mode de réception
-        $validCategories = self::METHOD_TO_CATEGORIES[$methodType] ?? [];
-
-        $eligible   = [];
-        $candidates = 0;
-
-        foreach (ProviderCatalog::all() as $slug => $provider) {
-            // ── Filtre 1 : catégorie compatible ──────────────────
-            if (!in_array($provider['category'], $validCategories, true)) {
-                continue;
-            }
-
-            // ── Filtre 2 : couvre le pays de destination ─────────
-            // On étend « EU » vers les pays individuels. Le Super Admin
-            // ($allRoutes) accède à TOUTES les routes, y compris hors des
-            // pays couverts par le provider.
-            // Un actif crypto de réception est un rail global : Bridge ou un
-            // on-ramp ne « couvre » pas un pays au sens d'un payout fiat.
-            // Les devises fiat restent, elles, strictement filtrées par pays.
-            $isGlobalCryptoDestination = $methodType === 'crypto'
-                && IntentEngine::isCryptoDestination((string) $destCurrency);
-            if (!$allRoutes && !$isGlobalCryptoDestination) {
-                $providerCountries = self::expandCountries($provider['countries']);
-                if (!in_array($countryCode, $providerCountries, true)) {
-                    continue;
-                }
-            }
-
-            // Un provider couvre ce corridor par le catalogue : c'est un
-            // candidat. S'il n'est pas réellement configuré, il est exclu —
-            // mais le distinguer du « corridor non couvert » permet au client
-            // de comprendre la vraie raison du refus (§10).
-            $candidates++;
-
-            // ── Filtre 3 : disponibilité réelle (§10, §12, §13) ──
-            // Catalogue ≠ opérationnel : seuls les providers CONFIGURÉS
-            // (env scopé ou credentials plateforme en base) participent au
-            // routing. Le mode démo — tout le catalogue éligible tant qu'aucun
-            // provider n'était configuré — est supprimé : un provider
-            // désactivé ou sans credentials est ignoré, et ne casse jamais le
-            // Core.
-            if (!ProviderRegistry::isAvailableForRouting($slug)) {
-                continue;
-            }
-
-            // ── Filtre 4 : capacité payout RÉELLEMENT implémentée (§21) ──
-            // Configuré ≠ exécutable. Un shell (pawaPay) ou un ConfigDriven
-            // ne doit jamais apparaître dans le routing tant que la matrice
-            // ne déclare pas payout=IMPLEMENTED.
-            if (ProviderCapabilityMatrix::for($slug)['payout'] !== ProviderCapabilityMatrix::IMPLEMENTED) {
-                continue;
-            }
-
-            // ── Fiabilité : mesurée, ou explicitement inconnue ───
-            $reliability = ProviderReliability::forProvider($slug, $environment);
-
-            // ── Délai : mesuré, ou explicitement inconnu ────────
-            $latency = ProviderLatency::forProvider($slug, $environment);
-
-            $eligible[] = [
-                'slug'               => $slug,
-                'name'               => $provider['name'],
-                'category'           => $provider['category'],
-                'reliability'        => $reliability['score'],
-                'reliability_status' => $reliability['status'],
-                'reliability_obs'    => $reliability['observations'],
-                'delay_seconds'      => $latency['seconds'],
-                'delay_status'       => $latency['status'],
-                'delay_obs'          => $latency['observations'],
-                'delay_p90_seconds'  => $latency['p90_seconds'],
-                'method_type'        => $methodType,
-            ];
+        if ($context === null) {
+            $context = ExecutionContext::explicit(
+                actorUserId: 0,
+                environment: $environment,
+            );
         }
 
-        if (empty($eligible)) {
-            if ($candidates > 0) {
-                // Des providers couvrent le corridor mais aucun n'est
-                // configuré : refus opérationnel, distinct d'un manque de
-                // couverture (§6, §10).
+        $intent['operation'] = $intent['operation'] ?? 'payout';
+        $resolution = ProviderResolver::resolveTransferRoute($intent, $context, $allRoutes);
+        $eligible   = $resolution['eligible_providers'];
+
+        if ($eligible === []) {
+            $corridorCandidates = self::countCorridorCandidates($intent, $allRoutes);
+            $destCurrency = (string) ($intent['destCurrency'] ?? '');
+            $countryCode  = (string) ($intent['destCountry'] ?? '');
+            $methodType   = (string) ($intent['receivingMethod'] ?? '');
+
+            if ($corridorCandidates > 0) {
                 throw new HttpException(
                     409,
                     "Aucun provider configuré n'est disponible pour le corridor " .
@@ -185,13 +86,6 @@ final class CapabilityEngine
             );
         }
 
-        // Tri : les fiabilités MESURÉES d'abord, décroissantes ; les providers
-        // non mesurés ensuite, à égalité entre eux et ordonnés par nom.
-        //
-        // `null <=> 0.97` vaudrait -1 et reléguerait un provider non mesuré
-        // derrière un provider mauvais : ce serait interpréter « inconnu »
-        // comme « mauvais ». Inconnu n'est pas une note (§17), d'où un tri à
-        // deux niveaux plutôt qu'une comparaison directe.
         usort($eligible, static function (array $a, array $b): int {
             $aMeasured = $a['reliability'] !== null;
             $bMeasured = $b['reliability'] !== null;
@@ -204,33 +98,50 @@ final class CapabilityEngine
                 return $b['reliability'] <=> $a['reliability'];
             }
 
-            return strcmp($a['slug'], $b['slug']);
+            $scoreCmp = ((int) ($b['route_score'] ?? 0)) <=> ((int) ($a['route_score'] ?? 0));
+            if ($scoreCmp !== 0) {
+                return $scoreCmp;
+            }
+
+            return strcmp((string) $a['slug'], (string) $b['slug']);
         });
 
-        return $eligible;
+        return array_map(static function (array $row): array {
+            unset($row['route_score'], $row['route_reasons']);
+            return $row;
+        }, $eligible);
     }
 
-    /**
-     * Déplie les codes « EU » en pays individuels (EU-27).
-     */
-    private static function expandCountries(array $codes): array
+    private static function countCorridorCandidates(array $intent, bool $allRoutes): int
     {
-        $eu = [
-            'AT','BE','BG','CY','CZ','DE','DK','EE','ES','FI',
-            'FR','GR','HR','HU','IE','IT','LT','LU','LV','MT',
-            'NL','PL','PT','RO','SE','SI','SK',
-        ];
+        $methodType   = (string) ($intent['receivingMethod'] ?? '');
+        $countryCode  = (string) ($intent['destCountry'] ?? '');
+        $destCurrency = (string) ($intent['destCurrency'] ?? '');
 
-        $expanded = [];
-        foreach ($codes as $code) {
-            if ($code === 'EU') {
-                foreach ($eu as $euCode) {
-                    $expanded[$euCode] = true;
-                }
-            } else {
-                $expanded[$code] = true;
+        $methodToCategories = [
+            'mobile_money' => ['mobile_money', 'payout_network'],
+            'bank'         => ['banking', 'fx', 'payout_network'],
+            'crypto'       => ['crypto', 'onramp'],
+            'cash_pickup'  => ['payout_network', 'fx'],
+        ];
+        $validCategories = $methodToCategories[$methodType] ?? [];
+        $count = 0;
+
+        foreach (ProviderCatalog::all() as $provider) {
+            if (!in_array($provider['category'], $validCategories, true)) {
+                continue;
             }
+            $isGlobalCryptoDestination = $methodType === 'crypto'
+                && IntentEngine::isCryptoDestination($destCurrency);
+            if (!$allRoutes && !$isGlobalCryptoDestination) {
+                $countries = $provider['countries'] ?? [];
+                if (!in_array($countryCode, $countries, true) && !in_array('EU', $countries, true)) {
+                    continue;
+                }
+            }
+            $count++;
         }
-        return array_keys($expanded);
+
+        return $count;
     }
 }

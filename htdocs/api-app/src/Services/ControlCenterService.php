@@ -188,6 +188,7 @@ final class ControlCenterService
             'operations_enabled' => in_array(true, $operations, true),
             'integration'     => \Nexus\Providers\ProviderCapabilityMatrix::integrationStatus($slug),
             'capabilities'    => $caps,
+            'routing'         => \Nexus\Providers\ProviderEligibilityService::adminRoutingSummary($pdo, $slug, $userId),
             'credential_schema'  => ProviderCredentialSchema::describe($slug),
             'documentation'   => self::documentationStatus($slug),
         ];

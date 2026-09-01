@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nexus\Services;
 
+use Nexus\Execution\ExecutionContext;
 use Nexus\Execution\ExecutionEnvironment;
 use Nexus\Providers\ProviderConfig;
 
@@ -27,16 +28,26 @@ final class QuoteService
      * @param ExecutionEnvironment|null $environment Environnement d'exécution,
      *        transmis au PolicyEngine : un filtrage de sanctions indisponible
      *        bloque en production et ne fait que signaler en sandbox.
+     * @param ExecutionContext|null $context Contexte complet pour la résolution
+     *        multi-provider (credentials scopées).
      *
      * @return list<array<string,mixed>> Routes classées (A, B, C…).
      */
     public static function computeRoutes(
         array $user,
         array $intent,
-        ?ExecutionEnvironment $environment = null
+        ?ExecutionEnvironment $environment = null,
+        ?ExecutionContext $context = null,
     ): array {
+        if ($context === null && $environment !== null) {
+            $context = ExecutionContext::explicit(
+                actorUserId: (int) ($user['id'] ?? 0),
+                environment: $environment,
+            );
+        }
+
         // Capability Engine : providers éligibles pour ce corridor.
-        $providers = CapabilityEngine::findEligible($intent, $environment);
+        $providers = CapabilityEngine::findEligible($intent, $environment, false, $context);
 
         // Policy Engine : conformité avant tout calcul de prix.
         $sourceToEur = self::rateToEur((string) $intent['sourceCurrency'], $environment);
