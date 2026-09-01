@@ -60,6 +60,7 @@ final class CashrampCardCreationPolicyService
             'business_cashramp_account_id' => trim((string) ($input['business_cashramp_account_id'] ?? '')),
         ];
 
+        self::ensureTableExists($pdo);
         $json = json_encode($payload, JSON_THROW_ON_ERROR);
         $stmt = $pdo->prepare(
             'INSERT INTO provider_platform_config (provider_slug, environment, config_key, config_json)
@@ -79,17 +80,41 @@ final class CashrampCardCreationPolicyService
     /** @return array<string,mixed>|null */
     private static function loadRow(PDO $pdo, string $environment): ?array
     {
-        $stmt = $pdo->prepare(
-            'SELECT config_json FROM provider_platform_config
-             WHERE provider_slug = :slug AND environment = :env AND config_key = :key LIMIT 1'
-        );
-        $stmt->execute(['slug' => 'cashramp', 'env' => $environment, 'key' => self::CONFIG_KEY]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        if ($row === false) {
+        try {
+            self::ensureTableExists($pdo);
+            $stmt = $pdo->prepare(
+                'SELECT config_json FROM provider_platform_config
+                 WHERE provider_slug = :slug AND environment = :env AND config_key = :key LIMIT 1'
+            );
+            $stmt->execute(['slug' => 'cashramp', 'env' => $environment, 'key' => self::CONFIG_KEY]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($row === false) {
+                return null;
+            }
+            $decoded = json_decode((string) ($row['config_json'] ?? ''), true);
+
+            return is_array($decoded) ? ['config_json' => $decoded] : null;
+        } catch (\Throwable) {
             return null;
         }
-        $decoded = json_decode((string) ($row['config_json'] ?? ''), true);
+    }
 
-        return is_array($decoded) ? ['config_json' => $decoded] : null;
+    private static function ensureTableExists(PDO $pdo): void
+    {
+        try {
+            $sql = "CREATE TABLE IF NOT EXISTS provider_platform_config (
+                id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                provider_slug VARCHAR(50) NOT NULL,
+                environment ENUM('sandbox','production') NOT NULL,
+                config_key VARCHAR(100) NOT NULL,
+                config_json JSON NOT NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_provider_platform_config (provider_slug, environment, config_key)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;";
+            $pdo->exec($sql);
+        } catch (\Throwable) {
+            // Ignore table creation error if user lacks DDL permissions
+        }
     }
 }
