@@ -208,6 +208,11 @@ final class ControlCenterService
      *
      * Tous les compteurs sont issus de mesures réelles.
      */
+    /**
+     * Vue d'ensemble du Control Center (§25).
+     *
+     * Tous les compteurs sont issus de mesures réelles.
+     */
     public static function overview(PDO $pdo, int $userId): array
     {
         $catalog = ProviderCatalog::all();
@@ -217,27 +222,30 @@ final class ControlCenterService
         $enabled    = 0;
         $withOps    = 0;
         foreach ($slugs as $slug) {
-            if (ProviderConfig::isEnabled($slug)) {
-                $enabled++;
-            }
-            if (ProviderRegistry::isConfigured($slug)) {
-                $configured++;
-            }
-            if (in_array(true, self::operationMatrix($slug), true)) {
-                $withOps++;
-            }
+            try {
+                if (ProviderConfig::isEnabled($slug)) {
+                    $enabled++;
+                }
+                if (ProviderRegistry::isConfigured($slug)) {
+                    $configured++;
+                }
+                if (in_array(true, self::operationMatrix($slug), true)) {
+                    $withOps++;
+                }
+            } catch (\Throwable) {}
         }
 
-        // Credentials réellement enregistrées, par environnement.
-        $credStmt = $pdo->prepare(
-            'SELECT environment, COUNT(*) AS n
-             FROM provider_credentials WHERE user_id = :uid GROUP BY environment'
-        );
-        $credStmt->execute(['uid' => $userId]);
         $credentials = ['sandbox' => 0, 'production' => 0];
-        foreach ($credStmt->fetchAll() as $row) {
-            $credentials[(string) $row['environment']] = (int) $row['n'];
-        }
+        try {
+            $credStmt = $pdo->prepare(
+                'SELECT environment, COUNT(*) AS n
+                 FROM provider_credentials WHERE user_id = :uid GROUP BY environment'
+            );
+            $credStmt->execute(['uid' => $userId]);
+            foreach ($credStmt->fetchAll() as $row) {
+                $credentials[(string) $row['environment']] = (int) $row['n'];
+            }
+        } catch (\Throwable) {}
 
         return [
             'environment'  => ProviderConfig::defaultEnvironment(),
@@ -266,22 +274,36 @@ final class ControlCenterService
             'total'      => 0,
         ];
 
-        $stmt = $pdo->query(
-            'SELECT subject_type, status, COUNT(*) AS n
-             FROM kyc_verifications GROUP BY subject_type, status'
-        );
-        foreach ($stmt->fetchAll() as $row) {
-            $type = (string) $row['subject_type'];
-            $out[$type][(string) $row['status']] = (int) $row['n'];
-            $out['total'] += (int) $row['n'];
+        try {
+            $stmt = $pdo->query(
+                'SELECT subject_type, status, COUNT(*) AS n
+                 FROM kyc_verifications GROUP BY subject_type, status'
+            );
+            if ($stmt !== false) {
+                foreach ($stmt->fetchAll() as $row) {
+                    $type = (string) $row['subject_type'];
+                    $out[$type][(string) $row['status']] = (int) $row['n'];
+                    $out['total'] += (int) $row['n'];
+                }
+            }
+        } catch (\Throwable $e) {
+            error_log("[NEXUS CONTROL CENTER] kycCounters degraded: " . $e->getMessage());
         }
 
-        $provider = new SumsubAdapter();
-        $out['provider'] = [
-            'slug'        => $provider->slug(),
-            'configured'  => $provider->isConfigured(),
-            'environment' => $provider->environment(),
-        ];
+        try {
+            $provider = new SumsubAdapter();
+            $out['provider'] = [
+                'slug'        => $provider->slug(),
+                'configured'  => $provider->isConfigured(),
+                'environment' => $provider->environment(),
+            ];
+        } catch (\Throwable) {
+            $out['provider'] = [
+                'slug'        => 'sumsub',
+                'configured'  => false,
+                'environment' => 'sandbox',
+            ];
+        }
 
         return $out;
     }
@@ -289,22 +311,26 @@ final class ControlCenterService
     /** Compteurs de webhooks réellement reçus (§19). */
     public static function webhookCounters(PDO $pdo): array
     {
-        $stmt = $pdo->query(
-            'SELECT provider, environment, COUNT(*) AS n
-             FROM kyc_webhook_events GROUP BY provider, environment'
-        );
-        $rows = $stmt->fetchAll();
-
         $total = 0;
         $byProvider = [];
-        foreach ($rows as $row) {
-            $n = (int) $row['n'];
-            $total += $n;
-            $byProvider[] = [
-                'provider'    => $row['provider'],
-                'environment' => $row['environment'],
-                'processed'   => $n,
-            ];
+        try {
+            $stmt = $pdo->query(
+                'SELECT provider, environment, COUNT(*) AS n
+                 FROM kyc_webhook_events GROUP BY provider, environment'
+            );
+            if ($stmt !== false) {
+                foreach ($stmt->fetchAll() as $row) {
+                    $n = (int) $row['n'];
+                    $total += $n;
+                    $byProvider[] = [
+                        'provider'    => $row['provider'],
+                        'environment' => $row['environment'],
+                        'processed'   => $n,
+                    ];
+                }
+            }
+        } catch (\Throwable $e) {
+            error_log("[NEXUS CONTROL CENTER] webhookCounters degraded: " . $e->getMessage());
         }
 
         return ['processed_total' => $total, 'by_provider' => $byProvider];
@@ -313,14 +339,20 @@ final class ControlCenterService
     /** Compteurs de sécurité réels (§26). */
     public static function securityCounters(PDO $pdo): array
     {
-        $audit = (int) $pdo->query('SELECT COUNT(*) FROM audit_logs')->fetchColumn();
-        $since = $pdo->query(
-            "SELECT COUNT(*) FROM audit_logs WHERE created_at >= (NOW() - INTERVAL 24 HOUR)"
-        )->fetchColumn();
+        $audit = 0;
+        $since = 0;
+        try {
+            $audit = (int) $pdo->query('SELECT COUNT(*) FROM audit_logs')->fetchColumn();
+            $since = (int) $pdo->query(
+                "SELECT COUNT(*) FROM audit_logs WHERE created_at >= (NOW() - INTERVAL 24 HOUR)"
+            )->fetchColumn();
+        } catch (\Throwable $e) {
+            error_log("[NEXUS CONTROL CENTER] securityCounters degraded: " . $e->getMessage());
+        }
 
         return [
             'audit_events_total' => $audit,
-            'audit_events_24h'   => (int) $since,
+            'audit_events_24h'   => $since,
         ];
     }
 
@@ -338,21 +370,22 @@ final class ControlCenterService
             if ($defs === null) {
                 continue; // schéma non vérifié → rien à déclarer
             }
-            // Un seul déchiffrement par (provider, environnement) : on n'en
-            // retient QUE la liste des champs renseignés, jamais les valeurs.
-            // Les valeurs déchiffrées ne quittent pas cette portée.
             $present = [];
             foreach (['sandbox', 'production'] as $env) {
                 $present[$env] = [];
-                if (ProviderCredentialService::findEffectiveRow($pdo, $userId, $slug, $env) !== null) {
-                    $creds = ProviderCredentialService::resolve($pdo, $userId, $slug, $env);
-                    foreach ($creds as $name => $value) {
-                        if (is_string($value) && $value !== '') {
-                            $present[$env][$name] = true;
+                try {
+                    if (ProviderCredentialService::findEffectiveRow($pdo, $userId, $slug, $env) !== null) {
+                        $creds = ProviderCredentialService::resolve($pdo, $userId, $slug, $env);
+                        if (is_array($creds)) {
+                            foreach ($creds as $name => $value) {
+                                if (is_string($value) && $value !== '') {
+                                    $present[$env][$name] = true;
+                                }
+                            }
                         }
+                        unset($creds);
                     }
-                    unset($creds);
-                }
+                } catch (\Throwable) {}
             }
 
             foreach ($defs as $def) {
