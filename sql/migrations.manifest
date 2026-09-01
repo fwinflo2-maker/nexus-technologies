@@ -1,0 +1,122 @@
+# NEXUS — Manifeste des migrations (SOURCE DE VÉRITÉ UNIQUE).
+#
+# Ordre d'application des migrations, appliqué APRÈS database/schema.sql.
+#
+# Ce fichier est lu par :
+#   - database/migrate.sh          (installation par migrations)
+#   - scripts/build_full_schema.sh (génération de database/full_schema.sql)
+#   - scripts/compare_schemas.sh   (contrôle d'équivalence des deux chemins)
+#
+# POURQUOI : ces trois scripts embarquaient chacun leur propre copie de la
+# liste. Ajouter une migration sans mettre à jour les trois produisait un
+# `full_schema.sql` périmé ET un compare_schemas.sh qui affichait PASS en
+# comparant deux installations périmées identiques — un faux PASS silencieux.
+#
+# RÈGLE : toute nouvelle migration s'ajoute ICI, et nulle part ailleurs.
+# Format : un nom de fichier par ligne (relatif à database/migrations/).
+# Les lignes vides et celles commençant par # sont ignorées.
+
+# 0.2 — Auth étendue (Google OAuth + téléphone)
+2026_08_10_oauth_phone.sql
+# 0.3 — Dashboard (états de solde sur wallets)
+2026_08_10_dashboard.sql
+# 0.4 — Notifications + comptes de paiement
+2026_08_10_notifications.sql
+2026_08_10_payment_accounts.sql
+# 0.5 — Credentials providers (chiffrées)
+2026_08_10_provider_credentials.sql
+# 0.6 — Quotes + KYC résidence/origines
+2026_08_10_quotes.sql
+2026_08_10_kyc_origins.sql
+# 0.7 — Wallet Core (ledger double-entrée, holds, idempotence, fx cache)
+2026_08_10_wallet_core.sql
+# 0.8 — Hold lifecycle + expiration des opérations
+2026_08_11_add_hold_operation_type.sql
+2026_08_12_add_expires_at_to_wallet_operations.sql
+# 0.9 — Transfer execution (traçabilité quote/route/montants)
+2026_08_14_transfer_execution.sql
+# 0.10 — Business suite (bénéficiaires, paiements, équipe, réconciliation)
+2026_08_14_business_suite.sql
+# 0.11 — Contraintes d'intégrité (unicité ledger, séparation sandbox/prod)
+2026_08_14_integrity_constraints.sql
+# 0.12 — Persistance KYC/KYB provider (exception documentée au freeze)
+2026_08_14_kyc_verifications.sql
+# 0.13 — Environnement d'exécution tracé sur les mouvements d'argent
+2026_08_14_execution_environment.sql
+# 0.14 — Propagation de l'environnement sur tout le cycle financier
+2026_08_14_environment_propagation.sql
+# 0.15 — Idempotence des wallet_operations scopée par environnement (correctif HIGH)
+2026_08_14_wallet_operations_idempotency_scope.sql
+
+# 0.16 — Rôle plateforme (Superadmin / personnel Nexus), correctif CRITICAL
+2026_08_14_platform_role.sql
+
+# 0.17 — Credentials providers = actifs de plateforme (correctif CRITICAL)
+2026_08_14_platform_credentials.sql
+
+# 0.18 — Une ecriture comptable ne peut pas changer d'environnement (FK composite)
+2026_08_15_ledger_environment_fk.sql
+
+# 0.19 — Defaut d'environnement sûr : sandbox, jamais production
+2026_08_15_safe_environment_default.sql
+
+# 0.20 — Le cache FX est isolé par environnement (un taux sandbox ne doit
+# jamais coter de l'argent réel)
+2026_08_15_fx_rates_environment.sql
+
+# 0.21 — Suppression de la table morte oauth_identities (Google Auth désactivée)
+2026_08_15_drop_oauth_identities.sql
+
+# 0.22 — Image de profil (avatar) utilisateur/entreprise
+2026_08_15_add_user_avatar.sql
+
+# 0.23 — Rôles internes Nexus (8 dashboards spécialisés RBAC)
+2026_08_15_internal_roles.sql
+
+# 0.24 — Rôles internes v2 : business_manager, technical_admin + alias
+2026_08_15_internal_roles_v2.sql
+
+# 0.25 — Nexus Connect (comptes B2B/API) + employés internes
+2026_08_15_connect_accounts_employees.sql
+
+# 0.26 — Profil client riche (infos saisies à l'inscription)
+2026_08_15_rich_client_profile.sql
+
+# 0.27 — Réinitialisation de mot de passe réelle (tokens en base)
+2026_08_16_password_reset_tokens.sql
+
+# 0.28 — Support chat (tickets / conversations)
+2026_08_16_support_chat.sql
+
+# 0.29 — Support chat : notes internes, pièces jointes
+2026_08_16_support_chat_enhancements.sql
+# 0.31 — KYB distinct pour comptes Business (Sumsub subject_type=company)
+2026_08_16_business_kyb.sql
+# 0.32 — KYB : infos entreprise vers Sumsub + niveau de risque (low/medium/high)
+2026_08_16_kyb_company_risk.sql
+# 0.33 — Journal des webhooks providers (idempotence, §13)
+2026_08_17_provider_webhook_events.sql
+# 0.34 — Exécution pawaPay
+2026_08_17_pawapay_execution.sql
+# 0.35 — Modèle comptable cible / GL
+2026_08_17_financial_gl_model.sql
+# 0.36 — États financiers cibles
+2026_08_17_financial_states.sql
+# 0.37 — Rotation atomique des credentials providers
+2026_08_18_credential_rotation.sql
+# 0.38 — Gaps du modèle financier
+2026_08_18_financial_model_gaps.sql
+# 0.39 — Chat interne du personnel
+2026_08_18_internal_chat.sql
+# 0.40 — Invalidation JWT après changement / reset mot de passe
+2026_08_20_password_changed_at.sql
+# 0.41 — Funding webhook attribué par intent, jamais par payload user_id
+2026_08_20_funding_intents.sql
+# 0.42 — Demandes de cartes virtuelles (émission provider ultérieure)
+2026_08_20_virtual_cards.sql
+# 0.43 — Cardholder id Stripe Issuing sur virtual_cards
+2026_08_20_virtual_cards_cardholder.sql
+# 0.44 — Messagerie interne : pièces jointes (images + PDF)
+2026_08_24_internal_chat_attachments.sql
+# 0.45 — Confirmation d'e-mail à l'inscription
+2026_08_26_email_verification.sql

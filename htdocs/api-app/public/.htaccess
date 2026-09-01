@@ -1,0 +1,15 @@
+# Désactive le listing des répertoires.
+Options -Indexes
+
+RewriteEngine On
+
+# Hostinger / LiteSpeed CGI : propager Authorization vers PHP.
+RewriteCond %{HTTP:Authorization} .
+RewriteRule ^ - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+# Ne réécrit pas si le fichier ou le dossier demandé existe réellement.
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+
+# Toutes les autres requêtes (dont /api/*) sont routées vers le front controller.
+RewriteRule ^(.*)$ index.php [QSA,L]

@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
+
+    <!-- Primary SEO (French default — app i18n starts in fr; runtime updates title/description) -->
+    <title>Nexus — Transferts multi-devises sans mauvaise surprise</title>
+    <meta
+      name="description"
+      content="Nexus orchestre vos transferts d'argent : compare les routes, affiche frais, taux et délai avant confirmation, puis exécute banque ou Mobile Money. Personal et Business."
+    />
+    <meta name="application-name" content="Nexus Technologies" />
+    <meta name="theme-color" content="#0A0E17" />
+    <meta name="color-scheme" content="dark" />
+    <!-- Empêche les proxies/CDN de servir un vieux shell HTML (écran noir). -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta name="robots" content="index, follow" />
+    <meta name="author" content="NEXUS Corp Technologies" />
+    <!-- Keywords kept sparse — modern SEO weights them lightly; useful for niche remittance intent -->
+    <meta name="keywords" content="transferts d'argent, remittance, multi-devises, Mobile Money, EUR XAF, orchestration financière, fintech" />
+
+    <!--
+      TODO(SEO): REPLACE_WITH_PRODUCTION_ORIGIN — same token as public/sitemap.xml.
+      Relative canonical/og:url/og:image are intentional until the public domain is known;
+      SeoMeta absolutizes them at runtime for clients that execute JS.
+    -->
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Nexus Technologies" />
+    <meta property="og:locale" content="fr_FR" />
+    <meta property="og:locale:alternate" content="en_US" />
+    <meta property="og:title" content="Nexus — Transferts multi-devises sans mauvaise surprise" />
+    <meta
+      property="og:description"
+      content="Comparez les routes, voyez le vrai coût et le vrai délai, puis exécutez. Orchestration financière Personal & Business."
+    />
+    <meta property="og:url" content="/" />
+    <meta property="og:image" content="/og-image.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Nexus — Financial orchestration" />
+
+    <!-- Twitter / X -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Nexus — Transferts multi-devises sans mauvaise surprise" />
+    <meta
+      name="twitter:description"
+      content="Comparez les routes, voyez le vrai coût et le vrai délai, puis exécutez. Orchestration financière Personal & Business."
+    />
+    <meta name="twitter:image" content="/og-image.png" />
+    <meta name="twitter:image:alt" content="Nexus — Financial orchestration" />
+
+    <!-- Icons -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+
+    <!-- Structured data: Organization + WebSite + FinancialService (truthful, no fake rates/fees) -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "#organization",
+            "name": "NEXUS Corp Technologies",
+            "alternateName": "Nexus",
+            "url": "/",
+            "logo": "/favicon.svg",
+            "description": "Plateforme d'orchestration financière multi-providers pour transferts, conversions et paiements cross-border."
+          },
+          {
+            "@type": "WebSite",
+            "@id": "#website",
+            "name": "Nexus Technologies",
+            "url": "/",
+            "inLanguage": ["fr", "en", "es", "pt", "de", "ar", "zh"],
+            "publisher": { "@id": "#organization" }
+          },
+          {
+            "@type": "FinancialService",
+            "@id": "#service",
+            "name": "Nexus",
+            "url": "/",
+            "image": "/og-image.png",
+            "description": "Orchestration de transferts multi-devises : comparaison de routes, affichage des coûts et délais avant confirmation, exécution et suivi jusqu'au règlement.",
+            "provider": { "@id": "#organization" },
+            "serviceType": [
+              "Money transfer",
+              "Multi-currency wallet",
+              "Cross-border payments",
+              "Financial orchestration"
+            ],
+            "areaServed": "Worldwide",
+            "audience": {
+              "@type": "Audience",
+              "audienceType": "Individuals and businesses"
+            }
+          },
+          {
+            "@type": "WebApplication",
+            "name": "Nexus",
+            "applicationCategory": "FinanceApplication",
+            "operatingSystem": "Web",
+            "description": "Application web d'orchestration financière : envoi, réception, conversion et paiements cross-border.",
+            "provider": { "@id": "#organization" }
+          }
+        ]
+      }
+    </script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
+    <style>
+      #nx-boot {
+        position: fixed; inset: 0; z-index: 9999;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 22px;
+        background: radial-gradient(720px 420px at 50% 28%, rgba(59,130,246,0.22), transparent 58%), #07090d;
+        color: #f4f7fb;
+        transition: opacity .45s ease, visibility .45s ease;
+      }
+      #nx-boot.is-done {
+        opacity: 0 !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+        display: none !important;
+      }
+      #nx-boot .mark { position: relative; width: 88px; height: 88px; display: grid; place-items: center; }
+      #nx-boot .ring {
+        position: absolute; inset: 0; border-radius: 50%;
+        border: 1.5px solid transparent; border-top-color: #60a5fa; border-right-color: rgba(96,165,250,.25);
+        animation: nx-boot-spin 1.15s linear infinite;
+      }
+      #nx-boot .ring.b { inset: 10px; border-top-color: #38bdf8; animation-duration: 1.7s; animation-direction: reverse; opacity: .7; }
+      #nx-boot svg { position: relative; z-index: 1; filter: drop-shadow(0 0 16px rgba(59,130,246,.55)); }
+      #nx-boot .word { margin: 0; font: 800 13px/1 Syne, Manrope, system-ui, sans-serif; letter-spacing: .28em; }
+      #nx-boot.is-recovery { gap: 14px; padding: 24px; text-align: center; }
+      #nx-boot.is-recovery .msg { margin: 0; max-width: 28rem; font: 500 14px/1.55 Manrope, system-ui, sans-serif; color: #c7d2e0; }
+      #nx-boot.is-recovery button {
+        margin-top: 6px; cursor: pointer; border: 0; border-radius: 999px;
+        padding: 12px 22px; font: 700 13px/1 Manrope, system-ui, sans-serif;
+        color: #061018; background: linear-gradient(135deg, #60a5fa, #38bdf8);
+      }
+      @keyframes nx-boot-spin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) { #nx-boot .ring { animation: none; } }
+    </style>
+    <script type="module" crossorigin src="/assets/index-DqvBQkus.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-hePW80VL.js">
+    <link rel="modulepreload" crossorigin href="/assets/charts-B0YcpCwv.js">
+    <link rel="modulepreload" crossorigin href="/assets/react-core-LhebbI47.js">
+    <link rel="modulepreload" crossorigin href="/assets/motion-rMkpVE4O.js">
+    <link rel="stylesheet" crossorigin href="/assets/index-DUmwSPqY.css">
+  </head>
+  <body>
+    <div id="nx-boot" aria-hidden="true">
+      <div class="mark">
+        <span class="ring"></span>
+        <span class="ring b"></span>
+        <svg width="36" height="36" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+          <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="#60A5FA" strokeWidth="2" />
+          <path d="M16 10L22 14V22L16 26L10 22V14L16 10Z" fill="#3B82F6" />
+        </svg>
+      </div>
+      <p class="word">NEXUS</p>
+    </div>
+    <div id="root"></div>
+    <script>
+      (function () {
+        var KEY = 'nx_asset_reload';
+        var boot = document.getElementById('nx-boot');
+        var root = document.getElementById('root');
+        var recovering = false;
+
+        function showRecovery(message) {
+          if (!boot || recovering) return;
+          recovering = true;
+          boot.classList.remove('is-done');
+          boot.classList.add('is-recovery');
+          boot.setAttribute('aria-hidden', 'false');
+          boot.innerHTML =
+            '<p class="word">NEXUS</p>' +
+            '<p class="msg">' + message + '</p>' +
+            '<button type="button" id="nx-boot-reload">Recharger</button>';
+          var btn = document.getElementById('nx-boot-reload');
+          if (btn) btn.onclick = function () { location.reload(); };
+        }
+
+        function reloadOnceOrRecover() {
+          try {
+            if (sessionStorage.getItem(KEY) === '1') {
+              sessionStorage.removeItem(KEY);
+              showRecovery('Le chargement a échoué (fichiers obsolètes ou réseau). Rechargez la page.');
+              return;
+            }
+            sessionStorage.setItem(KEY, '1');
+            location.reload();
+          } catch (e) {
+            showRecovery('Le chargement a échoué. Rechargez la page.');
+          }
+        }
+
+        // Uniquement le bundle d'entrée manquant — pas les modulepreload / polices
+        // (sinon boucle de reload = splash sans fin).
+        window.addEventListener('error', function (ev) {
+          var t = ev && ev.target;
+          if (!t || t.tagName !== 'SCRIPT') return;
+          var src = String(t.src || '');
+          if (src.indexOf('/assets/index-') === -1) return;
+          reloadOnceOrRecover();
+        }, true);
+
+        window.__NX_BOOT_OK = function () {
+          if (boot) {
+            boot.classList.add('is-done');
+            try { boot.remove(); } catch (e) { /* ignore */ }
+          }
+          try { sessionStorage.removeItem(KEY); } catch (e) { /* ignore */ }
+        };
+
+        // Filet : retirer le splash même si React met >2s à charger.
+        window.setTimeout(function () {
+          if (typeof window.__NX_BOOT_OK === 'function') window.__NX_BOOT_OK();
+          if (root && root.childElementCount === 0) {
+            reloadOnceOrRecover();
+          }
+        }, 1500);
+
+        // Filet anti « Chargement… » bloqué (ancien bundle lazy en cache).
+        window.setTimeout(function () {
+          try {
+            var text = (document.body && document.body.innerText) || '';
+            var onlyLoading = text.trim() === 'Chargement…' || text.trim() === 'Chargement...';
+            if (onlyLoading || (root && root.childElementCount > 0 && text.indexOf('Chargement') === 0 && text.length < 40)) {
+              sessionStorage.removeItem(KEY);
+              reloadOnceOrRecover();
+            }
+          } catch (e) { /* ignore */ }
+        }, 6000);
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,72 @@
+DirectoryIndex index.html index.php
+
+RewriteEngine On
+RewriteBase /
+
+# Hostinger / LiteSpeed CGI : propager Authorization vers PHP.
+RewriteCond %{HTTP:Authorization} .
+RewriteRule ^ - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+# Manifest PWA : InfinityFree transforme .json/.webmanifest en HTML
+# (anti-bot) → Chrome « Manifest: Line: 1, column: 1, Syntax error ».
+# L'URL .txt passe le filtre (comme robots.txt), PHP force le MIME.
+<Files "manifest.txt">
+  ForceType application/manifest+json
+</Files>
+<IfModule mod_headers.c>
+  <Files "manifest.txt">
+    Header set Content-Type "application/manifest+json; charset=utf-8"
+  </Files>
+</IfModule>
+RewriteRule ^manifest\.txt$ manifest-send.php [L]
+RewriteRule ^site\.webmanifest$ manifest-send.php [L]
+RewriteRule ^manifest\.json$ manifest-send.php [L]
+
+# Bloquer l'accès HTTP aux secrets et au code PHP hors front controller.
+RewriteRule ^api-app/(config|src|storage)(?:/|$) - [F,L]
+RewriteRule ^api-app/\.env - [F,L]
+
+# Fichiers uploadés par l'API (avatars, support, staff).
+RewriteRule ^uploads/(.*)$ api-app/public/uploads/$1 [L]
+
+# /api/* → front controller PHP (avant le fallback SPA).
+RewriteRule ^api(/.*)?$ api-app/public/index.php [QSA,L]
+
+# Assets SPA et fichiers réellement présents.
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# React Router : le reste → index.html (marque SPA_SHELL pour no-cache).
+RewriteCond %{REQUEST_URI} !^/api
+RewriteCond %{REQUEST_URI} !\.(?:js|css|png|jpe?g|gif|svg|ico|webp|woff2?|ttf|eot|map|json|webmanifest|xml|txt|php)$ [NC]
+RewriteRule ^ index.html [L,E=SPA_SHELL:1]
+
+# ── Cache ───────────────────────────────────────────────────────────────
+# Cause historique de l'écran noir : un index.html (ou route SPA) mis en cache
+# qui pointe vers d'anciens chunks hashed absents. HTML = jamais caché.
+# JS/CSS hashed = immutable longtemps.
+<IfModule mod_headers.c>
+  # Shell SPA (/, /dashboard, … via rewrite) + index.html (DirectoryIndex).
+  Header always set Cache-Control "no-cache, no-store, must-revalidate" env=SPA_SHELL
+  Header always set Pragma "no-cache" env=SPA_SHELL
+  Header always set Expires "0" env=SPA_SHELL
+  Header always set CDN-Cache-Control "no-store" env=SPA_SHELL
+  Header always set Surrogate-Control "no-store" env=SPA_SHELL
+
+  <FilesMatch "^(?:index\.html)$">
+    Header always set Cache-Control "no-cache, no-store, must-revalidate"
+    Header always set Pragma "no-cache"
+    Header always set Expires "0"
+    Header always set CDN-Cache-Control "no-store"
+    Header always set Surrogate-Control "no-store"
+  </FilesMatch>
+
+  <FilesMatch "\.(?:js|css|woff2?|ttf|eot|png|jpe?g|gif|svg|ico|webp|map)$">
+    Header always set Cache-Control "public, max-age=31536000, immutable"
+    Header always unset Pragma
+    Header always unset Expires
+    Header always unset CDN-Cache-Control
+    Header always unset Surrogate-Control
+  </FilesMatch>
+</IfModule>

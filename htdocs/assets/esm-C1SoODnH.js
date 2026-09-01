@@ -1,0 +1,2 @@
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/web-RXsH0EBG.js","assets/index-DqvBQkus.js","assets/rolldown-runtime-hePW80VL.js","assets/charts-B0YcpCwv.js","assets/react-core-LhebbI47.js","assets/motion-rMkpVE4O.js","assets/index-DUmwSPqY.css"])))=>i.map(i=>d[i]);
+import{u as e}from"./react-core-LhebbI47.js";import{r as t}from"./index-DqvBQkus.js";var n=t(`SocialLogin`,{web:()=>e(()=>import(`./web-RXsH0EBG.js`).then(e=>new e.SocialLoginWeb),__vite__mapDeps([0,1,2,3,4,5,6]))});export{n as SocialLogin};
