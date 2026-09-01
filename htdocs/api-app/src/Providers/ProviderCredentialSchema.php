@@ -41,7 +41,6 @@ final class ProviderCredentialSchema
         return match ($slug) {
             'stripe'  => self::stripe(),
             'stripe_issuing' => self::stripeIssuing(),
-            'pawapay' => self::pawapay(),
             'wise'    => self::wise(),
             'nium'    => self::nium(),
             'western_union' => self::westernUnion(),
@@ -177,48 +176,6 @@ final class ProviderCredentialSchema
                 justification: 'maplerad.dev/docs/verifying-webhooks : secret de signature des événements '
                     . 'issuing.*. Jamais exposable.',
                 placeholder: 'secret webhook Maplerad'
-            ),
-        ];
-    }
-
-    /**
-     * pawaPay — https://docs.pawapay.io/using_the_api
-     *
-     * ATTENTION — piège volontairement traité ici (§6) : pawaPay utilise une
-     * « clé publique » pour la signature des requêtes financières. Malgré son
-     * nom, elle n'est PAS destinée au navigateur : elle est déposée dans le
-     * dashboard pawaPay et sert à valider les signatures côté pawaPay.
-     * Elle reste donc backend-only.
-     */
-    private static function pawapay(): array
-    {
-        return [
-            CredentialDefinition::secret(
-                name: 'api_token',
-                label: 'API Token (Bearer)',
-                required: true,
-                usage: CredentialDefinition::USAGE_API_AUTH,
-                justification: 'docs.pawapay.io/using_the_api : « The pawaPay Merchant API uses a bearer '
-                    . 'token for authentication ». Le token sandbox ne fonctionne QUE en sandbox et '
-                    . 'un token distinct doit être généré en production.',
-                placeholder: 'Token pawaPay'
-            ),
-            CredentialDefinition::secret(
-                name: 'private_key',
-                label: 'Clé privée de signature',
-                required: false,
-                usage: CredentialDefinition::USAGE_SIGNING,
-                justification: 'docs.pawapay.io : signature optionnelle des requêtes financières '
-                    . '(deposit/payout/refund). Clé PRIVÉE : backend uniquement.',
-                placeholder: '-----BEGIN EC PRIVATE KEY-----'
-            ),
-            CredentialDefinition::identifier(
-                name: 'api_key_id',
-                label: 'Identifiant de clé (keyid)',
-                required: false,
-                justification: 'Identifiant de la clé de signature déclarée dans le dashboard pawaPay. '
-                    . 'Non secret mais backend-only (§6).',
-                placeholder: 'CUSTOMER_TEST_KEY'
             ),
         ];
     }
@@ -1029,18 +986,26 @@ final class ProviderCredentialSchema
         return [
             CredentialDefinition::publicKey(
                 name: 'public_key',
-                label: 'Public Key',
-                required: true,
-                justification: 'docs.cashramp.com : public_key côté intégration (catalogue).',
-                placeholder: 'public_key'
+                label: 'Public Key (CSHRMP-PUBK_…)',
+                required: false,
+                justification: 'docs.cashramp.co/cashramp/introduction/authentication.md : clé publique widget.',
+                placeholder: 'CSHRMP-PUBK_…'
             ),
             CredentialDefinition::secret(
                 name: 'secret_key',
-                label: 'Secret Key',
+                label: 'Secret Key (CSHRMP-SECK_…)',
                 required: true,
                 usage: CredentialDefinition::USAGE_API_AUTH,
-                justification: 'docs.cashramp.com : secret_key backend.',
-                placeholder: 'secret_key'
+                justification: 'docs.cashramp.co/cashramp/introduction/authentication.md : Bearer server-to-server.',
+                placeholder: 'CSHRMP-SECK_…'
+            ),
+            CredentialDefinition::secret(
+                name: 'webhook_token',
+                label: 'Webhook Token (X-CASHRAMP-TOKEN)',
+                required: false,
+                usage: CredentialDefinition::USAGE_WEBHOOK,
+                justification: 'docs.cashramp.co/cashramp/introduction/webhooks.md : header X-CASHRAMP-TOKEN.',
+                placeholder: 'Token dashboard'
             ),
         ];
     }

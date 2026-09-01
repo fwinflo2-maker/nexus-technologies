@@ -36,7 +36,7 @@ use Throwable;
  *   {
  *     "currency": "EUR",
  *     "amount": "100.00",
- *     "provider": "pawapay",        // slug
+ *     "provider": "cashramp",     // slug
  *     "provider_reference": "dep_…",// référence unique du dépôt chez le provider
  *     "environment": "sandbox",     // optionnel — mismatch = refus
  *     "event_id": "evt_…"           // optionnel — sinon dérivé (référence:statut)
@@ -76,7 +76,7 @@ final class FundingController
             Response::error('Payload de dépôt invalide.', 400, 'INVALID_DEPOSIT_PAYLOAD');
         }
 
-        $provider = substr((string) ($payload['provider'] ?? 'pawapay'), 0, 50);
+        $provider = substr((string) ($payload['provider'] ?? 'cashramp'), 0, 50);
         $env = ProviderConfig::activeEnvironment($provider);
 
         // 1) Signature AVANT toute interprétation (fail-closed).

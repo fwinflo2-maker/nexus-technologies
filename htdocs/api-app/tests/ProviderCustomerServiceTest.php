@@ -147,13 +147,13 @@ final class ProviderCustomerServiceTest extends TestCase
     public function testSyncCustomerUpdatesMapping(): void
     {
         $userId = $this->createUser();
-        ProviderCustomerService::createCustomer($userId, 'pawapay', 'sandbox', [
+        ProviderCustomerService::createCustomer($userId, 'cashramp', 'sandbox', [
             'provider_customer_id' => 'pp_old',
             'status'               => 'PENDING',
             'metadata'             => ['tier' => 'basic'],
         ]);
 
-        $updated = ProviderCustomerService::syncCustomer($userId, 'pawapay', 'sandbox', [
+        $updated = ProviderCustomerService::syncCustomer($userId, 'cashramp', 'sandbox', [
             'provider_customer_id' => 'pp_new',
             'status'               => 'ACTIVE',
             'metadata'             => ['tier' => 'verified'],

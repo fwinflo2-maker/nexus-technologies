@@ -189,6 +189,15 @@ final class ControlCenterService
             'integration'     => \Nexus\Providers\ProviderCapabilityMatrix::integrationStatus($slug),
             'capabilities'    => $caps,
             'routing'         => \Nexus\Providers\ProviderEligibilityService::adminRoutingSummary($pdo, $slug, $userId),
+            'card_creation_policy' => $slug === 'cashramp'
+                ? CashrampCardCreationPolicyService::get($pdo, ProviderConfig::activeEnvironment($slug))
+                : null,
+            'feature_flags'   => $slug === 'cashramp' ? [
+                'accounts'  => \Nexus\Providers\Cashramp\CashrampFeatureFlags::accountsEnabled(),
+                'crypto'    => \Nexus\Providers\Cashramp\CashrampFeatureFlags::cryptoEnabled(),
+                'transfers' => \Nexus\Providers\Cashramp\CashrampFeatureFlags::transfersEnabled(),
+                'cards'     => \Nexus\Providers\Cashramp\CashrampFeatureFlags::cardsEnabled(),
+            ] : null,
             'credential_schema'  => ProviderCredentialSchema::describe($slug),
             'documentation'   => self::documentationStatus($slug),
         ];

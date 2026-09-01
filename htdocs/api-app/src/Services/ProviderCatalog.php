@@ -27,22 +27,6 @@ final class ProviderCatalog
      */
     private const PROVIDERS = [
         // ── Mobile Money Aggregators ──────────────────────────────────────
-        'pawapay' => [
-            'name'        => 'pawaPay',
-            'category'    => 'mobile_money',
-            'routing_enabled' => false,
-            'icon'        => '📱',
-            'auth_type'   => 'bearer_token',
-            'base_url'    => 'https://api.pawapay.io',
-            'sandbox_url' => 'https://api.sandbox.pawapay.io',
-            'credentials' => [
-                ['key' => 'api_token',     'label' => 'API Token',     'placeholder' => 'Votre token pawaPay', 'required' => true, 'type' => 'password'],
-                ['key' => 'api_key_id',    'label' => 'Clé API (keyid)', 'placeholder' => 'CUSTOMER_TEST_KEY', 'required' => false, 'type' => 'text'],
-                ['key' => 'private_key',   'label' => 'Clé privée (signatures)', 'placeholder' => '-----BEGIN EC PRIVATE KEY-----', 'required' => false, 'type' => 'textarea'],
-            ],
-            'doc_url'    => 'https://docs.pawapay.io/using_the_api',
-            'countries'  => ['NG','CD','CM','CG','UG','TZ','ZM','GH','KE','RW','NE','TG','BJ','SN','CI','ML','BF'],
-        ],
         'thunes' => [
             'name'        => 'Thunes',
             'category'    => 'payout_network',
@@ -428,17 +412,18 @@ final class ProviderCatalog
         'cashramp' => [
             'name'        => 'CashRamp',
             'category'    => 'onramp',
-            'routing_enabled' => false,
+            'routing_enabled' => true,
             'icon'        => '🔀',
-            'auth_type'   => 'api_key',
-            'base_url'    => 'https://api.cashramp.com',
-            'sandbox_url' => 'https://sandbox-api.cashramp.com',
+            'auth_type'   => 'bearer_token',
+            'base_url'    => 'https://api.useaccrue.com/cashramp/api/graphql',
+            'sandbox_url' => 'https://staging.api.useaccrue.com/cashramp/api/graphql',
             'credentials' => [
-                ['key' => 'public_key',  'label' => 'Public Key',  'placeholder' => 'pk_...',  'required' => true, 'type' => 'text'],
-                ['key' => 'secret_key',  'label' => 'Secret Key',  'placeholder' => 'sk_...',   'required' => true, 'type' => 'password'],
+                ['key' => 'public_key',    'label' => 'Public Key (CSHRMP-PUBK_…)', 'placeholder' => 'CSHRMP-PUBK_…', 'required' => false, 'type' => 'text'],
+                ['key' => 'secret_key',    'label' => 'Secret Key (CSHRMP-SECK_…)',  'placeholder' => 'CSHRMP-SECK_…', 'required' => true,  'type' => 'password'],
+                ['key' => 'webhook_token', 'label' => 'Webhook Token (X-CASHRAMP-TOKEN)', 'placeholder' => 'Token dashboard', 'required' => false, 'type' => 'password'],
             ],
-            'doc_url'    => 'https://docs.cashramp.com/',
-            'countries'  => ['NG'],
+            'doc_url'    => 'https://docs.cashramp.co/cashramp',
+            'countries'  => ['NG','GH','CM','CI','SN','KE','UG','TZ','RW','ZA','US','EU'],
         ],
         'sumsub' => [
             'name'        => 'Sumsub',

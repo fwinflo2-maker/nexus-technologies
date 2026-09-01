@@ -166,7 +166,7 @@ final class ProviderOperationalAudit
     public static function priority(string $slug): string
     {
         return match ($slug) {
-            'pawapay', 'onfriq', 'stripe', 'stripe_issuing', 'maplerad', 'bridge' => 'P1',
+            'cashramp', 'onfriq', 'stripe', 'stripe_issuing', 'maplerad', 'bridge' => 'P1',
             'thunes', 'nium', 'currencycloud' => 'P2',
             'wise', 'yellow_card', 'bvnk' => 'P3',
             'dlocal', 'ebanx', 'tazapay', '2c2p', 'xendit' => 'P4',
@@ -181,7 +181,7 @@ final class ProviderOperationalAudit
             'stripe' => 'StripeAdapter',
             'stripe_issuing' => 'StripeIssuingAdapter',
             'maplerad' => 'MapleradIssuingAdapter',
-            'pawapay' => 'PawaPayAdapter',
+            'cashramp' => 'CashrampAdapter',
             'western_union' => 'WesternUnionAdapter',
             'moneygram' => 'MoneyGramAdapter',
             default => 'ConfigDrivenProviderAdapter',

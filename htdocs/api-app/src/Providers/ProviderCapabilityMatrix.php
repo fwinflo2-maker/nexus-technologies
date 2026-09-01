@@ -69,16 +69,14 @@ final class ProviderCapabilityMatrix
      * @var array<string, array<string, string>>
      */
     private const DECLARED = [
-        'pawapay' => [
-            // Merchant API v2 : payout + polling réellement câblés. Sans
-            // token, le runtime retourne CREDENTIALS_NOT_CONFIGURED.
+        'cashramp' => [
             'test_connection' => self::IMPLEMENTED,
-            'balance'         => self::NOT_IMPLEMENTED,
-            'quote'           => self::NOT_IMPLEMENTED,
+            'balance'         => self::IMPLEMENTED,
+            'quote'           => self::IMPLEMENTED,
             'payout'          => self::IMPLEMENTED,
-            'refund'          => self::NOT_SUPPORTED,   // doc : payout accepté terminal
-            'webhook'         => self::CONFIG_REQUIRED, // code RFC-9421 réel ; token + signed callbacks requis
-            'reconciliation'  => self::IMPLEMENTED,     // GET /v2/payouts/{payoutId}
+            'refund'          => self::NOT_SUPPORTED,
+            'webhook'         => self::CONFIG_REQUIRED,
+            'reconciliation'  => self::NOT_IMPLEMENTED,
             'account'         => self::CONFIG_REQUIRED,
         ],
         'stripe' => [
@@ -143,16 +141,6 @@ final class ProviderCapabilityMatrix
             'payout'          => self::NOT_IMPLEMENTED,
             'refund'          => self::NOT_IMPLEMENTED,
             'webhook'         => self::CONFIG_REQUIRED,
-            'reconciliation'  => self::NOT_IMPLEMENTED,
-            'account'         => self::NOT_IMPLEMENTED,
-        ],
-        'cashramp' => [
-            'test_connection' => self::NOT_IMPLEMENTED,
-            'balance'         => self::NOT_IMPLEMENTED,
-            'quote'           => self::NOT_IMPLEMENTED,
-            'payout'          => self::NOT_IMPLEMENTED,
-            'refund'          => self::NOT_IMPLEMENTED,
-            'webhook'         => self::NOT_IMPLEMENTED,
             'reconciliation'  => self::NOT_IMPLEMENTED,
             'account'         => self::NOT_IMPLEMENTED,
         ],

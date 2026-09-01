@@ -227,7 +227,6 @@ final class ProviderRegistry
             'stripe'  => new StripeAdapter(),
             'stripe_issuing' => new StripeIssuingAdapter(),
             'maplerad' => new MapleradIssuingAdapter(),
-            'pawapay' => new PawaPayAdapter(),
             'cashramp' => new CashrampAdapter(),
             'western_union' => new WesternUnionAdapter(),
             'moneygram' => new MoneyGramAdapter(),

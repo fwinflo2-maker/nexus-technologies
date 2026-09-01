@@ -8,11 +8,9 @@ use Nexus\Core\Correlation;
 use Nexus\Core\Database;
 use Nexus\Core\Request;
 use Nexus\Core\Response;
-use Nexus\Providers\PawaPayPublicKeyCache;
+use Nexus\Providers\CashrampAdapter;
 use Nexus\Providers\ProviderConfig;
-use Nexus\Providers\ProviderCredentialSchema;
-use Nexus\Providers\PawaPayAdapter;
-use Nexus\Providers\PawaPaySignature;
+use Nexus\Providers\ProviderRegistry;
 use Nexus\Providers\StripeAdapter;
 use Nexus\Providers\WebhookVerifier;
 use Nexus\Services\ExecutionSettlementService;
@@ -47,22 +45,11 @@ use Throwable;
  */
 final class ProviderWebhookController
 {
-    /** En-tête de signature attendu (convention Nexus). */
+    /** En-tête de signature attendu (convention Nexus générique). */
     private const SIGNATURE_HEADER = 'X-Nexus-Signature';
 
-    /** @var null|callable(string):?string */
-    private static $pawaPayPublicKeyOverride = null;
-
-    /**
-     * Injecte un résolveur de clé publique pawaPay (tests RFC-9421).
-     * Production laisse null : la clé vient de GET /v2/public-key/http.
-     *
-     * @param null|callable(string):?string $resolver
-     */
-    public static function overridePawaPayPublicKeyResolver(?callable $resolver): void
-    {
-        self::$pawaPayPublicKeyOverride = $resolver;
-    }
+    /** En-tête Cashramp (docs.cashramp.co). */
+    private const CASHRAMP_TOKEN_HEADER = 'X-CASHRAMP-TOKEN';
 
     public static function handle(Request $request): void
     {
@@ -150,20 +137,17 @@ final class ProviderWebhookController
             );
         }
 
-        if ($slug === 'pawapay') {
-            $token = $creds['api_token'] ?? ProviderConfig::credential($slug, 'API_TOKEN', $env);
-            if (!is_string($token) || $token === '') {
-                Response::error('Token pawaPay non configuré : clé callback non résoluble.', 501, 'WEBHOOK_NOT_CONFIGURED');
+        if ($slug === 'cashramp') {
+            $adapter = ProviderRegistry::get('cashramp');
+            if (!$adapter instanceof CashrampAdapter) {
+                Response::error('Adaptateur Cashramp indisponible.', 501, 'WEBHOOK_NOT_CONFIGURED');
             }
-            $headers = $request->headers();
-            $headers['@method'] = $request->method();
-            $headers['@authority'] = (string) ($request->header('Host') ?? '');
-            $headers['@path'] = '/api' . $request->path();
+            $token = (string) ($request->header(self::CASHRAMP_TOKEN_HEADER) ?? '');
+            if ($token === '') {
+                Response::error('Token Cashramp absent (X-CASHRAMP-TOKEN).', 401, 'INVALID_WEBHOOK_SIGNATURE');
+            }
 
-            $resolver = self::$pawaPayPublicKeyOverride
-                ?? static fn (string $keyId): ?string => self::resolvePawaPayPublicKey($env, $token, $keyId);
-
-            return PawaPaySignature::verifyCallback($raw, $headers, $resolver);
+            return $adapter->verifyWebhook($raw, $token);
         }
 
         $secret = $creds['webhook_secret'] ?? ProviderConfig::credential($slug, 'WEBHOOK_SECRET', $env);
@@ -177,61 +161,17 @@ final class ProviderWebhookController
         );
     }
 
-    private static function resolvePawaPayPublicKey(string $env, string $token, string $keyId): ?string
-    {
-        $cached = PawaPayPublicKeyCache::get($env, $keyId);
-        if ($cached !== null) {
-            return $cached;
-        }
-        $pem = self::fetchPawaPayPublicKey($env, $token, $keyId);
-        if ($pem !== null) {
-            PawaPayPublicKeyCache::put($env, $keyId, $pem);
-        }
-        return $pem;
-    }
-
-    private static function fetchPawaPayPublicKey(string $env, string $token, string $keyId): ?string
-    {
-        $url = rtrim(ProviderConfig::baseUrl('pawapay', $env), '/') . '/v2/public-key/http';
-        $ch = curl_init($url);
-        if ($ch === false) {
-            return null;
-        }
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $token, 'Accept: application/json'],
-            CURLOPT_CONNECTTIMEOUT => 3,
-            CURLOPT_TIMEOUT => 8,
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_MAXREDIRS => 0,
-        ]);
-        $body = curl_exec($ch);
-        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-        if (!is_string($body) || $status !== 200) {
-            return null;
-        }
-        $keys = json_decode($body, true);
-        if (!is_array($keys)) {
-            return null;
-        }
-        foreach ($keys as $key) {
-            if (is_array($key) && hash_equals((string) ($key['id'] ?? ''), $keyId)) {
-                $pem = (string) ($key['key'] ?? '');
-                return $pem !== '' ? $pem : null;
-            }
-        }
-        return null;
-    }
-
     /** @param array<string,mixed> $payload */
     private static function eventId(string $slug, array $payload): string
     {
-        if ($slug === 'pawapay') {
-            $payoutId = (string) ($payload['payoutId'] ?? '');
-            $status = strtoupper((string) ($payload['status'] ?? ''));
-            return $payoutId !== '' && $status !== '' ? $payoutId . ':' . $status : '';
+        if ($slug === 'cashramp') {
+            $eventType = (string) ($payload['event_type'] ?? 'unknown');
+            $dataId    = is_array($payload['data'] ?? null) ? (string) ($payload['data']['id'] ?? '') : '';
+            $status    = is_array($payload['data'] ?? null) ? (string) ($payload['data']['status'] ?? '') : '';
+
+            return $dataId !== '' ? $eventType . ':' . $dataId . ':' . $status : $eventType;
         }
+
         return (string) ($payload['event_id'] ?? $payload['id'] ?? '');
     }
 
@@ -247,10 +187,14 @@ final class ProviderWebhookController
         $rawStatus = '';
         $mapped = null;
 
-        if ($slug === 'pawapay') {
-            $providerOperationId = (string) ($payload['payoutId'] ?? '');
-            $rawStatus = strtoupper((string) ($payload['status'] ?? ''));
-            $mapped = PawaPayAdapter::STATUS_MAP[$rawStatus] ?? null;
+        if ($slug === 'cashramp') {
+            $adapter = ProviderRegistry::get('cashramp');
+            if ($adapter instanceof CashrampAdapter) {
+                $normalized = $adapter->normalizeWebhookPayload($payload);
+                $providerOperationId = (string) ($normalized['provider_id'] ?? '');
+                $rawStatus = (string) ($normalized['provider_status'] ?? '');
+                $mapped = (string) ($normalized['mapped_status'] ?? '');
+            }
         } elseif ($slug === 'stripe') {
             $type = (string) ($payload['type'] ?? '');
             $object = is_array($payload['data']['object'] ?? null) ? $payload['data']['object'] : [];
@@ -282,17 +226,7 @@ final class ProviderWebhookController
             Response::error('Opération provider inconnue.', 409, 'UNKNOWN_PROVIDER_OPERATION');
         }
 
-        // Les montants du webhook ne pilotent jamais le ledger. Ils servent
-        // uniquement à détecter une divergence avant le règlement.
-        if ($slug === 'pawapay' && isset($payload['amount'], $payload['currency'])) {
-            $expectedAmount = (string) ($tx['dest_amount'] ?? '');
-            $expectedCurrency = strtoupper((string) ($tx['dest_currency'] ?? ''));
-            if ($expectedAmount === '' || bccomp($expectedAmount, (string) $payload['amount'], 8) !== 0
-                || $expectedCurrency !== strtoupper((string) $payload['currency'])) {
-                self::markEvent($pdo, $slug, $env, $eventId, 'reconciliation_required');
-                Response::error('Montant ou devise provider divergent.', 409, 'PROVIDER_AMOUNT_MISMATCH');
-            }
-        }
+        // Les montants du webhook ne pilotent jamais le ledger.
         if ($slug === 'stripe') {
             $object = is_array($payload['data']['object'] ?? null) ? $payload['data']['object'] : [];
             if (isset($object['amount'], $object['currency'])) {
@@ -313,8 +247,9 @@ final class ProviderWebhookController
         }
 
         $providerTxnId = '';
-        if ($slug === 'pawapay') {
-            $providerTxnId = (string) ($payload['providerTransactionId'] ?? '');
+        if ($slug === 'cashramp') {
+            $data = is_array($payload['data'] ?? null) ? $payload['data'] : [];
+            $providerTxnId = (string) ($data['txhash'] ?? $data['id'] ?? '');
         } elseif ($slug === 'stripe') {
             $object = is_array($payload['data']['object'] ?? null) ? $payload['data']['object'] : [];
             $providerTxnId = (string) ($object['balance_transaction'] ?? $object['id'] ?? '');

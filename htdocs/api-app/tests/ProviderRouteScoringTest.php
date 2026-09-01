@@ -32,7 +32,7 @@ final class ProviderRouteScoringTest extends TestCase
         );
 
         $ineligible = new ProviderRouteCandidate(
-            'pawapay',
+            'cashramp',
             'payout',
             'EUR',
             'XAF',

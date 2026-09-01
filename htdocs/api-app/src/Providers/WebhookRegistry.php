@@ -32,14 +32,14 @@ final class WebhookRegistry
 {
     /** @var array<string, array<string, mixed>> */
     private const DECLARED = [
-        'pawapay' => [
-            'webhook_path'          => '/api/providers/webhook/pawapay',
-            'signature_type'        => 'rfc9421',
-            'verification_key_type' => 'public_key',
-            'timestamp_validation'  => ['enabled' => true, 'note' => 'Signature-Input date/@created, fenêtre de tolérance'],
-            'event_id_field'        => 'payoutId:status (chaque transition est un événement)',
+        'cashramp' => [
+            'webhook_path'          => '/api/providers/webhook/cashramp',
+            'signature_type'        => 'token_header',
+            'verification_key_type' => 'webhook_token',
+            'timestamp_validation'  => ['enabled' => false, 'note' => 'Header X-CASHRAMP-TOKEN (docs.cashramp.co)'],
+            'event_id_field'        => 'event_type:data.id:data.status',
             'idempotency_field'     => 'provider_webhook_events — UNIQUE(provider, environment, event_id)',
-            'implementation'        => 'CONFIG_REQUIRED', // RFC-9421 helper existe ; contrôleur = HMAC générique
+            'implementation'        => 'IMPLEMENTED',
         ],
         'stripe' => [
             'webhook_path'          => '/api/providers/webhook/stripe',

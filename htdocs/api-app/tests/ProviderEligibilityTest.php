@@ -28,21 +28,15 @@ final class ProviderEligibilityTest extends TestCase
         parent::tearDown();
     }
 
-    public function testProviderWithoutCredentialsIsNotEligible(): void
-    {
-        $result = ProviderEligibilityService::evaluate('pawapay', $this->intent(), $this->context);
-
-        self::assertFalse($result->eligible);
-        self::assertContains('routing disabled', $result->reasons);
-        self::assertSame(ProviderStatus::DISABLED, $result->status);
-    }
-
-    public function testCashrampAdapterNotImplementedIsNotEligible(): void
+    public function testCashrampWithoutCredentialsIsNotEligible(): void
     {
         $result = ProviderEligibilityService::evaluate('cashramp', $this->intent(), $this->context);
 
         self::assertFalse($result->eligible);
-        self::assertContains('routing disabled', $result->reasons);
+        self::assertTrue(
+            in_array('credentials not configured', $result->reasons, true)
+            || in_array('transfers feature disabled', $result->reasons, true)
+        );
     }
 
     public function testUnknownProviderIsNotEligible(): void

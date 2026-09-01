@@ -9,18 +9,12 @@ use PHPUnit\Framework\TestCase;
 
 final class ProviderCapabilityMatrixTest extends TestCase
 {
-    public function testCashrampPayoutIsNotImplemented(): void
+    public function testCashrampCapabilitiesReflectImplementedClient(): void
     {
         $caps = ProviderCapabilityMatrix::for('cashramp');
 
-        self::assertSame(ProviderCapabilityMatrix::NOT_IMPLEMENTED, $caps['payout']);
-        self::assertSame(ProviderCapabilityMatrix::NOT_IMPLEMENTED, $caps['quote']);
-    }
-
-    public function testPawapayPayoutDeclaredImplemented(): void
-    {
-        $caps = ProviderCapabilityMatrix::for('pawapay');
-
+        self::assertSame(ProviderCapabilityMatrix::IMPLEMENTED, $caps['test_connection']);
+        self::assertSame(ProviderCapabilityMatrix::IMPLEMENTED, $caps['quote']);
         self::assertSame(ProviderCapabilityMatrix::IMPLEMENTED, $caps['payout']);
     }
 
@@ -51,11 +45,5 @@ final class ProviderCapabilityMatrixTest extends TestCase
         );
 
         self::assertSame('cashramp|payout|EUR|XAF|FR|CM|mobile_money', $key);
-    }
-
-    public function testRouteDimensionsExposeFutureModel(): void
-    {
-        self::assertContains('provider', ProviderCapabilityMatrix::routeDimensions());
-        self::assertContains('status', ProviderCapabilityMatrix::routeDimensions());
     }
 }

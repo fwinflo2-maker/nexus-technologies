@@ -7,6 +7,7 @@ namespace Nexus\Providers;
 use Nexus\Core\Database;
 use Nexus\Execution\ExecutionContext;
 use Nexus\Execution\ProviderResolver;
+use Nexus\Providers\Cashramp\CashrampFeatureFlags;
 use Nexus\Services\ControlCenterService;
 use Nexus\Services\IntentEngine;
 use Nexus\Services\ProviderCatalog;
@@ -93,10 +94,11 @@ final class ProviderEligibilityService
 
         $operation = (string) ($intent['operation'] ?? 'payout');
         if (!self::hasOperationCapability($slug, $operation)) {
-            $reason = $slug === 'cashramp'
-                ? 'adapter not implemented'
-                : 'required capability not available';
-            return ProviderEligibilityResult::ineligible([$reason]);
+            return ProviderEligibilityResult::ineligible(['required capability not available']);
+        }
+
+        if ($slug === 'cashramp' && $operation === 'payout' && !CashrampFeatureFlags::transfersEnabled()) {
+            return ProviderEligibilityResult::ineligible(['transfers feature disabled']);
         }
 
         if (!ProviderResolver::hasCredentialFor($slug, $context)) {

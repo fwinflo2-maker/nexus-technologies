@@ -11,8 +11,10 @@ use Nexus\Core\Response;
 use Nexus\Execution\ExecutionContext;
 use Nexus\Execution\PlatformRole;
 use Nexus\Providers\ProviderRegistry;
+use Nexus\Services\CashrampCardCreationPolicyService;
 use Nexus\Services\ControlCenterService;
 use Nexus\Services\FXService;
+use Nexus\Providers\ProviderConfig;
 use Nexus\Services\ProviderCatalog;
 use Nexus\Services\ProviderCredentialService;
 use Nexus\Services\StaffDashboardService;
@@ -997,6 +999,58 @@ final class ControlCenterController
 
         $pdo->prepare('UPDATE users SET status = :status WHERE id = :id')
             ->execute(['status' => $status, 'id' => $id]);
+    }
+
+    /**
+     * GET /api/control/providers/cashramp/card-policy
+     *
+     * Retourne la politique commerciale de création de carte Cashramp :
+     * minimum $1, compte Business Cashramp, provider de funding, statut.
+     * Accès : superadmin uniquement (données d'infrastructure financière).
+     */
+    public static function cashrampCardPolicy(Request $request): void
+    {
+        $user        = self::authorize($request, 'superadmin');
+        $pdo         = Database::getConnection();
+        $environment = ExecutionContext::fromRequest($request, $user)->environment->value;
+
+        Response::success([
+            'environment' => $environment,
+            'policy'      => CashrampCardCreationPolicyService::get($pdo, $environment),
+        ]);
+    }
+
+    /**
+     * PUT /api/control/providers/cashramp/card-policy
+     *
+     * Met à jour la politique commerciale de création de carte Cashramp.
+     * Champs attendus :
+     *   minimum_usd                  (string, positif)
+     *   business_cashramp_account_id (string, identifiant du compte Business Cashramp)
+     *   funding_provider             (string, défaut : 'cashramp')
+     *
+     * Accès : superadmin uniquement.
+     * Aucun secret n'est impliqué — uniquement la configuration métier.
+     */
+    public static function updateCashrampCardPolicy(Request $request): void
+    {
+        $user        = self::authorize($request, 'superadmin');
+        $pdo         = Database::getConnection();
+        $environment = ExecutionContext::fromRequest($request, $user)->environment->value;
+
+        $input = [
+            'minimum_usd'                  => (string) $request->input('minimum_usd', CashrampCardCreationPolicyService::DEFAULT_MINIMUM_USD),
+            'business_cashramp_account_id' => trim((string) $request->input('business_cashramp_account_id', '')),
+            'funding_provider'             => trim((string) $request->input('funding_provider', 'cashramp')),
+        ];
+
+        $policy = CashrampCardCreationPolicyService::upsert($pdo, $environment, $input);
+
+        Response::success([
+            'environment' => $environment,
+            'policy'      => $policy,
+            'updated'     => true,
+        ]);
     }
 
     private static function normalizedEmail(string $email): string

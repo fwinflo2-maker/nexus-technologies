@@ -29,12 +29,12 @@ final class ProviderHealthEligibilityTest extends TestCase
             self::markTestSkipped('NOT EXECUTED — MYSQL REQUIRED: ' . $e->getMessage());
         }
 
-        $health = ProviderHealthService::healthFor($pdo, 'pawapay', 'sandbox');
+        $health = ProviderHealthService::healthFor($pdo, 'cashramp', 'sandbox');
 
         self::assertFalse($health['configured']);
         self::assertSame('NOT_CONFIGURED', $health['connection']);
 
-        $result = ProviderEligibilityService::evaluate('pawapay', [
+        $result = ProviderEligibilityService::evaluate('cashramp', [
             'amount'          => 100.0,
             'sourceCurrency'  => 'EUR',
             'destCountry'     => 'CM',

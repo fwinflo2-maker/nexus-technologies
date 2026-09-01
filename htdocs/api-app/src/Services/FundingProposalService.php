@@ -502,7 +502,7 @@ final class FundingProposalService
             'orange_money' => $op === 'ORANGE',
             'safaricom_mpesa' => in_array($op, ['SAFARICOM', 'MPESA', 'VODACOM'], true),
             'yellow_card' => true,
-            'pawapay' => true, // agrégateur : tous les opérateurs du pays
+            'cashramp' => true,
             default => true,
         };
     }

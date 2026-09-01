@@ -17,10 +17,10 @@ final class ProviderRegistryTest extends TestCase
 
     public function testExistingProviderCanBeResolved(): void
     {
-        $adapter = ProviderRegistry::get('pawapay');
+        $adapter = ProviderRegistry::get('cashramp');
 
-        self::assertSame('pawapay', $adapter->slug());
-        self::assertSame($adapter, ProviderRegistry::adapter('pawapay'));
+        self::assertSame('cashramp', $adapter->slug());
+        self::assertSame($adapter, ProviderRegistry::adapter('cashramp'));
     }
 
     public function testHasReturnsTrueForCatalogProvider(): void
@@ -38,13 +38,11 @@ final class ProviderRegistryTest extends TestCase
 
     public function testAllReturnsCatalogSlugs(): void
     {
-        self::assertContains('pawapay', ProviderRegistry::all());
         self::assertContains('cashramp', ProviderRegistry::all());
     }
 
-    public function testEnabledExcludesRoutingDisabledProviders(): void
+    public function testEnabledIncludesCashramp(): void
     {
-        self::assertNotContains('pawapay', ProviderRegistry::enabled());
-        self::assertNotContains('cashramp', ProviderRegistry::enabled());
+        self::assertContains('cashramp', ProviderRegistry::enabled());
     }
 }
