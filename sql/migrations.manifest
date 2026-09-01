@@ -120,3 +120,5 @@
 2026_08_24_internal_chat_attachments.sql
 # 0.45 — Confirmation d'e-mail à l'inscription
 2026_08_26_email_verification.sql
+# 0.46 — Mapping utilisateur → customer provider (Cashramp-ready, provider-agnostic)
+2026_09_01_provider_customers.sql

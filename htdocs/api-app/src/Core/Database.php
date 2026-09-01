@@ -21,6 +21,12 @@ final class Database
         // Classe utilitaire : pas d'instanciation directe.
     }
 
+    /** Réinitialise le singleton PDO (tests uniquement). */
+    public static function resetConnection(): void
+    {
+        self::$pdo = null;
+    }
+
     public static function getConnection(): PDO
     {
         if (self::$pdo === null) {

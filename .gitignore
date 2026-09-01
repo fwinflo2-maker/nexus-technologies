@@ -4,3 +4,6 @@
 **/.env
 !**/.env.example
 !**/.env.*.example
+htdocs/api-app/vendor/
+htdocs/api-app/.phpunit.cache/
+htdocs/api-app/composer.phar
