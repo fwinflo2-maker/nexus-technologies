@@ -1,0 +1,16 @@
+# Fichiers synchronisés vers Hostinger (chemins relatifs à la racine du repo).
+# Ajouter une ligne par fichier modifié lors des milestones.
+
+htdocs/api-app/src/Services/ProviderCustomerService.php
+htdocs/api-app/src/Core/Database.php
+htdocs/api-app/migrations/2026_09_01_provider_customers.sql
+htdocs/api-app/scripts/apply_provider_customers_migration.php
+htdocs/api-app/scripts/setup_test_db.php
+htdocs/api-app/composer.json
+htdocs/api-app/composer.lock
+htdocs/api-app/phpunit.xml
+htdocs/api-app/tests/bootstrap.php
+htdocs/api-app/tests/ProviderCustomerSchemaTest.php
+htdocs/api-app/tests/ProviderCustomerServiceTest.php
+scripts/hostinger-sync-from-github.sh
+scripts/hostinger-sync.manifest
