@@ -407,7 +407,8 @@ final class StaffDashboardService
         $dbOk = true;
         try {
             $pdo->query('SELECT 1')->fetchColumn();
-        } catch (\Throwable) {
+        } catch (\Throwable $e) {
+            error_log('[NEXUS] StaffDashboardService technical db check degraded: ' . $e->getMessage());
             $dbOk = false;
         }
 

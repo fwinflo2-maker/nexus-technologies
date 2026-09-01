@@ -122,6 +122,7 @@ final class PlatformRole
      */
     private const CREDENTIAL_INVENTORY_VIEWERS = [
         self::SUPERADMIN,
+        self::OPERATIONS_MANAGER,
         self::PROVIDER_ENGINEER,
         self::PROVIDER_MANAGER,
         self::TECHNICAL_ADMIN,
@@ -129,6 +130,10 @@ final class PlatformRole
         self::SECURITY_TECHNICAL,
         self::SECURITY_ADMIN,
         self::SRE_OPERATOR,
+        self::BUSINESS_MANAGER,
+        self::FINANCE_TREASURY,
+        self::TREASURY_MANAGER,
+        self::BACKEND_ENGINEER,
     ];
 
     /**
@@ -205,8 +210,18 @@ final class PlatformRole
             return self::USER;
         }
 
+        $normalized = strtolower(trim($role));
+
+        // Normalisation des alias courants d'administration
+        $mapped = match ($normalized) {
+            'admin', 'super_admin', 'administrator', 'owner', 'root' => self::SUPERADMIN,
+            'operations', 'op_manager', 'ops' => self::OPERATIONS_MANAGER,
+            'provider_admin' => self::PROVIDER_MANAGER,
+            default => $normalized,
+        };
+
         // Deny by default : une valeur non reconnue ne confère aucun droit.
-        return in_array($role, self::all(), true) ? $role : self::USER;
+        return in_array($mapped, self::all(), true) ? $mapped : self::USER;
     }
 
     /** @return list<string> */

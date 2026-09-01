@@ -94,7 +94,8 @@ final class CashrampCardCreationPolicyService
             $decoded = json_decode((string) ($row['config_json'] ?? ''), true);
 
             return is_array($decoded) ? ['config_json' => $decoded] : null;
-        } catch (\Throwable) {
+        } catch (\Throwable $e) {
+            error_log('[NEXUS] CashrampCardCreationPolicyService loadRow degraded: ' . $e->getMessage());
             return null;
         }
     }
@@ -113,8 +114,8 @@ final class CashrampCardCreationPolicyService
                 UNIQUE KEY uq_provider_platform_config (provider_slug, environment, config_key)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;";
             $pdo->exec($sql);
-        } catch (\Throwable) {
-            // Ignore table creation error if user lacks DDL permissions
+        } catch (\Throwable $e) {
+            error_log('[NEXUS] CashrampCardCreationPolicyService ensureTableExists degraded: ' . $e->getMessage());
         }
     }
 }

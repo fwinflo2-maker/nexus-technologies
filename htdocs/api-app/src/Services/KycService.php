@@ -200,8 +200,8 @@ final class KycService
 
         try {
             $remote = $provider->getVerificationStatus($applicantId);
-        } catch (\Throwable) {
-            // Provider down / timeout : on renvoie l'état local sans bloquer l'UI.
+        } catch (\Throwable $e) {
+            error_log('[NEXUS] KycService remote verification degraded for applicant ' . $applicantId . ': ' . $e->getMessage());
             return self::statusFor($pdo, $provider, $userId, $type) + self::accountProjection($pdo, $userId);
         }
 
