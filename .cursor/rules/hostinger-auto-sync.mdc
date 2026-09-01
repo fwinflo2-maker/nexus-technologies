@@ -27,13 +27,9 @@ Ne jamais écraser : `api-app/.env`, `public/uploads/`, données client.
 ## Commande cron (inline)
 
 ```bash
-B=$HOME/domains/nexustechnologies.cloud/public_html; R=https://raw.githubusercontent.com/fwinflo2-maker/nexus-technologies/main; while IFS= read -r f; do f=${f%%#*}; f=$(echo "$f"|xargs); [ -z "$f" ] && continue; d=${f#htdocs/}; mkdir -p "$(dirname "$B/$d")"; curl -fsSL "$R/$f" -o "$B/$d"; done <<'EOF'
-htdocs/api-app/src/Services/ProviderCustomerService.php
-htdocs/api-app/src/Core/Database.php
-htdocs/api-app/migrations/2026_09_01_provider_customers.sql
-htdocs/api-app/scripts/apply_provider_customers_migration.php
-EOF
-php "$B/api-app/scripts/apply_provider_customers_migration.php" 2>/dev/null || true
+curl -fsSL https://raw.githubusercontent.com/fwinflo2-maker/nexus-technologies/main/scripts/hostinger-cron-sync.sh | bash
 ```
 
-Schedule recommandé : `*/5 * * * *` (cron permanent) + exécution manuelle après chaque push en recréant le job si nécessaire.
+Schedule : `*/5 * * * *` (username `u199940923`).
+
+Après chaque push, le cron applique automatiquement le manifeste GitHub sous 5 minutes max.

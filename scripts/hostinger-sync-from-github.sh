@@ -9,8 +9,9 @@ REPO="${NEXUS_GITHUB_RAW:-https://raw.githubusercontent.com/fwinflo2-maker/nexus
 MANIFEST="${NEXUS_SYNC_MANIFEST:-$(dirname "$0")/hostinger-sync.manifest}"
 
 if [[ ! -f "$MANIFEST" ]]; then
-  echo "Manifest introuvable: $MANIFEST" >&2
-  exit 1
+  MANIFEST="$(mktemp)"
+  curl -fsSL "$REPO/scripts/hostinger-sync.manifest" -o "$MANIFEST"
+  trap 'rm -f "$MANIFEST"' EXIT
 fi
 
 while IFS= read -r line || [[ -n "$line" ]]; do
