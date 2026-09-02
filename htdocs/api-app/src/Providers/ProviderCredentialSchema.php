@@ -986,26 +986,18 @@ final class ProviderCredentialSchema
         return [
             CredentialDefinition::publicKey(
                 name: 'public_key',
-                label: 'Public Key (CSHRMP-PUBK_…)',
-                required: false,
-                justification: 'docs.cashramp.co/cashramp/introduction/authentication.md : clé publique widget.',
-                placeholder: 'CSHRMP-PUBK_…'
+                label: 'Public Key',
+                required: true,
+                justification: 'docs.cashramp.com : public_key côté intégration (catalogue).',
+                placeholder: 'public_key'
             ),
             CredentialDefinition::secret(
                 name: 'secret_key',
-                label: 'Secret Key (CSHRMP-SECK_…)',
+                label: 'Secret Key',
                 required: true,
                 usage: CredentialDefinition::USAGE_API_AUTH,
-                justification: 'docs.cashramp.co/cashramp/introduction/authentication.md : Bearer server-to-server.',
-                placeholder: 'CSHRMP-SECK_…'
-            ),
-            CredentialDefinition::secret(
-                name: 'webhook_token',
-                label: 'Webhook Token (X-CASHRAMP-TOKEN)',
-                required: false,
-                usage: CredentialDefinition::USAGE_WEBHOOK,
-                justification: 'docs.cashramp.co/cashramp/introduction/webhooks.md : header X-CASHRAMP-TOKEN.',
-                placeholder: 'Token dashboard'
+                justification: 'docs.cashramp.com : secret_key backend.',
+                placeholder: 'secret_key'
             ),
         ];
     }

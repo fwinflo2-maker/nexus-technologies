@@ -8,9 +8,8 @@ use Nexus\Core\Correlation;
 use Nexus\Core\Database;
 use Nexus\Core\Request;
 use Nexus\Core\Response;
-use Nexus\Providers\CashrampAdapter;
 use Nexus\Providers\ProviderConfig;
-use Nexus\Providers\ProviderRegistry;
+use Nexus\Providers\ProviderCredentialSchema;
 use Nexus\Providers\StripeAdapter;
 use Nexus\Providers\WebhookVerifier;
 use Nexus\Services\ExecutionSettlementService;
@@ -45,11 +44,8 @@ use Throwable;
  */
 final class ProviderWebhookController
 {
-    /** En-tête de signature attendu (convention Nexus générique). */
+    /** En-tête de signature attendu (convention Nexus). */
     private const SIGNATURE_HEADER = 'X-Nexus-Signature';
-
-    /** En-tête Cashramp (docs.cashramp.co). */
-    private const CASHRAMP_TOKEN_HEADER = 'X-CASHRAMP-TOKEN';
 
     public static function handle(Request $request): void
     {
@@ -137,19 +133,6 @@ final class ProviderWebhookController
             );
         }
 
-        if ($slug === 'cashramp') {
-            $adapter = ProviderRegistry::get('cashramp');
-            if (!$adapter instanceof CashrampAdapter) {
-                Response::error('Adaptateur Cashramp indisponible.', 501, 'WEBHOOK_NOT_CONFIGURED');
-            }
-            $token = (string) ($request->header(self::CASHRAMP_TOKEN_HEADER) ?? '');
-            if ($token === '') {
-                Response::error('Token Cashramp absent (X-CASHRAMP-TOKEN).', 401, 'INVALID_WEBHOOK_SIGNATURE');
-            }
-
-            return $adapter->verifyWebhook($raw, $token);
-        }
-
         $secret = $creds['webhook_secret'] ?? ProviderConfig::credential($slug, 'WEBHOOK_SECRET', $env);
         if (!is_string($secret) || $secret === '') {
             Response::error('Secret webhook non configuré.', 501, 'WEBHOOK_NOT_CONFIGURED');
@@ -164,14 +147,6 @@ final class ProviderWebhookController
     /** @param array<string,mixed> $payload */
     private static function eventId(string $slug, array $payload): string
     {
-        if ($slug === 'cashramp') {
-            $eventType = (string) ($payload['event_type'] ?? 'unknown');
-            $dataId    = is_array($payload['data'] ?? null) ? (string) ($payload['data']['id'] ?? '') : '';
-            $status    = is_array($payload['data'] ?? null) ? (string) ($payload['data']['status'] ?? '') : '';
-
-            return $dataId !== '' ? $eventType . ':' . $dataId . ':' . $status : $eventType;
-        }
-
         return (string) ($payload['event_id'] ?? $payload['id'] ?? '');
     }
 
@@ -187,15 +162,7 @@ final class ProviderWebhookController
         $rawStatus = '';
         $mapped = null;
 
-        if ($slug === 'cashramp') {
-            $adapter = ProviderRegistry::get('cashramp');
-            if ($adapter instanceof CashrampAdapter) {
-                $normalized = $adapter->normalizeWebhookPayload($payload);
-                $providerOperationId = (string) ($normalized['provider_id'] ?? '');
-                $rawStatus = (string) ($normalized['provider_status'] ?? '');
-                $mapped = (string) ($normalized['mapped_status'] ?? '');
-            }
-        } elseif ($slug === 'stripe') {
+        if ($slug === 'stripe') {
             $type = (string) ($payload['type'] ?? '');
             $object = is_array($payload['data']['object'] ?? null) ? $payload['data']['object'] : [];
             $providerOperationId = (string) ($object['id'] ?? '');
@@ -226,7 +193,8 @@ final class ProviderWebhookController
             Response::error('Opération provider inconnue.', 409, 'UNKNOWN_PROVIDER_OPERATION');
         }
 
-        // Les montants du webhook ne pilotent jamais le ledger.
+        // Les montants du webhook ne pilotent jamais le ledger. Ils servent
+        // uniquement à détecter une divergence avant le règlement.
         if ($slug === 'stripe') {
             $object = is_array($payload['data']['object'] ?? null) ? $payload['data']['object'] : [];
             if (isset($object['amount'], $object['currency'])) {
@@ -247,10 +215,7 @@ final class ProviderWebhookController
         }
 
         $providerTxnId = '';
-        if ($slug === 'cashramp') {
-            $data = is_array($payload['data'] ?? null) ? $payload['data'] : [];
-            $providerTxnId = (string) ($data['txhash'] ?? $data['id'] ?? '');
-        } elseif ($slug === 'stripe') {
+        if ($slug === 'stripe') {
             $object = is_array($payload['data']['object'] ?? null) ? $payload['data']['object'] : [];
             $providerTxnId = (string) ($object['balance_transaction'] ?? $object['id'] ?? '');
         }

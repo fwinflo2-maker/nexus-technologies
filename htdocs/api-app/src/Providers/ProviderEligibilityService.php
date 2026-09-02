@@ -194,8 +194,21 @@ final class ProviderEligibilityService
         $destCurrency = (string) ($intent['destCurrency'] ?? '');
         $validCategories = self::METHOD_TO_CATEGORIES[$methodType] ?? [];
 
-        if (!in_array($provider['category'] ?? '', $validCategories, true)) {
-            return false;
+        $categoryMatches = in_array($provider['category'] ?? '', $validCategories, true);
+
+        // Si la catégorie ne correspond pas directement, vérifier si l'adaptateur
+        // déclare explicitement ce type de méthode (ex. Cashramp est catégorisé
+        // comme « onramp » mais déclare `mobile_money` comme méthode supportée).
+        if (!$categoryMatches) {
+            try {
+                $adapter          = ProviderRegistry::adapter($slug);
+                $supportedMethods = $adapter->getCapabilities()['supported_methods'];
+                if (!in_array($methodType, $supportedMethods, true)) {
+                    return false;
+                }
+            } catch (\Throwable) {
+                return false;
+            }
         }
 
         $isGlobalCryptoDestination = $methodType === 'crypto'

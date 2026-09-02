@@ -32,15 +32,6 @@ final class WebhookRegistry
 {
     /** @var array<string, array<string, mixed>> */
     private const DECLARED = [
-        'cashramp' => [
-            'webhook_path'          => '/api/providers/webhook/cashramp',
-            'signature_type'        => 'token_header',
-            'verification_key_type' => 'webhook_token',
-            'timestamp_validation'  => ['enabled' => false, 'note' => 'Header X-CASHRAMP-TOKEN (docs.cashramp.co)'],
-            'event_id_field'        => 'event_type:data.id:data.status',
-            'idempotency_field'     => 'provider_webhook_events — UNIQUE(provider, environment, event_id)',
-            'implementation'        => 'IMPLEMENTED',
-        ],
         'stripe' => [
             'webhook_path'          => '/api/providers/webhook/stripe',
             'signature_type'        => 'hmac_sha256_stripe_signature',

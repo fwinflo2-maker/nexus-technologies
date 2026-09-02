@@ -31,6 +31,11 @@ if [[ -f "$BASE/api-app/scripts/apply_provider_customers_migration.php" ]]; then
   php "$BASE/api-app/scripts/apply_provider_customers_migration.php" || true
 fi
 
+# Migration idempotente cashramp_integration (ignore si déjà appliquée).
+if [[ -f "$BASE/api-app/scripts/apply_cashramp_integration_migration.php" ]]; then
+  php "$BASE/api-app/scripts/apply_cashramp_integration_migration.php" || true
+fi
+
 # Purge cache Hostinger / LiteSpeed si disponible.
 if command -v cache-purge >/dev/null 2>&1; then
   cache-purge "$BASE" || true

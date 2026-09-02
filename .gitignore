@@ -4,6 +4,10 @@
 **/.env
 !**/.env.example
 !**/.env.*.example
+.agents/
+.gemini/
+.config/kilo/
+htdocs/api-app/public/uploads/
 htdocs/api-app/vendor/
 htdocs/api-app/.phpunit.cache/
 htdocs/api-app/composer.phar

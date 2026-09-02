@@ -7,7 +7,7 @@ namespace Nexus\Execution;
 use Nexus\Core\Database;
 use Nexus\Core\HttpException;
 use Nexus\Providers\ProviderAdapter;
-use Nexus\Providers\ProviderCatalog;
+use Nexus\Services\ProviderCatalog;
 use Nexus\Providers\ProviderConfig;
 use Nexus\Providers\ProviderEligibilityService;
 use Nexus\Providers\ProviderRegistry;

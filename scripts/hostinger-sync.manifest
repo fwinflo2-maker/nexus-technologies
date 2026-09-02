@@ -4,7 +4,9 @@
 htdocs/api-app/src/Services/ProviderCustomerService.php
 htdocs/api-app/src/Core/Database.php
 htdocs/api-app/migrations/2026_09_01_provider_customers.sql
+htdocs/api-app/migrations/2026_09_01_cashramp_integration.sql
 htdocs/api-app/scripts/apply_provider_customers_migration.php
+htdocs/api-app/scripts/apply_cashramp_integration_migration.php
 htdocs/api-app/scripts/setup_test_db.php
 htdocs/api-app/composer.json
 htdocs/api-app/composer.lock

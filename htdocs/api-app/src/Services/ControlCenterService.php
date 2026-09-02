@@ -56,8 +56,7 @@ final class ControlCenterService
     {
         try {
             $adapter = ProviderRegistry::adapter($slug);
-        } catch (\Throwable $e) {
-            error_log('[NEXUS CONTROL CENTER] operationImplemented adapter failed for ' . $slug . ': ' . $e->getMessage());
+        } catch (\Throwable) {
             return false;
         }
 
@@ -233,30 +232,20 @@ final class ControlCenterService
                 if (in_array(true, self::operationMatrix($slug), true)) {
                     $withOps++;
                 }
-            } catch (\Throwable $e) {
-                error_log('[NEXUS CONTROL CENTER] Provider loop degraded for ' . $slug . ': ' . $e->getMessage());
-            }
+            } catch (\Throwable) {}
         }
 
-        $credentials = ['sandbox' => null, 'production' => null, 'data_status' => 'UNAVAILABLE'];
+        $credentials = ['sandbox' => 0, 'production' => 0];
         try {
             $credStmt = $pdo->prepare(
                 'SELECT environment, COUNT(*) AS n
                  FROM provider_credentials WHERE user_id = :uid GROUP BY environment'
             );
             $credStmt->execute(['uid' => $userId]);
-            $rows = $credStmt->fetchAll();
-            if ($rows !== []) {
-                $credentials = ['sandbox' => 0, 'production' => 0, 'data_status' => 'OK'];
-                foreach ($rows as $row) {
-                    $credentials[(string) $row['environment']] = (int) $row['n'];
-                }
-            } else {
-                $credentials = ['sandbox' => 0, 'production' => 0, 'data_status' => 'OK'];
+            foreach ($credStmt->fetchAll() as $row) {
+                $credentials[(string) $row['environment']] = (int) $row['n'];
             }
-        } catch (\Throwable $e) {
-            error_log('[NEXUS CONTROL CENTER] credentials query degraded: ' . $e->getMessage());
-        }
+        } catch (\Throwable) {}
 
         return [
             'environment'  => ProviderConfig::defaultEnvironment(),
@@ -308,8 +297,7 @@ final class ControlCenterService
                 'configured'  => $provider->isConfigured(),
                 'environment' => $provider->environment(),
             ];
-        } catch (\Throwable $e) {
-            error_log('[NEXUS CONTROL CENTER] kycCounters provider degraded: ' . $e->getMessage());
+        } catch (\Throwable) {
             $out['provider'] = [
                 'slug'        => 'sumsub',
                 'configured'  => false,
@@ -397,9 +385,7 @@ final class ControlCenterService
                         }
                         unset($creds);
                     }
-                } catch (\Throwable $e) {
-                    error_log('[NEXUS CONTROL CENTER] Public key registry degraded for ' . $slug . ' ' . $env . ': ' . $e->getMessage());
-                }
+                } catch (\Throwable) {}
             }
 
             foreach ($defs as $def) {

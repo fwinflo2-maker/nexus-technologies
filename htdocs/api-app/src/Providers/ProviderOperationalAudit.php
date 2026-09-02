@@ -166,7 +166,7 @@ final class ProviderOperationalAudit
     public static function priority(string $slug): string
     {
         return match ($slug) {
-            'cashramp', 'onfriq', 'stripe', 'stripe_issuing', 'maplerad', 'bridge' => 'P1',
+            'onfriq', 'stripe', 'stripe_issuing', 'maplerad', 'bridge', 'cashramp' => 'P1',
             'thunes', 'nium', 'currencycloud' => 'P2',
             'wise', 'yellow_card', 'bvnk' => 'P3',
             'dlocal', 'ebanx', 'tazapay', '2c2p', 'xendit' => 'P4',

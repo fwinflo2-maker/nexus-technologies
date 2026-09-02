@@ -19,12 +19,14 @@ final class ProviderResolverTest extends TestCase
     protected function setUp(): void
     {
         $this->context = ExecutionContext::explicit(1, ExecutionEnvironment::SANDBOX, 1);
+        putenv('PROVIDER_CASHRAMP_ENABLED=true');
     }
 
     protected function tearDown(): void
     {
         ProviderRegistry::resetAdapters();
         ProviderEligibilityService::clearTestCapabilityOverrides();
+        putenv('PROVIDER_CASHRAMP_ENABLED');
         parent::tearDown();
     }
 

@@ -10,7 +10,6 @@ use Nexus\Core\Request;
 use Nexus\Core\Response;
 use Nexus\Kyc\KycSubjectType;
 use Nexus\Kyc\SumsubAdapter;
-use Nexus\Services\CompanyRegistryService;
 use Nexus\Services\KycService;
 use RuntimeException;
 
@@ -68,49 +67,16 @@ final class KycController
         // Projection du flag KYB distinct pour les comptes Business : c'est
         // `users.kyb_status` (et non le statut du dossier) que le Policy Engine
         // consulte pour bloquer/débloquer les paiements.
-        $isBusiness = ($user['account_type'] ?? 'personal') === 'business';
-        if ($isBusiness) {
+        if (($user['account_type'] ?? 'personal') === 'business') {
             $acct = is_array($status['account'] ?? null) ? $status['account'] : [];
             $status['kyb_status'] = $acct['kyb_status'] ?? $user['kyb_status'] ?? 'none';
             $status['kyb_verified_at'] = $acct['kyb_verified_at'] ?? $user['kyb_verified_at'] ?? null;
             // Niveau de risque KYB (approche basée sur le risque, FATF).
             $status['risk_level'] = $user['risk_level'] ?? null;
-
-            // Si Sumsub n'a pas de dossier company mais le registre a vérifié,
-            // aligne le statut exposé sur users.kyb_status.
-            if (($status['kyb_status'] ?? '') === 'verified' && ($status['status'] ?? '') !== 'verified') {
-                $status['status'] = 'verified';
-                $status['required_action'] = 'none';
-                $status['provider'] = 'opencorporates';
-            }
-
-            $pdo = Database::getConnection();
-            $profile = KycService::verificationProfile($pdo, (int) $user['id']);
-            $status['company_profile'] = [
-                'company_name'                  => $profile['company_name'] ?? null,
-                'company_registration_number'   => $profile['company_registration_number'] ?? null,
-                'country_of_residence'          => $profile['country_of_residence'] ?? null,
-                'jurisdiction_code'             => CompanyRegistryService::jurisdictionFromCountry(
-                    (string) ($profile['country_of_residence'] ?? '')
-                ),
-            ];
         }
 
-        $registry = new CompanyRegistryService();
-        $sumsubConfigured = $provider->isConfigured();
-        // Compte business : « configured » si Sumsub OU registre OC disponible.
-        $configured = $sumsubConfigured || ($isBusiness && $registry->isConfigured());
-
         // §32 : statut, action attendue, type — jamais de secret ni de document.
-        Response::success($status + [
-            'configured'         => $configured,
-            'sumsub_configured'  => $sumsubConfigured,
-            'registry'           => [
-                'available'  => $registry->isConfigured(),
-                'provider'   => 'opencorporates',
-                'preferred'  => $isBusiness && $registry->isFallbackPreferred(),
-            ],
-        ]);
+        Response::success($status + ['configured' => $provider->isConfigured()]);
     }
 
     /**
@@ -167,18 +133,6 @@ final class KycController
                 $profile
             );
         } catch (RuntimeException $e) {
-            $msg = $e->getMessage();
-            // Message actionnable : le cas le plus fréquent en Business est un
-            // niveau KYB Sumsub manquant (les clés KYC peuvent déjà marcher).
-            if (str_contains($msg, 'SUMSUB_LEVEL_NAME_KYB') || str_contains($msg, 'level_name_kyb')) {
-                Response::error(
-                    'Vérification entreprise indisponible : configurez le niveau KYB Sumsub (level_name_kyb / SUMSUB_LEVEL_NAME_KYB) dans les credentials provider.',
-                    503,
-                    'KYC_KYB_LEVEL_NOT_CONFIGURED'
-                );
-                return;
-            }
-            error_log('[NEXUS KYC] session failed: ' . $msg);
             Response::error('Impossible de démarrer la vérification.', 502, 'KYC_SESSION_FAILED');
             return;
         }

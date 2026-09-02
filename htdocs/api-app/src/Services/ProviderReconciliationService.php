@@ -23,7 +23,8 @@ use Throwable;
  * l'état réel — ou signale les écarts qui exigent une décision humaine.
  *
  * Providers pollables = ceux dont la matrice déclare reconciliation=IMPLEMENTED
- * (aujourd'hui : cashramp). Aucun hardcode métier hors de la matrice.
+ * (aucun à ce jour — à activer par provider une fois le polling réel branché).
+ * Aucun hardcode métier hors de la matrice.
  *
  * Cas détectés :
  *   - provider COMPLETED   → Nexus 'processing' : régler (completed).

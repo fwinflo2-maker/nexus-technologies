@@ -14,10 +14,11 @@ namespace Nexus\Providers;
  * explicitement qu'elle est destinée à être publiée côté client.
  *
  * Ne JAMAIS déduire qu'une clé est publique parce que son nom contient
- * « public ».
- * (`public_key`) sert à vérifier les signatures de requêtes financières —
- * c'est une clé de configuration serveur, jamais un secret à publier dans
- * un navigateur. À l'inverse, la `publishable_key` de Stripe est
+ * « public ». Contre-exemple réel : une « clé publique » de signature
+ * (`public_key`) peut servir à vérifier les signatures de requêtes
+ * financières côté provider — c'est une clé de configuration serveur,
+ * jamais un secret à publier dans un navigateur. À l'inverse, la
+ * `publishable_key` de Stripe est
  * explicitement documentée comme « safe to expose ».
  *
  * Chaque définition porte donc une justification (`justification`) qui doit

@@ -16,7 +16,7 @@ use Throwable;
 /**
  * ExecutionSettlementService — règlement asynchrone des transferts provider.
  *
- * L'API de payout asynchrone : un payout est d'abord accepté
+ * Certaines API provider (ex. mobile money) sont asynchrones : un payout est d'abord accepté
  * (ACCEPTED/ENQUEUED → transaction Nexus 'processing'), puis évolue vers un
  * état final via webhook ou polling :
  *

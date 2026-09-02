@@ -19,7 +19,6 @@ use Nexus\Controllers\FundingController;
 use Nexus\Controllers\IntentController;
 use Nexus\Controllers\ControlCenterController;
 use Nexus\Controllers\MaintenanceController;
-use Nexus\Controllers\CompanyController;
 use Nexus\Controllers\KycController;
 use Nexus\Controllers\NotificationController;
 use Nexus\Controllers\PaymentController;
@@ -202,10 +201,6 @@ $router->delete('/control/staff/chats/{id}/messages/{messageId}', [StaffChatCont
 $router->post('/control/staff/chats/{id}/read', [StaffChatController::class, 'markRead']);
 $router->get('/control/overview', [ControlCenterController::class, 'overview']);
 $router->get('/control/providers', [ControlCenterController::class, 'providers']);
-// Cashramp card-policy : chemin littéral déclaré AVANT /{slug} pour éviter
-// que le routeur ne l'interprète comme un slug variable.
-$router->get('/control/providers/cashramp/card-policy', [ControlCenterController::class, 'cashrampCardPolicy']);
-$router->put('/control/providers/cashramp/card-policy', [ControlCenterController::class, 'updateCashrampCardPolicy']);
 $router->get('/control/providers/{slug}', [ControlCenterController::class, 'providerDetail']);
 $router->get('/control/credentials', [ControlCenterController::class, 'credentials']);
 $router->get('/control/public-keys', [ControlCenterController::class, 'publicKeys']);
@@ -245,11 +240,6 @@ $router->post('/kyc/session', [KycController::class, 'session']);
 // webhook : route PUBLIQUE — l'authentification se fait par SIGNATURE HMAC,
 // pas par JWT (le provider n'a pas de session utilisateur).
 $router->post('/kyc/webhook', [KycController::class, 'webhook']);
-
-// --- Registre entreprises (OpenCorporates) — KYB fallback / enrichissement ---
-$router->get('/companies/search', [CompanyController::class, 'search']);
-$router->get('/companies/{jurisdiction}/{number}', [CompanyController::class, 'show']);
-$router->post('/kyb/registry/verify', [CompanyController::class, 'verify']);
 
 // --- Intent Engine : couverture pays/modes/devises pour /send (protégé) ----
 $router->get('/intent/countries', [IntentController::class, 'countries']);

@@ -52,7 +52,7 @@ final class WesternUnionAdapter extends AbstractProviderAdapter
 
     /**
      * Sonde auth réelle : GET /Ping avec mTLS.
-     * Statuts normalisés comme Cashramp / MoneyGram.
+     * Statuts normalisés comme MoneyGram.
      */
     public function testConnection(string $environment, ?array $credentials = null): array
     {

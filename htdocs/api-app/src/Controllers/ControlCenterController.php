@@ -11,10 +11,8 @@ use Nexus\Core\Response;
 use Nexus\Execution\ExecutionContext;
 use Nexus\Execution\PlatformRole;
 use Nexus\Providers\ProviderRegistry;
-use Nexus\Services\CashrampCardCreationPolicyService;
 use Nexus\Services\ControlCenterService;
 use Nexus\Services\FXService;
-use Nexus\Providers\ProviderConfig;
 use Nexus\Services\ProviderCatalog;
 use Nexus\Services\ProviderCredentialService;
 use Nexus\Services\StaffDashboardService;
@@ -114,38 +112,7 @@ final class ControlCenterController
 
         $items = [];
         foreach (array_keys(ProviderCatalog::all()) as $slug) {
-            try {
-                $items[] = ControlCenterService::providerCard($pdo, (int) $user['id'], $slug);
-            } catch (\Throwable $e) {
-                error_log("[NEXUS CONTROL CENTER] Erreur carte provider '{$slug}': " . $e->getMessage());
-                $items[] = [
-                    'slug'            => $slug,
-                    'name'            => ProviderCatalog::get($slug)['name'] ?? $slug,
-                    'category'        => ProviderCatalog::get($slug)['category'] ?? 'unknown',
-                    'icon'            => ProviderCatalog::get($slug)['icon'] ?? null,
-                    'doc_url'         => ProviderCatalog::get($slug)['doc_url'] ?? null,
-                    'countries'       => ProviderCatalog::get($slug)['countries'] ?? [],
-                    'active_environment' => 'sandbox',
-                    'enabled'         => false,
-                    'status'          => 'error',
-                    'missing_required'=> [],
-                    'reason'          => 'Erreur de chargement: ' . $e->getMessage(),
-                    'environments'    => [
-                        'sandbox'    => ['configured' => false, 'status' => 'error', 'last_tested_at' => null, 'last_error' => $e->getMessage(), 'updated_at' => null, 'base_url' => '', 'inherited_from' => null],
-                        'production' => ['configured' => false, 'status' => 'error', 'last_tested_at' => null, 'last_error' => $e->getMessage(), 'updated_at' => null, 'base_url' => '', 'inherited_from' => null],
-                    ],
-                    'payment_rails'   => [],
-                    'operations'      => ControlCenterService::operationMatrix($slug),
-                    'operations_enabled' => false,
-                    'integration'     => 'NOT_IMPLEMENTED',
-                    'capabilities'    => \Nexus\Providers\ProviderCapabilityMatrix::for($slug),
-                    'routing'         => ['eligible' => false, 'reasons' => ['Provider loading degraded']],
-                    'card_creation_policy' => null,
-                    'feature_flags'   => null,
-                    'credential_schema' => \Nexus\Providers\ProviderCredentialSchema::describe($slug),
-                    'documentation'   => ControlCenterService::documentationStatus($slug),
-                ];
-            }
+            $items[] = ControlCenterService::providerCard($pdo, (int) $user['id'], $slug);
         }
 
         Response::success([
@@ -347,7 +314,7 @@ final class ControlCenterController
         $stmt = $pdo->query(
             'SELECT u.id, u.full_name, u.email, u.phone, u.account_type, u.platform_role,
                     u.status, u.kyc_level, u.country_of_residence, u.avatar, u.auth_provider,
-                    u.email_verified_at, u.created_at, u.updated_at,
+                    u.created_at, u.updated_at,
                     COALESCE(SUM(CASE WHEN w.currency = \'EUR\' THEN w.balance ELSE 0 END), 0)  AS balance_eur,
                     COALESCE(SUM(CASE WHEN w.currency = \'USD\' THEN w.balance ELSE 0 END), 0)  AS balance_usd,
                     COALESCE(SUM(CASE WHEN w.currency = \'XAF\' THEN w.balance ELSE 0 END), 0)  AS balance_xaf,
@@ -372,8 +339,6 @@ final class ControlCenterController
                 'country_of_residence' => $row['country_of_residence'],
                 'avatar'               => $row['avatar'],
                 'auth_provider'        => $row['auth_provider'],
-                'email_verified'       => !empty($row['email_verified_at']),
-                'email_verified_at'    => $row['email_verified_at'] ?? null,
                 'created_at'           => $row['created_at'],
                 'updated_at'           => $row['updated_at'],
                 'balances'             => [
@@ -417,7 +382,7 @@ final class ControlCenterController
         $stmt = $pdo->prepare(
             'SELECT u.id, u.full_name, u.email, u.phone, u.account_type, u.platform_role,
                     u.status, u.kyc_level, u.country_of_residence, u.avatar, u.auth_provider,
-                    u.email_verified_at, u.birth_date, u.gender, u.city, u.postal_code, u.address,
+                    u.birth_date, u.gender, u.city, u.postal_code, u.address,
                     u.company_name, u.legal_form, u.company_registration_number, u.industry, u.company_size, u.website,
                     u.created_at, u.updated_at,
                     COALESCE(SUM(CASE WHEN w.currency = \'EUR\' THEN w.balance ELSE 0 END), 0) AS balance_eur,
@@ -508,8 +473,6 @@ final class ControlCenterController
                 'country_of_residence' => $row['country_of_residence'],
                 'avatar'               => $row['avatar'],
                 'auth_provider'        => $row['auth_provider'],
-                'email_verified'       => !empty($row['email_verified_at']),
-                'email_verified_at'    => $row['email_verified_at'] ?? null,
                 'created_at'           => $row['created_at'],
                 'updated_at'           => $row['updated_at'],
                 'address'              => $address,
@@ -578,20 +541,6 @@ final class ControlCenterController
 
             $previous = (string) $target['status'];
             self::applyClientStatusChange($pdo, $id, $status);
-            // Réactiver un client = le débloquer complètement : sans e-mail confirmé,
-            // le login reste refusé (EMAIL_NOT_VERIFIED) même en statut ACTIVE.
-            if ($status === 'ACTIVE') {
-                try {
-                    $pdo->prepare(
-                        'UPDATE users
-                            SET email_verified_at = COALESCE(email_verified_at, UTC_TIMESTAMP()),
-                                updated_at = NOW()
-                          WHERE id = :id'
-                    )->execute(['id' => $id]);
-                } catch (\PDOException) {
-                    // Colonne absente : le statut ACTIVE suffit pour les bases pré-migration.
-                }
-            }
             $pdo->prepare(
                 'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, metadata)
                  VALUES (:user_id, :action, :entity_type, :entity_id, :metadata)'
@@ -1030,58 +979,6 @@ final class ControlCenterController
 
         $pdo->prepare('UPDATE users SET status = :status WHERE id = :id')
             ->execute(['status' => $status, 'id' => $id]);
-    }
-
-    /**
-     * GET /api/control/providers/cashramp/card-policy
-     *
-     * Retourne la politique commerciale de création de carte Cashramp :
-     * minimum $1, compte Business Cashramp, provider de funding, statut.
-     * Accès : superadmin uniquement (données d'infrastructure financière).
-     */
-    public static function cashrampCardPolicy(Request $request): void
-    {
-        $user        = self::authorize($request, 'superadmin');
-        $pdo         = Database::getConnection();
-        $environment = ExecutionContext::fromRequest($request, $user)->environment->value;
-
-        Response::success([
-            'environment' => $environment,
-            'policy'      => CashrampCardCreationPolicyService::get($pdo, $environment),
-        ]);
-    }
-
-    /**
-     * PUT /api/control/providers/cashramp/card-policy
-     *
-     * Met à jour la politique commerciale de création de carte Cashramp.
-     * Champs attendus :
-     *   minimum_usd                  (string, positif)
-     *   business_cashramp_account_id (string, identifiant du compte Business Cashramp)
-     *   funding_provider             (string, défaut : 'cashramp')
-     *
-     * Accès : superadmin uniquement.
-     * Aucun secret n'est impliqué — uniquement la configuration métier.
-     */
-    public static function updateCashrampCardPolicy(Request $request): void
-    {
-        $user        = self::authorize($request, 'superadmin');
-        $pdo         = Database::getConnection();
-        $environment = ExecutionContext::fromRequest($request, $user)->environment->value;
-
-        $input = [
-            'minimum_usd'                  => (string) $request->input('minimum_usd', CashrampCardCreationPolicyService::DEFAULT_MINIMUM_USD),
-            'business_cashramp_account_id' => trim((string) $request->input('business_cashramp_account_id', '')),
-            'funding_provider'             => trim((string) $request->input('funding_provider', 'cashramp')),
-        ];
-
-        $policy = CashrampCardCreationPolicyService::upsert($pdo, $environment, $input);
-
-        Response::success([
-            'environment' => $environment,
-            'policy'      => $policy,
-            'updated'     => true,
-        ]);
     }
 
     private static function normalizedEmail(string $email): string

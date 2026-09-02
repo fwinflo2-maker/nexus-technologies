@@ -93,31 +93,14 @@ final class AuthController
         $pdo = Database::getConnection();
         self::ensureEmailVerificationSchema($pdo);
 
-        // --- Email unique (réouverture possible si le compte client est CLOSED) -
-        $stmt = $pdo->prepare(
-            'SELECT id, status, platform_role, auth_provider FROM users WHERE email = :email LIMIT 1'
-        );
+        // --- Email unique -----------------------------------------------------
+        $stmt = $pdo->prepare('SELECT id FROM users WHERE email = :email LIMIT 1');
         $stmt->execute(['email' => $email]);
-        $existing = $stmt->fetch(PDO::FETCH_ASSOC);
-        $reopenClosed = false;
-        if (is_array($existing)) {
-            $existingStatus = strtoupper((string) ($existing['status'] ?? ''));
-            $existingRole = (string) ($existing['platform_role'] ?? PlatformRole::USER);
-            $existingProvider = (string) ($existing['auth_provider'] ?? 'local');
-            // Un compte client clôturé peut être rouvert via une nouvelle inscription :
-            // sans ça, l'e-mail reste bloqué à jamais et l'utilisateur « ne voit » plus son compte.
-            if (
-                $existingStatus === 'CLOSED'
-                && $existingRole === PlatformRole::USER
-                && $existingProvider === 'local'
-            ) {
-                $reopenClosed = true;
-            } else {
-                Response::conflict('Un compte existe déjà avec cette adresse email.');
-            }
+        if ($stmt->fetch() !== false) {
+            Response::conflict('Un compte existe déjà avec cette adresse email.');
         }
 
-        // --- Création / réouverture (transaction) -----------------------------
+        // --- Création du compte (transaction : user + wallets + notification) -
         $passwordHash = password_hash($password, PASSWORD_DEFAULT);
         $userId = 0;
         $verifyToken = '';
@@ -125,109 +108,38 @@ final class AuthController
         try {
             $pdo->beginTransaction();
 
-            if ($reopenClosed) {
-                $userId = (int) $existing['id'];
-                try {
-                    $pdo->prepare(
-                        'UPDATE users SET full_name = :full_name, email_verified_at = NULL, phone = :phone,
-                                password_hash = :password_hash, account_type = :account_type, status = :status,
-                                kyc_level = :kyc_level, birth_date = :birth_date, gender = :gender, city = :city,
-                                postal_code = :postal_code, address = :address, country_of_residence = :country_of_residence,
-                                company_name = :company_name, legal_form = :legal_form,
-                                company_registration_number = :reg_number, industry = :industry,
-                                company_size = :company_size, website = :website, password_changed_at = UTC_TIMESTAMP(),
-                                updated_at = NOW()
-                          WHERE id = :id'
-                    )->execute([
-                        'full_name'     => $fullName,
-                        'phone'         => $fullPhone,
-                        'password_hash' => $passwordHash,
-                        'account_type'  => $accountType,
-                        'status'        => 'PENDING',
-                        'kyc_level'     => 'none',
-                        'birth_date'    => $birthDate !== '' ? $birthDate : null,
-                        'gender'        => $gender !== '' ? $gender : null,
-                        'city'          => $city !== '' ? $city : null,
-                        'postal_code'   => $postalCode !== '' ? $postalCode : null,
-                        'address'       => $address !== '' ? $address : null,
-                        'country_of_residence' => $countryCode !== '' && strlen($countryCode) === 2 ? $countryCode : null,
-                        'company_name'  => $companyName !== '' ? $companyName : null,
-                        'legal_form'    => $legalForm !== '' ? $legalForm : null,
-                        'reg_number'    => $regNumber !== '' ? $regNumber : null,
-                        'industry'      => $industry !== '' ? $industry : null,
-                        'company_size'  => $companySize !== '' ? $companySize : null,
-                        'website'       => $website !== '' ? $website : null,
-                        'id'            => $userId,
-                    ]);
-                } catch (PDOException) {
-                    $pdo->prepare(
-                        'UPDATE users SET full_name = :full_name, email_verified_at = NULL, phone = :phone,
-                                password_hash = :password_hash, account_type = :account_type, status = :status,
-                                kyc_level = :kyc_level, birth_date = :birth_date, gender = :gender, city = :city,
-                                postal_code = :postal_code, address = :address, country_of_residence = :country_of_residence,
-                                company_name = :company_name, legal_form = :legal_form,
-                                company_registration_number = :reg_number, industry = :industry,
-                                company_size = :company_size, website = :website, updated_at = NOW()
-                          WHERE id = :id'
-                    )->execute([
-                        'full_name'     => $fullName,
-                        'phone'         => $fullPhone,
-                        'password_hash' => $passwordHash,
-                        'account_type'  => $accountType,
-                        'status'        => 'PENDING',
-                        'kyc_level'     => 'none',
-                        'birth_date'    => $birthDate !== '' ? $birthDate : null,
-                        'gender'        => $gender !== '' ? $gender : null,
-                        'city'          => $city !== '' ? $city : null,
-                        'postal_code'   => $postalCode !== '' ? $postalCode : null,
-                        'address'       => $address !== '' ? $address : null,
-                        'country_of_residence' => $countryCode !== '' && strlen($countryCode) === 2 ? $countryCode : null,
-                        'company_name'  => $companyName !== '' ? $companyName : null,
-                        'legal_form'    => $legalForm !== '' ? $legalForm : null,
-                        'reg_number'    => $regNumber !== '' ? $regNumber : null,
-                        'industry'      => $industry !== '' ? $industry : null,
-                        'company_size'  => $companySize !== '' ? $companySize : null,
-                        'website'       => $website !== '' ? $website : null,
-                        'id'            => $userId,
-                    ]);
-                }
-                $pdo->prepare('DELETE FROM email_verification_tokens WHERE user_id = :id')
-                    ->execute(['id' => $userId]);
-            } else {
-                $stmt = $pdo->prepare(
-                    'INSERT INTO users (full_name, email, email_verified_at, phone, password_hash, account_type, auth_provider, status, kyc_level,
-                                        birth_date, gender, city, postal_code, address, country_of_residence,
-                                        company_name, legal_form, company_registration_number, industry, company_size, website)
-                     VALUES (:full_name, :email, :email_verified_at, :phone, :password_hash, :account_type, :auth_provider, :status, :kyc_level,
-                             :birth_date, :gender, :city, :postal_code, :address, :country_of_residence,
-                             :company_name, :legal_form, :reg_number, :industry, :company_size, :website)'
-                );
-                $stmt->execute([
-                    'full_name'     => $fullName,
-                    'email'         => $email,
-                    'email_verified_at' => null,
-                    'phone'         => $fullPhone,
-                    'password_hash' => $passwordHash,
-                    'account_type'  => $accountType,
-                    'auth_provider' => 'local',
-                    'status'        => 'PENDING',
-                    'kyc_level'     => 'none',
-                    'birth_date'    => $birthDate !== '' ? $birthDate : null,
-                    'gender'        => $gender !== '' ? $gender : null,
-                    'city'          => $city !== '' ? $city : null,
-                    'postal_code'   => $postalCode !== '' ? $postalCode : null,
-                    'address'       => $address !== '' ? $address : null,
-                    'country_of_residence' => $countryCode !== '' && strlen($countryCode) === 2 ? $countryCode : null,
-                    'company_name'  => $companyName !== '' ? $companyName : null,
-                    'legal_form'    => $legalForm !== '' ? $legalForm : null,
-                    'reg_number'    => $regNumber !== '' ? $regNumber : null,
-                    'industry'      => $industry !== '' ? $industry : null,
-                    'company_size'  => $companySize !== '' ? $companySize : null,
-                    'website'       => $website !== '' ? $website : null,
-                ]);
-                $userId = (int) $pdo->lastInsertId();
-            }
-
+            $stmt = $pdo->prepare(
+                'INSERT INTO users (full_name, email, email_verified_at, phone, password_hash, account_type, auth_provider, status, kyc_level,
+                                    birth_date, gender, city, postal_code, address, country_of_residence,
+                                    company_name, legal_form, company_registration_number, industry, company_size, website)
+                 VALUES (:full_name, :email, :email_verified_at, :phone, :password_hash, :account_type, :auth_provider, :status, :kyc_level,
+                         :birth_date, :gender, :city, :postal_code, :address, :country_of_residence,
+                         :company_name, :legal_form, :reg_number, :industry, :company_size, :website)'
+            );
+            $stmt->execute([
+                'full_name'     => $fullName,
+                'email'         => $email,
+                'email_verified_at' => null,
+                'phone'         => $fullPhone,
+                'password_hash' => $passwordHash,
+                'account_type'  => $accountType,
+                'auth_provider' => 'local',
+                'status'        => 'PENDING',
+                'kyc_level'     => 'none',
+                'birth_date'    => $birthDate !== '' ? $birthDate : null,
+                'gender'        => $gender !== '' ? $gender : null,
+                'city'          => $city !== '' ? $city : null,
+                'postal_code'   => $postalCode !== '' ? $postalCode : null,
+                'address'       => $address !== '' ? $address : null,
+                'country_of_residence' => $countryCode !== '' && strlen($countryCode) === 2 ? $countryCode : null,
+                'company_name'  => $companyName !== '' ? $companyName : null,
+                'legal_form'    => $legalForm !== '' ? $legalForm : null,
+                'reg_number'    => $regNumber !== '' ? $regNumber : null,
+                'industry'      => $industry !== '' ? $industry : null,
+                'company_size'  => $companySize !== '' ? $companySize : null,
+                'website'       => $website !== '' ? $website : null,
+            ]);
+            $userId = (int) $pdo->lastInsertId();
             $verifyToken = self::issueHashedToken(
                 $pdo,
                 'email_verification_tokens',
@@ -257,11 +169,10 @@ final class AuthController
         }
 
         try {
-            self::audit($userId, $reopenClosed ? 'auth.register_reopen' : 'auth.register', 'users', $userId, [
+            self::audit($userId, 'auth.register', 'users', $userId, [
                 'account_type' => $accountType,
                 'phone'        => $fullPhone,
                 'email_confirmation' => true,
-                'reopened' => $reopenClosed,
             ], $request);
         } catch (\Throwable $e) {
             error_log('[NEXUS API] audit register: ' . $e->getMessage());
@@ -938,22 +849,8 @@ final class AuthController
 
         $pdo->beginTransaction();
         try {
-            try {
-                $pdo->prepare(
-                    'UPDATE users
-                        SET email_verified_at = UTC_TIMESTAMP(),
-                            status = CASE WHEN status = \'PENDING\' THEN \'ACTIVE\' ELSE status END,
-                            updated_at = UTC_TIMESTAMP()
-                      WHERE id = :id'
-                )->execute(['id' => $userId]);
-            } catch (PDOException) {
-                $pdo->prepare(
-                    'UPDATE users SET email_verified_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP() WHERE id = :id'
-                )->execute(['id' => $userId]);
-                $pdo->prepare(
-                    'UPDATE users SET status = \'ACTIVE\', updated_at = UTC_TIMESTAMP() WHERE id = :id AND status = \'PENDING\''
-                )->execute(['id' => $userId]);
-            }
+            $pdo->prepare('UPDATE users SET email_verified_at = UTC_TIMESTAMP(), updated_at = UTC_TIMESTAMP() WHERE id = :id')
+                ->execute(['id' => $userId]);
             $pdo->prepare(
                 'UPDATE email_verification_tokens SET used_at = :used WHERE token_hash = :token_hash'
             )->execute([
